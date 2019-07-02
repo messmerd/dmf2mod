@@ -1,1 +1,1 @@
-gcc -o dmf2mod.exe dmf2mod.c -lz
+gcc dmf2mod.c system_info.c -o dmf2mod.exe -lz

@@ -16,7 +16,7 @@ Converts Deflemask .dmf files to .mod tracker files.
 #include <assert.h>
 #include "zlib.h"
 
-#include "system_info.c"
+#include "system_info.h"
 
 #if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(__CYGWIN__)
 #  include <fcntl.h>
@@ -26,6 +26,7 @@ Converts Deflemask .dmf files to .mod tracker files.
 #  define SET_BINARY_MODE(file)
 #endif
 
+
 const char* get_filename_ext(const char* filename) {
     const char* dot = strrchr(filename, '.');
     if(!dot || dot == filename) return "";
@@ -34,6 +35,16 @@ const char* get_filename_ext(const char* filename) {
 
 
 #define CHUNK 16384
+
+struct Instrument
+{
+    unsigned char nameLength;
+    char *name;
+    unsigned char mode;  // 0 = STANDARD INS, 1 = FM INS 
+
+
+};
+
 
 /* Decompress from file source to file dest until stream ends or EOF.
    inf() returns Z_OK on success, Z_MEM_ERROR if memory could not be
@@ -226,23 +237,8 @@ int main(int argc, char* argv[])
 
     ///////////////// SYSTEM SET 
 
-    switch (fgetc(fptrIn))
-    {
-        case SYSTEM_GENESIS:
-            printf("Genesis\n");
-            break;
-        case SYSTEM_GENESIS_CH3:
-            printf("Genesis ext. ch3\n");
-            break;
-        case SYSTEM_SMS:
-            printf("SMS\n");
-            break;
-        case SYSTEM_GAMEBOY:
-            printf("GameBoy\n");
-            break;
-        default: 
-            printf("Other system\n");
-    }
+    System sys = getSystem(fgetc(fptrIn)); 
+    printf("System: %s (channels: %u)\n", sys.name, sys.channels);
 
     ///////////////// VISUAL INFORMATION
 
@@ -262,6 +258,56 @@ int main(int argc, char* argv[])
     unsigned char highlightBPatterns = fgetc(fptrIn); 
 
     ///////////////// MODULE INFORMATION
+
+    int timeBase = fgetc(fptrIn);   
+    int tickTime1 = fgetc(fptrIn); 
+    int tickTime2 = fgetc(fptrIn); 
+    int framesMode = fgetc(fptrIn); 
+    int usingCustomHZ = fgetc(fptrIn); 
+    int customHZValue1 = fgetc(fptrIn); 
+    int customHZValue2 = fgetc(fptrIn); 
+    int customHZValue3 = fgetc(fptrIn); 
+    char totalRowsPerPattern[4];
+    fgets(totalRowsPerPattern, 5, fptrIn);
+    int totalRowsInPatternMatrix = fgetc(fptrIn); 
+
+    printf("timeBase: %u\n", timeBase);    // In Def. it says 1, but here it gives 0.
+    printf("tickTime1: %u\n", tickTime1);  // Good 
+    printf("tickTime2: %u\n", tickTime2);  // Good 
+    printf("framesMode: %u\n", framesMode);  // If this is called "Step" in Def., then this is good 
+    printf("usingCustomHZ: %u\n", usingCustomHZ);    // Whether the "Custom" clock box is checked? 
+    printf("customHZValue1: %u\n", customHZValue1);  // Hz clock - 1st digit?
+    printf("customHZValue2: %u\n", customHZValue2);  // Hz clock - 2nd digit?
+    printf("customHZValue3: %u\n", customHZValue3);  // Hz clock - 3rd digit?
+
+    printf("totalRowsPerPattern[0]: %u\n", totalRowsPerPattern[0]);  // Says 64, which is what "Rows" is  
+    printf("totalRowsPerPattern[1]: %u\n", totalRowsPerPattern[1]);  // Says 0 
+    printf("totalRowsPerPattern[2]: %u\n", totalRowsPerPattern[2]);  // Says 0 
+    printf("totalRowsPerPattern[3]: %u\n", totalRowsPerPattern[3]);  // Says 0 
+
+    printf("totalRowsInPatternMatrix: %u or %x\n", totalRowsInPatternMatrix, totalRowsInPatternMatrix); // Good. 
+
+    // In previous .dmp versions, arpeggio tick speed is here! 
+
+    ///////////////// PATTERN MATRIX VALUES (A matrix of SYSTEM_TOTAL_CHANNELS x TOTAL_ROWS_IN_PATTERN_MATRIX)
+
+    // Format: patterMatrixValues[columns (channel)][rows] 
+    unsigned char **patternMatrixValues = (unsigned char **)malloc(sys.channels * sizeof(unsigned char)); 
+
+    for (int i = 0; i < sys.channels; i++)
+    {
+        patternMatrixValues[i] = (unsigned char *)malloc(totalRowsInPatternMatrix * sizeof(unsigned char));
+        for (int j = 0; j < totalRowsInPatternMatrix; j++)
+        {
+            patternMatrixValues[i][j] = fgetc(fptrIn); 
+        }
+    }
+
+    ///////////////// INSTRUMENTS DATA 
+
+
+
+
 
 
     // .... To be completed....

@@ -1,24 +1,27 @@
 
+#include "system_info.h"
 
-//unsigned char genesis = 0x02;
+System systems[10] = {
+    {.id = 0x00, .name = "ERROR", .channels = 0},
+	{.id = 0x02, .name = "GENESIS", .channels = 10},
+	{.id = 0x12, .name = "GENESIS_CH3", .channels = 13},
+	{.id = 0x03, .name = "SMS", .channels = 4},
+	{.id = 0x04, .name = "GAMEBOY", .channels = 4},
+	{.id = 0x05, .name = "PCENGINE", .channels = 6},
+	{.id = 0x06, .name = "NES", .channels = 5},
+	{.id = 0x07, .name = "C64_SID_8580", .channels = 3},
+	{.id = 0x17, .name = "C64_SID_6581", .channels = 3},
+	{.id = 0x08, .name = "YM2151", .channels = 13}
+	};
 
 
-#define SYSTEM_GENESIS 0x02			
-#define SYSTEM_GENESIS_CHANNELS 10 
-#define SYSTEM_GENESIS_CH3 0x12			
-#define SYSTEM_GENESIS_CH3_CHANNELS 13
-#define SYSTEM_SMS 0x03 
-#define SYSTEM_SMS_CHANNELS 4 
-#define SYSTEM_GAMEBOY 0x04 
-#define SYSTEM_GAMEBOY_CHANNELS 4
+System getSystem(unsigned char systemByte)
+{
+    for (int i = 1; i < 10; i++)
+    {
+        if (systems[i].id == systemByte) 
+            return systems[i];
+    }
+    return systems[0]; // Error: System byte invalid  
+}
 
-/*
-	  SYSTEM_GENESIS (EXT. CH3) 0x12(SYSTEM_TOTAL_CHANNELS 13)
-	  SYSTEM_SMS 0x03				(SYSTEM_TOTAL_CHANNELS 4)
-	  SYSTEM_GAMEBOY 0x04			(SYSTEM_TOTAL_CHANNELS 4)
-	  SYSTEM_PCENGINE 0x05			(SYSTEM_TOTAL_CHANNELS 6)
-	  SYSTEM_NES 0x06				(SYSTEM_TOTAL_CHANNELS 5)
-	  SYSTEM_C64 (SID 8580) 0x07	(SYSTEM_TOTAL_CHANNELS 3)
-	  SYSTEM_C64 (SID 6581) 0x17	(SYSTEM_TOTAL_CHANNELS 3)
-	  SYSTEM_YM2151 0x08     		(SYSTEM_TOTAL_CHANNELS 13)
-*/ 

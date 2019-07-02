@@ -16,6 +16,8 @@ Converts Deflemask .dmf files to .mod tracker files.
 #include <assert.h>
 #include "zlib.h"
 
+#include "system_info.c"
+
 #if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(__CYGWIN__)
 #  include <fcntl.h>
 #  include <io.h>
@@ -126,7 +128,7 @@ int main(int argc, char* argv[])
 {
     char *inFileRaw, *inFileInflated, *outFile; 
 
-    printf("start\n");
+    printf("Start\n");
 
     if (argc != 3)
     {
@@ -173,8 +175,6 @@ int main(int argc, char* argv[])
     {
         strcat(outFile, ".mod"); // Add ".mod" extension if it wasn't specified in the argument 
     }
-
-    printf("here0\n");
     
     FILE* fptrIn = fopen(inFileInflated, "wb");
     int ret = inf(fptrRaw, fptrIn);
@@ -187,18 +187,82 @@ int main(int argc, char* argv[])
     {
         printf("Unsuccessful inflation.\n");
         zerr(ret);
+        return 1;
     }   
     
     fclose(fptrRaw);
 
-    printf("%d", ret);
+    fclose(fptrIn);
+    fptrIn = fopen(inFileInflated, "rb");
 
     fseek(fptrIn, 0L, SEEK_END);
     long sz = ftell(fptrIn);   // How large the file is 
-    unsigned char *fBuff = malloc(sz + 1); // File buffer 
+    unsigned char *fBuff = malloc(sz); // File buffer 
+    printf("File has %u bytes.\n", sz);
 
     rewind(fptrIn);
-    fread(fBuff, 1, sz, fptrIn);  // Read entire file, putting it in fBuff    
+    //fread(fBuff, 1, sz, fptrIn);  // Read entire file, putting it in fBuff    
+    //printf("sz=%u\n", sz);
+
+    //ong pos = 0;   // Just use ftell(fptrIn) instead 
+
+
+    ///////////////// FORMAT FLAGS 
+
+    fgets(fBuff, 17, fptrIn); 
+    if (strncmp(fBuff, ".DelekDefleMask.", 17) == 0)
+    {
+        printf("Format header is good.\n");
+    }
+    else
+    {
+        printf(fBuff);
+        printf("Format header is bad.\n");
+        return 1;
+    }
+
+    unsigned char dmfFileVersion = fgetc(fptrIn); 
+    printf(".dmf File Version: %u\n", dmfFileVersion); 
+
+    ///////////////// SYSTEM SET 
+
+    switch (fgetc(fptrIn))
+    {
+        case SYSTEM_GENESIS:
+            printf("Genesis\n");
+            break;
+        case SYSTEM_GENESIS_CH3:
+            printf("Genesis ext. ch3\n");
+            break;
+        case SYSTEM_SMS:
+            printf("SMS\n");
+            break;
+        case SYSTEM_GAMEBOY:
+            printf("GameBoy\n");
+            break;
+        default: 
+            printf("Other system\n");
+    }
+
+    ///////////////// VISUAL INFORMATION
+
+    int songNameLength = fgetc(fptrIn);    
+    char *songName = malloc(songNameLength); 
+    fgets(songName, songNameLength + 1, fptrIn); 
+    //printf("len: %u\n", songNameLength);
+    printf("Title: %s\n", songName);
+
+    int songAuthorLength = fgetc(fptrIn);    
+    char *songAuthor = malloc(songAuthorLength); 
+    fgets(songAuthor, songAuthorLength + 1, fptrIn); 
+    //printf("len: %u\n", songAuthorLength);
+    printf("Author: %s\n", songAuthor);
+
+    unsigned char highlightAPatterns = fgetc(fptrIn);  
+    unsigned char highlightBPatterns = fgetc(fptrIn); 
+
+    ///////////////// MODULE INFORMATION
+
 
     // .... To be completed....
 

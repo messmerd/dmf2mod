@@ -294,7 +294,12 @@ int main(int argc, char* argv[])
         }
     }
 
-    ///////////////// INSTRUMENTS DATA  (untested)
+    printf("here\n");
+
+    //printf("test results: %i", testFunc());
+    //return 1; 
+
+    ///////////////// INSTRUMENTS DATA  - seems to load instruments correctly, but isn't saving them correctly 
 
     unsigned char totalInstruments = fgetc(fptrIn);
     Instrument* instruments = (Instrument *)malloc(totalInstruments * sizeof(Instrument)); 
@@ -304,7 +309,18 @@ int main(int argc, char* argv[])
         instruments[i] = loadInstrument(fptrIn, sys);
     }
 
+    // These crash the program: 
+    printf("here1\n");
+    printf("%s\n", instruments[0].name);
+    printf("here1b\n");
+    printf("%s\n", instruments[1].name);
+    printf("%s\n", instruments[2].name);
+
+    printf("here2\n");
+
     ///////////////// WAVETABLES DATA
+
+
 
 
     // .... To be completed....

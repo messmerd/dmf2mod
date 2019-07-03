@@ -17,6 +17,7 @@ Converts Deflemask .dmf files to .mod tracker files.
 #include "zlib.h"
 
 #include "system_info.h"
+#include "instruments.h" 
 
 #if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(__CYGWIN__)
 #  include <fcntl.h>
@@ -33,18 +34,7 @@ const char* get_filename_ext(const char* filename) {
     return dot + 1;
 }
 
-
 #define CHUNK 16384
-
-struct Instrument
-{
-    unsigned char nameLength;
-    char *name;
-    unsigned char mode;  // 0 = STANDARD INS, 1 = FM INS 
-
-
-};
-
 
 /* Decompress from file source to file dest until stream ends or EOF.
    inf() returns Z_OK on success, Z_MEM_ERROR if memory could not be
@@ -52,7 +42,7 @@ struct Instrument
    invalid or incomplete, Z_VERSION_ERROR if the version of zlib.h and
    the version of the library linked do not match, or Z_ERRNO if there
    is an error reading or writing the files. */
-int inf(FILE *source, FILE *dest)
+int inf(FILE *source, FILE *dest) // was FILE *dest)
 {
     int ret;
     unsigned have;
@@ -96,12 +86,18 @@ int inf(FILE *source, FILE *dest)
                 return ret;
             }
             have = CHUNK - strm.avail_out;
+            
+            //strncpy(dest, out, have);  // New. testing  
+            
+            
             if (fwrite(out, 1, have, dest) != have || ferror(dest)) {
                 (void)inflateEnd(&strm);
                 return Z_ERRNO;
             }
+            
+            
         } while (strm.avail_out == 0);
-
+        
         /* done when inflate() says it's done */
     } while (ret != Z_STREAM_END);
 
@@ -212,13 +208,8 @@ int main(int argc, char* argv[])
     printf("File has %u bytes.\n", sz);
 
     rewind(fptrIn);
-    //fread(fBuff, 1, sz, fptrIn);  // Read entire file, putting it in fBuff    
-    //printf("sz=%u\n", sz);
 
-    //ong pos = 0;   // Just use ftell(fptrIn) instead 
-
-
-    ///////////////// FORMAT FLAGS 
+    ///////////////// FORMAT FLAGS - passes 
 
     fgets(fBuff, 17, fptrIn); 
     if (strncmp(fBuff, ".DelekDefleMask.", 17) == 0)
@@ -235,12 +226,12 @@ int main(int argc, char* argv[])
     unsigned char dmfFileVersion = fgetc(fptrIn); 
     printf(".dmf File Version: %u\n", dmfFileVersion); 
 
-    ///////////////// SYSTEM SET 
+    ///////////////// SYSTEM SET - passes 
 
     System sys = getSystem(fgetc(fptrIn)); 
     printf("System: %s (channels: %u)\n", sys.name, sys.channels);
 
-    ///////////////// VISUAL INFORMATION
+    ///////////////// VISUAL INFORMATION - passes
 
     int songNameLength = fgetc(fptrIn);    
     char *songName = malloc(songNameLength); 
@@ -257,7 +248,7 @@ int main(int argc, char* argv[])
     unsigned char highlightAPatterns = fgetc(fptrIn);  
     unsigned char highlightBPatterns = fgetc(fptrIn); 
 
-    ///////////////// MODULE INFORMATION
+    ///////////////// MODULE INFORMATION - seems to pass 
 
     int timeBase = fgetc(fptrIn);   
     int tickTime1 = fgetc(fptrIn); 
@@ -289,7 +280,7 @@ int main(int argc, char* argv[])
 
     // In previous .dmp versions, arpeggio tick speed is here! 
 
-    ///////////////// PATTERN MATRIX VALUES (A matrix of SYSTEM_TOTAL_CHANNELS x TOTAL_ROWS_IN_PATTERN_MATRIX)
+    ///////////////// PATTERN MATRIX VALUES (A matrix of SYSTEM_TOTAL_CHANNELS x TOTAL_ROWS_IN_PATTERN_MATRIX) - tested somewhat. Seems to pass
 
     // Format: patterMatrixValues[columns (channel)][rows] 
     unsigned char **patternMatrixValues = (unsigned char **)malloc(sys.channels * sizeof(unsigned char)); 
@@ -303,34 +294,25 @@ int main(int argc, char* argv[])
         }
     }
 
-    ///////////////// INSTRUMENTS DATA 
+    ///////////////// INSTRUMENTS DATA  (untested)
 
+    unsigned char totalInstruments = fgetc(fptrIn);
+    Instrument* instruments = (Instrument *)malloc(totalInstruments * sizeof(Instrument)); 
 
+    for (int i = 0; i < totalInstruments; i++)
+    {
+        instruments[i] = loadInstrument(fptrIn, sys);
+    }
 
-
+    ///////////////// WAVETABLES DATA
 
 
     // .... To be completed....
 
-    /*
-    int c;
-    unsigned int pos = 0;
-    while (1) {
-        c = fgetc(fptrIn);
-        if (feof(fptrIn)) {
-            break;
-        }
-        //printf("%c", c);
+    fclose(fptrIn);
 
-        if (pos >= 0 && pos <= 15)
-        {
-            printf("%u", c);
-        }
-        pos++;
-   }*/
-
-   fclose(fptrIn);
-
+    // Need to close files here!! (and anywhere the program might end prematurely)
+    // Need to deallocate memory here!! (and anywhere the program might end prematurely)
 
     return 0; 
 }

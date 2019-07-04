@@ -294,11 +294,6 @@ int main(int argc, char* argv[])
         }
     }
 
-    printf("here\n");
-
-    //printf("test results: %i", testFunc());
-    //return 1; 
-
     ///////////////// INSTRUMENTS DATA  - seems to load instruments correctly, but isn't saving them correctly 
 
     unsigned char totalInstruments = fgetc(fptrIn);
@@ -307,20 +302,10 @@ int main(int argc, char* argv[])
     for (int i = 0; i < totalInstruments; i++)
     {
         instruments[i] = loadInstrument(fptrIn, sys);
+        printf("Loaded instrument: %s\n", instruments[i].name);
     }
 
-    // These crash the program: 
-    printf("here1\n");
-    printf("%s\n", instruments[0].name);
-    printf("here1b\n");
-    printf("%s\n", instruments[1].name);
-    printf("%s\n", instruments[2].name);
-
-    printf("here2\n");
-
     ///////////////// WAVETABLES DATA
-
-
 
 
     // .... To be completed....

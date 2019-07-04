@@ -6,14 +6,10 @@ Instrument loadInstrument(FILE *filePointer, System systemType)
     Instrument inst; 
 
     int name_size = fgetc(filePointer); 
-    printf("name_size: %u\n", name_size);
-
     inst.name = (char *)malloc(name_size * sizeof(char)); 
     fgets(inst.name, name_size + 1, filePointer);
-    printf("name: %s\n", inst.name);
 
-    inst.mode = fgetc(filePointer);
-    printf("mode: %u\n", inst.mode);
+    inst.mode = fgetc(filePointer); // 1 = FM; 0 = Standard 
     
     if (inst.mode == 1) // FM instrument 
     {
@@ -41,10 +37,8 @@ Instrument loadInstrument(FILE *filePointer, System systemType)
     }
     else if (inst.mode == 0) // Standard instrument 
     {
-        printf("mode==0. systemType.name: %s\n", systemType.name);
         if (strcmp(systemType.name, "GAMEBOY") != 0)  // Not a GameBoy  
         {
-            printf("hello\n");
             // Volume macro 
             inst.stdVolEnvSize = fgetc(filePointer); 
             inst.stdVolEnvValue = (int32_t *)malloc(inst.stdVolEnvSize * sizeof(int32_t));
@@ -62,7 +56,6 @@ Instrument loadInstrument(FILE *filePointer, System systemType)
 
         // Arpeggio macro 
         inst.stdArpEnvSize = fgetc(filePointer); 
-        printf("inst.stdArpEnvSize: %u\n", inst.stdArpEnvSize);  // gave 1 
         inst.stdArpEnvValue = (int32_t *)malloc(inst.stdArpEnvSize * sizeof(int32_t));
         for (int i = 0; i < inst.stdArpEnvSize; i++)
         {
@@ -71,14 +64,11 @@ Instrument loadInstrument(FILE *filePointer, System systemType)
             inst.stdArpEnvValue[i] |= fgetc(filePointer) << 8;
             inst.stdArpEnvValue[i] |= fgetc(filePointer) << 16;
             inst.stdArpEnvValue[i] |= fgetc(filePointer) << 24;
-            printf("inst.stdArpEnvValue[%u]: %i. ", i, inst.stdArpEnvValue[i]); // gave 65536 though this is unsigned 
         }
 
         if (inst.stdArpEnvSize > 0)
             inst.stdArpEnvLoopPos = fgetc(filePointer ); 
-        printf("inst.stdArpEnvLoopPos: %u. ", inst.stdArpEnvLoopPos);  // gave 0 
         inst.stdArpMacroMode = fgetc(filePointer); 
-        printf("inst.stdArpMacroMode: %u\n", inst.stdArpMacroMode);  // gave 0
 
         // Duty/Noise macro 
         inst.stdDutyNoiseEnvSize = fgetc(filePointer); 
@@ -109,7 +99,7 @@ Instrument loadInstrument(FILE *filePointer, System systemType)
             inst.stdWavetableEnvLoopPos = fgetc(filePointer); 
 
         // Per system data
-        if (strcmp(systemType.name, "C64_SID_8580") == 0 || strcmp(systemType.name, "C64_SID_6581") == 0) //(systemType.name == "C64_SID_8580" || systemType.name == "C64_SID_6581") 
+        if (strcmp(systemType.name, "C64_SID_8580") == 0 || strcmp(systemType.name, "C64_SID_6581") == 0) // Using Commodore 64 
         {
             
             inst.stdC64TriWaveEn = fgetc(filePointer); 
@@ -134,7 +124,7 @@ Instrument loadInstrument(FILE *filePointer, System systemType)
             inst.stdC64FilterLowPass = fgetc(filePointer); 
             inst.stdC64FilterCH2Off = fgetc(filePointer); 
         }
-        else if (strcmp(systemType.name, "GAMEBOY") == 0) //(systemType.name == "GAMEBOY") 
+        else if (strcmp(systemType.name, "GAMEBOY") == 0) // Using GameBoy 
         {
             inst.stdGBEnvVol = fgetc(filePointer); 
             inst.stdGBEnvDir = fgetc(filePointer); 
@@ -143,4 +133,5 @@ Instrument loadInstrument(FILE *filePointer, System systemType)
         }
     }
 
+    return inst; 
 }

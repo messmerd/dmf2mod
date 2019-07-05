@@ -5,7 +5,7 @@ Instrument loadInstrument(FILE *filePointer, System systemType)
 {
     Instrument inst; 
 
-    int name_size = fgetc(filePointer); 
+    uint8_t name_size = fgetc(filePointer); 
     inst.name = (char *)malloc(name_size * sizeof(char)); 
     fgets(inst.name, name_size + 1, filePointer);
 
@@ -135,3 +135,32 @@ Instrument loadInstrument(FILE *filePointer, System systemType)
 
     return inst; 
 }
+
+PCMSample loadPCMSample(FILE *filePointer)
+{
+    PCMSample sample; 
+
+    sample.size = fgetc(filePointer);
+    sample.size |= fgetc(filePointer) << 8;
+    sample.size |= fgetc(filePointer) << 16;
+    sample.size |= fgetc(filePointer) << 24;
+
+    uint8_t name_size = fgetc(filePointer); 
+    sample.name = (char *)malloc(name_size * sizeof(char)); 
+    fgets(sample.name, name_size + 1, filePointer);
+
+    sample.rate = fgetc(filePointer); 
+    sample.pitch = fgetc(filePointer); 
+    sample.amp = fgetc(filePointer); 
+    sample.bits = fgetc(filePointer); 
+
+    sample.data = (uint16_t *)malloc(sample.size * sizeof(uint16_t *)); 
+    for (uint32_t i = 0; i < sample.size; i++) 
+    {
+        sample.data[i] = fgetc(filePointer); 
+        sample.data[i] |= fgetc(filePointer) << 8; 
+    }
+
+    return sample; 
+}
+

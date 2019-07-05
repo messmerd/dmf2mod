@@ -32,6 +32,15 @@ typedef struct Instrument
 
 } Instrument;
 
+typedef struct PCMSample 
+{
+    uint32_t size; 
+    char *name; 
+    uint8_t rate, pitch, amp, bits;
+    uint16_t *data; 
+} PCMSample; 
+
 Instrument loadInstrument(FILE *filePointer, System systemType);
+PCMSample loadPCMSample(FILE *filePointer); 
 
 #endif 

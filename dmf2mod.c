@@ -18,6 +18,7 @@ Converts Deflemask .dmf files to .mod tracker files.
 
 #include "system_info.h"
 #include "instruments.h" 
+#include "patterns.h"
 
 #if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(__CYGWIN__)
 #  include <fcntl.h>
@@ -164,7 +165,7 @@ int main(int argc, char* argv[])
     }
     else
     {
-        printf("File loaded.\n");
+        printf("File found.\n");
     }
     
     if (strcmp(get_filename_ext(inFileRaw), "dmf") != 0)
@@ -209,7 +210,7 @@ int main(int argc, char* argv[])
 
     rewind(fptrIn);
 
-    ///////////////// FORMAT FLAGS - passes 
+    ///////////////// FORMAT FLAGS  
 
     fgets(fBuff, 17, fptrIn); 
     if (strncmp(fBuff, ".DelekDefleMask.", 17) == 0)
@@ -226,12 +227,12 @@ int main(int argc, char* argv[])
     unsigned char dmfFileVersion = fgetc(fptrIn); 
     printf(".dmf File Version: %u\n", dmfFileVersion); 
 
-    ///////////////// SYSTEM SET - passes 
+    ///////////////// SYSTEM SET  
 
     System sys = getSystem(fgetc(fptrIn)); 
     printf("System: %s (channels: %u)\n", sys.name, sys.channels);
 
-    ///////////////// VISUAL INFORMATION - passes
+    ///////////////// VISUAL INFORMATION 
 
     int songNameLength = fgetc(fptrIn);    
     char *songName = malloc(songNameLength); 
@@ -248,7 +249,7 @@ int main(int argc, char* argv[])
     unsigned char highlightAPatterns = fgetc(fptrIn);  
     unsigned char highlightBPatterns = fgetc(fptrIn); 
 
-    ///////////////// MODULE INFORMATION - seems to pass 
+    ///////////////// MODULE INFORMATION  
 
     int timeBase = fgetc(fptrIn);   
     int tickTime1 = fgetc(fptrIn); 
@@ -258,8 +259,10 @@ int main(int argc, char* argv[])
     int customHZValue1 = fgetc(fptrIn); 
     int customHZValue2 = fgetc(fptrIn); 
     int customHZValue3 = fgetc(fptrIn); 
-    char totalRowsPerPattern[4];
-    fgets(totalRowsPerPattern, 5, fptrIn);
+    uint32_t totalRowsPerPattern = fgetc(fptrIn); 
+    totalRowsPerPattern |= fgetc(fptrIn) << 8;
+    totalRowsPerPattern |= fgetc(fptrIn) << 16;
+    totalRowsPerPattern |= fgetc(fptrIn) << 24;
     int totalRowsInPatternMatrix = fgetc(fptrIn); 
 
     printf("timeBase: %u\n", timeBase);    // In Def. it says 1, but here it gives 0.
@@ -271,30 +274,32 @@ int main(int argc, char* argv[])
     printf("customHZValue2: %u\n", customHZValue2);  // Hz clock - 2nd digit?
     printf("customHZValue3: %u\n", customHZValue3);  // Hz clock - 3rd digit?
 
-    printf("totalRowsPerPattern[0]: %u\n", totalRowsPerPattern[0]);  // Says 64, which is what "Rows" is  
-    printf("totalRowsPerPattern[1]: %u\n", totalRowsPerPattern[1]);  // Says 0 
-    printf("totalRowsPerPattern[2]: %u\n", totalRowsPerPattern[2]);  // Says 0 
-    printf("totalRowsPerPattern[3]: %u\n", totalRowsPerPattern[3]);  // Says 0 
-
+    printf("totalRowsPerPattern: %u\n", totalRowsPerPattern);  // Says 64, which is what "Rows" is  
     printf("totalRowsInPatternMatrix: %u or %x\n", totalRowsInPatternMatrix, totalRowsInPatternMatrix); // Good. 
 
     // In previous .dmp versions, arpeggio tick speed is here! 
 
-    ///////////////// PATTERN MATRIX VALUES (A matrix of SYSTEM_TOTAL_CHANNELS x TOTAL_ROWS_IN_PATTERN_MATRIX) - tested somewhat. Seems to pass
+    ///////////////// PATTERN MATRIX VALUES 
 
-    // Format: patterMatrixValues[columns (channel)][rows] 
-    unsigned char **patternMatrixValues = (unsigned char **)malloc(sys.channels * sizeof(unsigned char)); 
+    // Format: patterMatrixValues[channel][pattern matrix row] 
+    uint8_t **patternMatrixValues = (uint8_t **)malloc(sys.channels * sizeof(uint8_t *)); 
+    uint8_t *patternMatrixMaxValues = (uint8_t *)malloc(sys.channels * sizeof(uint8_t)); 
 
     for (int i = 0; i < sys.channels; i++)
     {
-        patternMatrixValues[i] = (unsigned char *)malloc(totalRowsInPatternMatrix * sizeof(unsigned char));
+        patternMatrixMaxValues[i] = 0; 
+        patternMatrixValues[i] = (uint8_t *)malloc(totalRowsInPatternMatrix * sizeof(uint8_t));
         for (int j = 0; j < totalRowsInPatternMatrix; j++)
         {
             patternMatrixValues[i][j] = fgetc(fptrIn); 
+            if (patternMatrixValues[i][j] > patternMatrixMaxValues[i]) 
+            {
+                patternMatrixMaxValues[i] = patternMatrixValues[i][j]; 
+            }
         }
     }
-
-    ///////////////// INSTRUMENTS DATA  - seems to load instruments correctly, but isn't saving them correctly 
+    
+    ///////////////// INSTRUMENTS DATA 
 
     unsigned char totalInstruments = fgetc(fptrIn);
     Instrument* instruments = (Instrument *)malloc(totalInstruments * sizeof(Instrument)); 
@@ -302,15 +307,86 @@ int main(int argc, char* argv[])
     for (int i = 0; i < totalInstruments; i++)
     {
         instruments[i] = loadInstrument(fptrIn, sys);
-        printf("Loaded instrument: %s\n", instruments[i].name);
     }
+
+    printf("Loaded instruments.\n");
 
     ///////////////// WAVETABLES DATA
 
+    unsigned char totalWavetables = fgetc(fptrIn); 
+    
+    uint32_t *wavetableSizes = (uint32_t *)malloc(totalWavetables * sizeof(uint32_t));     
+    uint32_t **wavetableValues = (uint32_t **)malloc(totalWavetables * sizeof(uint32_t *)); 
 
-    // .... To be completed....
+    for (int i = 0; i < totalWavetables; i++)
+    {
+        wavetableSizes[i] = fgetc(fptrIn); 
+        wavetableSizes[i] |= fgetc(fptrIn) << 8;
+        wavetableSizes[i] |= fgetc(fptrIn) << 16;
+        wavetableSizes[i] |= fgetc(fptrIn) << 24;
+
+        wavetableValues[i] = (uint32_t *)malloc(wavetableSizes[i] * sizeof(uint32_t)); 
+        for (int j = 0; j < wavetableSizes[i]; j++)
+        {
+            wavetableValues[i][j] = fgetc(fptrIn); 
+            wavetableValues[i][j] |= fgetc(fptrIn) << 8;
+            wavetableValues[i][j] |= fgetc(fptrIn) << 16;
+            wavetableValues[i][j] |= fgetc(fptrIn) << 24;
+        }
+    }
+    printf("Loaded %u wavetable(s).\n", totalWavetables);
+
+    ///////////////// PATTERNS DATA
+
+    // patternValues[channel][pattern matrix number][pattern row number]
+    PatternRow ***patternValues = (PatternRow ***)malloc(sys.channels * sizeof(PatternRow **)); 
+    int *channelEffectsColumnsCount = (int *)malloc(sys.channels * sizeof(int));
+    uint8_t patternMatrixNumber;
+
+    for (int channel = 0; channel < sys.channels; channel++)
+    {
+        channelEffectsColumnsCount[channel] = fgetc(fptrIn); 
+
+        patternValues[channel] = (PatternRow **)malloc((patternMatrixMaxValues[channel] + 1) * sizeof(PatternRow *));
+        for (int i = 0; i < patternMatrixMaxValues[channel] + 1; i++) 
+        {
+            patternValues[channel][i] = NULL; 
+        }
+
+        for (int rowInPatternMatrix = 0; rowInPatternMatrix < totalRowsInPatternMatrix; rowInPatternMatrix++)
+        {
+            patternMatrixNumber = patternMatrixValues[channel][rowInPatternMatrix];
+            if (patternValues[channel][patternMatrixNumber] != NULL) // If pattern has been loaded previously 
+            {
+                fseek(fptrIn, (8 + 4*channelEffectsColumnsCount[channel])*totalRowsPerPattern, SEEK_CUR); // Unnecessary information
+                continue; // Skip patterns that have already been loaded 
+            }
+
+            patternValues[channel][patternMatrixNumber] = (PatternRow *)malloc(totalRowsPerPattern * sizeof(PatternRow));
+            
+            for (uint32_t row = 0; row < totalRowsPerPattern; row++)
+            {
+                patternValues[channel][patternMatrixNumber][row] = loadPatternRow(fptrIn, channelEffectsColumnsCount[channel]);
+            }
+        }
+    }
+
+    printf("Loaded patterns.\n");
+
+    ///////////////// PCM SAMPLES DATA
+
+    uint8_t totalPCMSamples = fgetc(fptrIn); 
+    PCMSample *pcmSamples = (PCMSample *)malloc(totalPCMSamples * sizeof(PCMSample));
+
+    for (int sample = 0; sample < totalPCMSamples; sample++) 
+    {
+        pcmSamples[sample] = loadPCMSample(fptrIn);
+    }
+
+    printf("Loaded PCM Samples.\nThe .dmf file has finished loading. \n");
 
     fclose(fptrIn);
+
 
     // Need to close files here!! (and anywhere the program might end prematurely)
     // Need to deallocate memory here!! (and anywhere the program might end prematurely)

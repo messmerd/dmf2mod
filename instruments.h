@@ -40,6 +40,14 @@ typedef struct PCMSample
     uint16_t *data; 
 } PCMSample; 
 
+const int16_t sqwSampleLength;
+const int8_t sqwSampleDuty12_5[32];
+const int8_t sqwSampleDuty25[32];
+const int8_t sqwSampleDuty50[32];
+const int8_t sqwSampleDuty75[32];
+const char sqwSampleNames[4][22];
+
+
 Instrument loadInstrument(FILE *filePointer, System systemType);
 PCMSample loadPCMSample(FILE *filePointer); 
 

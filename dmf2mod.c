@@ -231,14 +231,25 @@ int main(int argc, char* argv[])
 
     System sys = getSystem(fgetc(fptrIn)); 
     printf("System: %s (channels: %u)\n", sys.name, sys.channels);
+    if (strcmp(sys.name, "GAMEBOY") != 0) // If it's not a GameBoy 
+    {
+        printf("Sorry. Only the GameBoy system is currently supported. \n");
+        exit(1);
+    }
 
     ///////////////// VISUAL INFORMATION 
 
-    int songNameLength = fgetc(fptrIn);    
+    int songNameLength = fgetc(fptrIn);   
     char *songName = malloc(songNameLength); 
     fgets(songName, songNameLength + 1, fptrIn); 
     //printf("len: %u\n", songNameLength);
     printf("Title: %s\n", songName);
+    if (songNameLength > 22) 
+    {
+        songName[20] = '\0'; 
+        printf("Song name is longer than 20 characters and will be truncated.\n");
+        printf("New title: %s\n", songName); 
+    } 
 
     int songAuthorLength = fgetc(fptrIn);    
     char *songAuthor = malloc(songAuthorLength); 
@@ -277,6 +288,20 @@ int main(int argc, char* argv[])
     printf("totalRowsPerPattern: %u\n", totalRowsPerPattern);  // Says 64, which is what "Rows" is  
     printf("totalRowsInPatternMatrix: %u or %x\n", totalRowsInPatternMatrix, totalRowsInPatternMatrix); // Good. 
 
+    // Find out how many patterns are needed here
+
+    if (totalRowsInPatternMatrix > 128) 
+    {
+        printf("Error: There must be 128 or fewer rows in the pattern matrix.\n");
+        exit(1);
+    }
+
+    if (totalRowsPerPattern != 64) 
+    {
+        printf("Error: Patterns must have 64 rows. \n");
+        exit(1);
+    }
+
     // In previous .dmp versions, arpeggio tick speed is here! 
 
     ///////////////// PATTERN MATRIX VALUES 
@@ -295,8 +320,24 @@ int main(int argc, char* argv[])
             if (patternMatrixValues[i][j] > patternMatrixMaxValues[i]) 
             {
                 patternMatrixMaxValues[i] = patternMatrixValues[i][j]; 
+                if (patternMatrixMaxValues[i] > 63) 
+                {
+                    printf("Too many patterns. The maximum is 64 unique rows in the pattern matrix.\n", i); 
+                    exit(1); 
+                }
             }
         }
+    }
+    
+    int8_t duplicateIndices = 0;
+    // The function below tries to find repeating rows of patterns in the pattern matrix so that fewer 
+    //   ProTracker patterns are needed. This could allow some .dmf files to successfully be converted 
+    //   to .mod that wouldn't otherwise. It also assigns the ProTracker pattern indices. 
+    duplicateIndices = getProTrackerRepeatPatterns(patternMatrixValues, totalRowsInPatternMatrix);
+    if (proTrackerToDeflemaskIndices == NULL || totalRowsInPatternMatrix - duplicateIndices > 64) 
+    {
+        printf("Error: Too many unique rows of patterns in the pattern matrix. 64 is the maximum.\n");
+        exit(1);
     }
     
     ///////////////// INSTRUMENTS DATA 
@@ -387,6 +428,65 @@ int main(int argc, char* argv[])
 
     fclose(fptrIn);
 
+    ///////////////////////////////////////////////////////////////////////
+    ///////////////////////////  EXPORT TO MOD  ///////////////////////////
+    ///////////////////////////////////////////////////////////////////////
+
+    printf("here-1\n");
+
+    FILE *fptrOut = fopen(outFile, "wb");
+    
+    fputs(songName, fptrOut);  // Can include lowercase letters. Does ProTracker allow lowercase? 
+    if (songNameLength < 20) 
+    {
+        for (int i = songNameLength; i < 20; i++) 
+        {
+            fputc(0, fptrOut);
+        }
+    }
+
+    // Export samples (blank, but could add four square wave samples with difference duty cycles)
+    
+    // Export 4 square wave samples 
+    for (int i = 0; i < 4; i++)
+    {
+        fputs(sqwSampleNames[i], fptrOut);            // Sample i+1 - 22B - name 
+        printf("hereee\n");
+        fputc(sqwSampleLength >> 8, fptrOut);           // Sample i+1 - 1B - length byte 0 - 0
+        fputc(sqwSampleLength | 0x00FF, fptrOut);       // Sample i+1 - 1B - length byte 1 - 64
+        printf("hereee1\n");
+        fputc(0, fptrOut);                              // Sample i+1 - 1B - finetune value - 0 
+        fputc(64, fptrOut);                             // Sample i+1 - 1B - volume - full volume
+        fputc(0 , fptrOut);                             // Sample i+1 - 1B - repeat offset byte 0 
+        fputc(0 , fptrOut);                             // Sample i+1 - 1B - repeat offset byte 1 
+        printf("hereee2\n");
+        fputc(sqwSampleLength >> 8, fptrOut);           // Sample i+1 - 1B - sample repeat length byte 0 - 0
+        fputc(sqwSampleLength | 0x00FF, fptrOut);       // Sample i+1 - 1B - sample repeat length byte 1 - 64
+        printf("hereee3\n");
+    }
+    
+    printf("here\n");
+
+    // The 27 remaining samples are blank: 
+    for (int i = 0; i < 27*30; i++) 
+    {
+        fputc(0, fptrOut); 
+    }
+
+    fputc(totalRowsInPatternMatrix, fptrOut);   // Song length in patterns  
+    fputc(127, fptrOut);                        // Useless byte that has to be here 
+
+    printf("here1\n");
+
+    int nextIndex = 0;
+    for (int i = 0; i < 128; i++) 
+    {
+        fputc(deflemaskToProTrackerIndices[i] - 1, fptrOut);
+    }
+
+    fprintf(fptrOut, "M.K."); 
+
+    printf("The End\n");
 
     // Need to close files here!! (and anywhere the program might end prematurely)
     // Need to deallocate memory here!! (and anywhere the program might end prematurely)

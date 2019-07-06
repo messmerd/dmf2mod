@@ -38,4 +38,8 @@ typedef struct PatternRow
 
 PatternRow loadPatternRow(FILE *filePointer, int effectsColumnsCount); 
 
+int8_t getProTrackerRepeatPatterns(uint8_t **patMatVal, int totalRows); 
+
+int8_t *proTrackerToDeflemaskIndices, *deflemaskToProTrackerIndices;
+
 #endif 

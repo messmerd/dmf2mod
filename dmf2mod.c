@@ -179,7 +179,7 @@ int main(int argc, char* argv[])
         printf("File extension is dmf....good.\n");
     }
 
-    if (get_filename_ext(outFile) != "mod")
+    if (strcmp(get_filename_ext(outFile), "mod") != 0) 
     {
         strcat(outFile, ".mod"); // Add ".mod" extension if it wasn't specified in the argument 
     }
@@ -290,7 +290,7 @@ int main(int argc, char* argv[])
 
     // Find out how many patterns are needed here
 
-    if (totalRowsInPatternMatrix > 128) 
+    if (totalRowsInPatternMatrix > 128) // totalRowsInPatternMatrix is 1 more than it actually is 
     {
         printf("Error: There must be 128 or fewer rows in the pattern matrix.\n");
         exit(1);
@@ -334,7 +334,7 @@ int main(int argc, char* argv[])
     //   ProTracker patterns are needed. This could allow some .dmf files to successfully be converted 
     //   to .mod that wouldn't otherwise. It also assigns the ProTracker pattern indices. 
     duplicateIndices = getProTrackerRepeatPatterns(patternMatrixValues, totalRowsInPatternMatrix);
-    if (proTrackerToDeflemaskIndices == NULL || totalRowsInPatternMatrix - duplicateIndices > 64) 
+    if (deflemaskToProTrackerIndices == NULL || totalRowsInPatternMatrix - duplicateIndices > 64) 
     {
         printf("Error: Too many unique rows of patterns in the pattern matrix. 64 is the maximum.\n");
         exit(1);
@@ -387,6 +387,12 @@ int main(int argc, char* argv[])
     for (int channel = 0; channel < sys.channels; channel++)
     {
         channelEffectsColumnsCount[channel] = fgetc(fptrIn); 
+
+        if (channelEffectsColumnsCount[channel] > 1) 
+        {
+            printf("Error: Each channel can only have 1 effects column.\n");
+            //exit(1);
+        }
 
         patternValues[channel] = (PatternRow **)malloc((patternMatrixMaxValues[channel] + 1) * sizeof(PatternRow *));
         for (int i = 0; i < patternMatrixMaxValues[channel] + 1; i++) 
@@ -450,22 +456,16 @@ int main(int argc, char* argv[])
     // Export 4 square wave samples 
     for (int i = 0; i < 4; i++)
     {
-        fputs(sqwSampleNames[i], fptrOut);            // Sample i+1 - 22B - name 
-        printf("hereee\n");
+        fputs(sqwSampleNames[i], fptrOut);              // Sample i+1 - 22B - name 
         fputc(sqwSampleLength >> 8, fptrOut);           // Sample i+1 - 1B - length byte 0 - 0
         fputc(sqwSampleLength | 0x00FF, fptrOut);       // Sample i+1 - 1B - length byte 1 - 64
-        printf("hereee1\n");
         fputc(0, fptrOut);                              // Sample i+1 - 1B - finetune value - 0 
         fputc(64, fptrOut);                             // Sample i+1 - 1B - volume - full volume
         fputc(0 , fptrOut);                             // Sample i+1 - 1B - repeat offset byte 0 
         fputc(0 , fptrOut);                             // Sample i+1 - 1B - repeat offset byte 1 
-        printf("hereee2\n");
         fputc(sqwSampleLength >> 8, fptrOut);           // Sample i+1 - 1B - sample repeat length byte 0 - 0
         fputc(sqwSampleLength | 0x00FF, fptrOut);       // Sample i+1 - 1B - sample repeat length byte 1 - 64
-        printf("hereee3\n");
     }
-    
-    printf("here\n");
 
     // The 27 remaining samples are blank: 
     for (int i = 0; i < 27*30; i++) 
@@ -476,17 +476,28 @@ int main(int argc, char* argv[])
     fputc(totalRowsInPatternMatrix, fptrOut);   // Song length in patterns  
     fputc(127, fptrOut);                        // Useless byte that has to be here 
 
-    printf("here1\n");
-
-    int nextIndex = 0;
-    for (int i = 0; i < 128; i++) 
-    {
-        fputc(deflemaskToProTrackerIndices[i] - 1, fptrOut);
-    }
+    fwrite(deflemaskToProTrackerIndices, 1, 128, fptrOut);
 
     fprintf(fptrOut, "M.K."); 
 
-    printf("The End\n");
+
+
+    /*
+    for (int i = 0; i < totalRowsInPatternMatrix; i++) // Deflemask/ProTracker pattern matrix row indices 
+    {
+        for (int j = 0; j < 64; j++) 
+        {
+            for (int k = 0; k < sys.channels; k++) 
+            {
+                proTrackerToDeflemaskIndices[]
+            }
+        }
+    }
+    */
+
+
+
+    printf("end\n");
 
     // Need to close files here!! (and anywhere the program might end prematurely)
     // Need to deallocate memory here!! (and anywhere the program might end prematurely)

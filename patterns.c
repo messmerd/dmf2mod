@@ -9,6 +9,12 @@ PatternRow loadPatternRow(FILE *filePointer, int effectsColumnsCount)
     pat.note |= fgetc(filePointer) << 8; 
     pat.octave = fgetc(filePointer); 
     pat.octave |= fgetc(filePointer) << 8; 
+
+    if (pat.octave > 4)
+    {
+        printf("Error: Octave must be 4 or less.\n");
+    }
+
     pat.volume = fgetc(filePointer); 
     pat.volume |= fgetc(filePointer) << 8; 
 
@@ -39,45 +45,45 @@ int8_t getProTrackerRepeatPatterns(uint8_t **patMatVal, int totalRows)
     {
         return 0; 
     }
-
-    if (proTrackerToDeflemaskIndices == NULL)
-    {
-        proTrackerToDeflemaskIndices = (uint8_t *)calloc(128, sizeof(uint8_t));  // maps PT indices to Deflemask indices 
-    }
     
     if (deflemaskToProTrackerIndices == NULL) 
     {
-        deflemaskToProTrackerIndices = (uint8_t *)calloc(128, sizeof(uint8_t));  // maps Deflemask indices to PT indices
+        deflemaskToProTrackerIndices = (int8_t *)malloc(128 * sizeof(int8_t));  // maps Deflemask indices to PT indices
+        if (deflemaskToProTrackerIndices) 
+        {
+            memset(deflemaskToProTrackerIndices, (int8_t)-1, 128);
+        }
+        else
+        {
+            return 0; 
+        }
     }
 
-    // Unnecessary but shorter names are nice: 
-    uint8_t *d2pt = deflemaskToProTrackerIndices;  
-    uint8_t *pt2d = proTrackerToDeflemaskIndices;  
+    // Unnecessary but a shorter name is nice: 
+    int8_t *d2pt = deflemaskToProTrackerIndices;  
 
-    pt2d[0] = 0; 
-    uint8_t currentProTrackerIndex = 1; 
+    uint8_t currentProTrackerIndex = 0; 
     uint8_t duplicateCount = 0; 
     for (int i = 0; i < totalRows - 1; i++) 
     {
-        if (d2pt[i] != 0) {continue; }  // Duplicate that has already been found 
+        if (d2pt[i] >= 0) {continue; }  // Duplicate that has already been found 
         for (int j = i + 1; j < totalRows; j++) 
         {
-            if (d2pt[j] != 0) {continue; }  // Duplicate that has already been found 
-
+            //if (d2pt[j] >= 0) {continue; }  // Duplicate that has already been found 
+            
             if (patMatVal[0][i] == patMatVal[0][j]
              && patMatVal[1][i] == patMatVal[1][j]
               && patMatVal[2][i] == patMatVal[2][j]
                && patMatVal[3][i] == patMatVal[3][j])
             {
-                pt2d[currentProTrackerIndex] = i + 1; // One more than actual index b/c 0 is used as a magic number in this loop
                 d2pt[i] = currentProTrackerIndex; 
                 d2pt[j] = currentProTrackerIndex; 
                 duplicateCount++; 
             }
         }
-        if (d2pt[i+1] == 0) // This row has no duplicate 
+        if (d2pt[i] < 0) // This row has no duplicate 
         {
-            pt2d[currentProTrackerIndex] = i+1;
+            d2pt[i] = currentProTrackerIndex; 
         }
 
         currentProTrackerIndex++;
@@ -86,3 +92,31 @@ int8_t getProTrackerRepeatPatterns(uint8_t **patMatVal, int totalRows)
     return duplicateCount; 
 }
 
+// Unfinished function 
+void writeProTrackerPatternRow(PatternRow *pat)
+{
+    uint16_t period = 0;
+    if (pat->note >= 1 && pat->note <= 12)  // A note 
+    {
+        period = proTrackerPeriodTable[(*pat).octave][(*pat).note % 12]; 
+    }
+    // handle other note values here 
+
+
+    if (pat->effectCode[0] == SETDUTYCYCLE) 
+    {
+        
+    }
+
+}
+
+
+// GameBoy's range is:  C-1 -> C-8
+// ProTracker's range is:  C-1 -> B-3  (plus octaves 0 and 4 which are non-standard)
+uint16_t proTrackerPeriodTable[5][12] = {
+    {1712,1616,1525,1440,1357,1281,1209,1141,1077,1017, 961, 907},  /* C-0 to B-0 */
+    {856,808,762,720,678,640,604,570,538,508,480,453},              /* C-1 to B-1 */
+    {428,404,381,360,339,320,302,285,269,254,240,226},              /* C-2 to B-2 */
+    {214,202,190,180,170,160,151,143,135,127,120,113},              /* C-3 to B-3 */
+    {107,101, 95, 90, 85, 80, 76, 71, 67, 64, 60, 57}               /* C-4 to B-4 */
+}; 

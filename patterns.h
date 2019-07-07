@@ -22,9 +22,22 @@ typedef enum NOTE {
     A=9, 
     AS=10, 
     B=11, 
-    BS=12, 
+    C=12, 
     OFF=100
     } NOTE;
+
+// Deflemask effects found across all systems: 
+typedef enum EFFECT {
+    ARP=0x0, PORTUP=0x1, PORTDOWN=0x2, PORT2NOTE=0x3, VIBRATO=0x4, PORT2NOTEVOLSLIDE=0x5, VIBRATOVOLSLIDE=0x6,
+    TREMOLO=0x7, PANNING=0x8, SETSPEEDVAL1=0x9, VOLSLIDE=0xA, POSJUMP=0xB, RETRIG=0xC, PATBREAK=0xD, 
+    ARPTICKSPEED=0xE0, NOTESLIDEUP=0xE1, NOTESLIDEDOWN=0xE2, SETVIBRATOMODE=0xE3, SETFINEVIBRATODEPTH=0xE4, 
+    SETFINETUNE=0xE5, SETSAMPLESBANK=0xEB, NOTECUT=0xEC, NOTEDELAY=0xED, SYNCSIGNAL=0xEE, SETGLOBALFINETUNE=0xEF, 
+    SETSPEEDVAL2=0xF
+} EFFECT; 
+
+typedef enum GAMEBOY_EFFECT {
+    SETWAVE=0x10, SETNOISEPOLYCOUNTERMODE=0x11, SETDUTYCYCLE=0x12, SETSWEEPTIMESHIFT=0x13, SETSWEEPDIR=0x14
+} GAMEBOY_EFFECT;
 
 typedef struct PatternRow
 {
@@ -40,6 +53,10 @@ PatternRow loadPatternRow(FILE *filePointer, int effectsColumnsCount);
 
 int8_t getProTrackerRepeatPatterns(uint8_t **patMatVal, int totalRows); 
 
-int8_t *proTrackerToDeflemaskIndices, *deflemaskToProTrackerIndices;
+void writeProTrackerPatternRow(PatternRow *pat);
+
+int8_t *deflemaskToProTrackerIndices;
+
+uint16_t proTrackerPeriodTable[5][12]; 
 
 #endif 

@@ -46,12 +46,25 @@ int8_t getProTrackerRepeatPatterns(uint8_t **patMatVal, int totalRows)
         return 0; 
     }
     
-    if (deflemaskToProTrackerIndices == NULL) 
+    if (patternMatrixRowToProTrackerPattern == NULL) 
     {
-        deflemaskToProTrackerIndices = (int8_t *)malloc(128 * sizeof(int8_t));  // maps Deflemask indices to PT indices
-        if (deflemaskToProTrackerIndices) 
+        patternMatrixRowToProTrackerPattern = (int8_t *)malloc(128 * sizeof(int8_t));  // maps Deflemask indices to PT indices
+        if (patternMatrixRowToProTrackerPattern) 
         {
-            memset(deflemaskToProTrackerIndices, (int8_t)-1, 128);
+            memset(patternMatrixRowToProTrackerPattern, (int8_t)-1, 128);
+        }
+        else
+        {
+            return 0; 
+        }
+    }
+
+    if (proTrackerPatternToPatternMatrixRow == NULL)
+    {
+        proTrackerPatternToPatternMatrixRow = (int8_t *)malloc(128 * sizeof(int8_t));
+        if (proTrackerPatternToPatternMatrixRow) 
+        {
+            memset(proTrackerPatternToPatternMatrixRow, (int8_t)-1, 128);
         }
         else
         {
@@ -60,13 +73,14 @@ int8_t getProTrackerRepeatPatterns(uint8_t **patMatVal, int totalRows)
     }
 
     // Unnecessary but a shorter name is nice: 
-    int8_t *d2pt = deflemaskToProTrackerIndices;  
+    int8_t *r2pt = patternMatrixRowToProTrackerPattern;  
+    int8_t *pt2r = proTrackerPatternToPatternMatrixRow;  
 
     uint8_t currentProTrackerIndex = 0; 
     uint8_t duplicateCount = 0; 
     for (int i = 0; i < totalRows - 1; i++) 
     {
-        if (d2pt[i] >= 0) {continue; }  // Duplicate that has already been found 
+        if (r2pt[i] >= 0) {continue; }  // Duplicate that has already been found 
         for (int j = i + 1; j < totalRows; j++) 
         {
             //if (d2pt[j] >= 0) {continue; }  // Duplicate that has already been found 
@@ -76,14 +90,16 @@ int8_t getProTrackerRepeatPatterns(uint8_t **patMatVal, int totalRows)
               && patMatVal[2][i] == patMatVal[2][j]
                && patMatVal[3][i] == patMatVal[3][j])
             {
-                d2pt[i] = currentProTrackerIndex; 
-                d2pt[j] = currentProTrackerIndex; 
+                r2pt[i] = currentProTrackerIndex; 
+                r2pt[j] = currentProTrackerIndex; 
+                pt2r[currentProTrackerIndex] = i; 
                 duplicateCount++; 
             }
         }
-        if (d2pt[i] < 0) // This row has no duplicate 
+        if (r2pt[i] < 0) // This row has no duplicate 
         {
-            d2pt[i] = currentProTrackerIndex; 
+            r2pt[i] = currentProTrackerIndex; 
+            pt2r[currentProTrackerIndex] = i; 
         }
 
         currentProTrackerIndex++;
@@ -93,8 +109,10 @@ int8_t getProTrackerRepeatPatterns(uint8_t **patMatVal, int totalRows)
 }
 
 // Unfinished function 
-void writeProTrackerPatternRow(PatternRow *pat)
+void writeProTrackerPatternRow(FILE *filePointer, PatternRow *pat, uint8_t dutyCycle) 
 {
+    //printf("start func...");
+    int8_t bytes[4];
     uint16_t period = 0;
     if (pat->note >= 1 && pat->note <= 12)  // A note 
     {
@@ -102,12 +120,22 @@ void writeProTrackerPatternRow(PatternRow *pat)
     }
     // handle other note values here 
 
+    uint16_t effect = 0; //pat->effectCode; 
 
-    if (pat->effectCode[0] == SETDUTYCYCLE) 
-    {
-        
-    }
+    fputc((dutyCycle & 0xF0) | ((period & 0x0F00) >> 8), filePointer);  // Sample number (upper 4b); sample period/effect param. (upper 4b)
+    fputc(period & 0x00FF, filePointer);                                // Sample period/effect param. (lower 8 bits) 
+    fputc((dutyCycle << 4) | ((effect & 0x0F00) >> 8), filePointer);    // Sample number (lower 4b); effect code (upper 4b)
+    fputc(effect & 0x00FF, filePointer);                                // Effect code (lower 8 bits) 
 
+    /*
+    7654-3210 7654-3210 7654-3210 7654-3210
+    wwww xxxx-xxxx-xxxx yyyy zzzz-zzzz-zzzz
+
+        wwwwyyyy (8 bits) is the sample for this channel/division
+    xxxxxxxxxxxx (12 bits) is the sample's period (or effect parameter)
+    zzzzzzzzzzzz (12 bits) is the effect for this channel/division
+    */
+   //printf("end func.\n");
 }
 
 

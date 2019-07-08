@@ -53,9 +53,14 @@ PatternRow loadPatternRow(FILE *filePointer, int effectsColumnsCount);
 
 int8_t getProTrackerRepeatPatterns(uint8_t **patMatVal, int totalRows); 
 
-void writeProTrackerPatternRow(PatternRow *pat);
+void writeProTrackerPatternRow(FILE *filePointer, PatternRow *pat, uint8_t dutyCycle); 
 
-int8_t *deflemaskToProTrackerIndices;
+// Deflemask/ProTracker pattern matrix row number to ProTracker pattern index 
+int8_t *patternMatrixRowToProTrackerPattern;
+
+// ProTracker pattern index to Deflemask/ProTracker pattern matrix row number. 
+// If a pattern is used more than once, the first pattern matrix row number where it appears is used 
+int8_t *proTrackerPatternToPatternMatrixRow;
 
 uint16_t proTrackerPeriodTable[5][12]; 
 

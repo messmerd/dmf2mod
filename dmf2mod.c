@@ -334,7 +334,7 @@ int main(int argc, char* argv[])
     //   ProTracker patterns are needed. This could allow some .dmf files to successfully be converted 
     //   to .mod that wouldn't otherwise. It also assigns the ProTracker pattern indices. 
     duplicateIndices = getProTrackerRepeatPatterns(patternMatrixValues, totalRowsInPatternMatrix);
-    if (deflemaskToProTrackerIndices == NULL || totalRowsInPatternMatrix - duplicateIndices > 64) 
+    if (patternMatrixRowToProTrackerPattern == NULL || totalRowsInPatternMatrix - duplicateIndices > 64) 
     {
         printf("Error: Too many unique rows of patterns in the pattern matrix. 64 is the maximum.\n");
         exit(1);
@@ -379,7 +379,7 @@ int main(int argc, char* argv[])
 
     ///////////////// PATTERNS DATA
 
-    // patternValues[channel][pattern matrix number][pattern row number]
+    // patternValues[channel][pattern number][pattern row number]
     PatternRow ***patternValues = (PatternRow ***)malloc(sys.channels * sizeof(PatternRow **)); 
     int *channelEffectsColumnsCount = (int *)malloc(sys.channels * sizeof(int));
     uint8_t patternMatrixNumber;
@@ -394,6 +394,7 @@ int main(int argc, char* argv[])
             //exit(1);
         }
 
+        // Maybe use calloc instead of malloc in the line below?     
         patternValues[channel] = (PatternRow **)malloc((patternMatrixMaxValues[channel] + 1) * sizeof(PatternRow *));
         for (int i = 0; i < patternMatrixMaxValues[channel] + 1; i++) 
         {
@@ -438,7 +439,7 @@ int main(int argc, char* argv[])
     ///////////////////////////  EXPORT TO MOD  ///////////////////////////
     ///////////////////////////////////////////////////////////////////////
 
-    printf("here-1\n");
+    printf("Starting to export to .mod....\n");
 
     FILE *fptrOut = fopen(outFile, "wb");
     
@@ -476,28 +477,51 @@ int main(int argc, char* argv[])
     fputc(totalRowsInPatternMatrix, fptrOut);   // Song length in patterns  
     fputc(127, fptrOut);                        // Useless byte that has to be here 
 
-    fwrite(deflemaskToProTrackerIndices, 1, 128, fptrOut);
+    fwrite(patternMatrixRowToProTrackerPattern, 1, 128, fptrOut);
 
     fprintf(fptrOut, "M.K."); 
 
+    printf("Exporting pattern data...\n");
 
+    uint8_t currentDutyCycle[4] = {0,0,0,0}; 
+    int8_t pat_mat_row = -1; 
 
-    /*
-    for (int i = 0; i < totalRowsInPatternMatrix; i++) // Deflemask/ProTracker pattern matrix row indices 
+    for (int i = 0; i < totalRowsInPatternMatrix; i++)  
     {
+        //printf("i=%u\n", i);
+        pat_mat_row = proTrackerPatternToPatternMatrixRow[i];
+        //printf("  pat_mat_row=%u\n", pat_mat_row);
+
+        if (pat_mat_row == -1) 
+        {
+            for (int j = 0; j < 64*sys.channels; j++) 
+            {
+                fputc(0, fptrOut);
+            }
+            continue; 
+        }
+   
         for (int j = 0; j < 64; j++) 
         {
+            //printf("j=%u, ", j);
             for (int k = 0; k < sys.channels; k++) 
             {
-                proTrackerToDeflemaskIndices[]
+                //printf("k=%u", k);
+                if (patternValues[k][patternMatrixValues[k][pat_mat_row]][j].effectCode[0] == SETDUTYCYCLE) 
+                {
+                    currentDutyCycle[k] = patternValues[k][patternMatrixValues[k][pat_mat_row]][j].effectValue[0]; 
+                }
+                //printf("...: ");
+                writeProTrackerPatternRow(fptrOut, &patternValues[k][patternMatrixValues[k][pat_mat_row]][j], currentDutyCycle[k]);
             }
         }
+        
     }
-    */
+    
 
 
 
-    printf("end\n");
+    printf("Done!\n");
 
     // Need to close files here!! (and anywhere the program might end prematurely)
     // Need to deallocate memory here!! (and anywhere the program might end prematurely)

@@ -41,10 +41,7 @@ typedef struct PCMSample
 } PCMSample; 
 
 const int16_t sqwSampleLength;
-const int8_t sqwSampleDuty12_5[32];
-const int8_t sqwSampleDuty25[32];
-const int8_t sqwSampleDuty50[32];
-const int8_t sqwSampleDuty75[32];
+const int8_t sqwSampleDuty[4][32];
 const char sqwSampleNames[4][22];
 
 

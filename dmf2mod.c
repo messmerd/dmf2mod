@@ -457,7 +457,7 @@ int main(int argc, char* argv[])
     // Export 4 square wave samples 
     for (int i = 0; i < 4; i++)
     {
-        fputs(sqwSampleNames[i], fptrOut);              // Sample i+1 - 22B - name 
+        fwrite(sqwSampleNames[i], 1, 22, fptrOut);      // Sample i+1 - 22B - name 
         fputc(sqwSampleLength >> 8, fptrOut);           // Sample i+1 - 1B - length byte 0 - 0
         fputc(sqwSampleLength | 0x00FF, fptrOut);       // Sample i+1 - 1B - length byte 1 - 64
         fputc(0, fptrOut);                              // Sample i+1 - 1B - finetune value - 0 
@@ -518,10 +518,23 @@ int main(int argc, char* argv[])
         
     }
     
+    // Samples 
+    printf("Exporting samples...\n"); 
 
+    for (int i = 0; i < 4; i++) 
+    {
+        fputc(0, fptrOut); // Repeat information 
+
+        for (int j = 0; j < sqwSampleLength; j++) 
+        {
+            fwrite(sqwSampleDuty[i], 1, sqwSampleLength, fptrOut); 
+        }
+    }
 
 
     printf("Done!\n");
+
+    fclose(fptrOut); 
 
     // Need to close files here!! (and anywhere the program might end prematurely)
     // Need to deallocate memory here!! (and anywhere the program might end prematurely)

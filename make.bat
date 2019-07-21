@@ -1,1 +1,1 @@
-gcc dmf2mod.c system_info.c instruments.c patterns.c -o dmf2mod.exe -lz
+gcc dmf2mod.c dmf.c mod.c -o dmf2mod.exe -lz

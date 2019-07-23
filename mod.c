@@ -1,8 +1,34 @@
+/*
+mod.c
+Written by Dalton Messmer <messmer.dalton@gmail.com>. 
+
+Provides functions for exporting the contents of a .dmf file 
+to ProTracker's .mod format. 
+
+Several limitations apply in order to export. For example, the 
+.dmf file must use the GameBoy system, patterns must have 64 
+rows, only one effect column is allowed per channel, etc.  
+*/
 
 #include "mod.h"
 
 void exportMOD(char *fname, DMFContents *dmf) 
 {
+    FILE *fout;
+    if (strcmp(getFilenameExt(fname), "mod") != 0) 
+    {
+        char *fname2 = malloc(sizeof(fname) + 4*sizeof(char)); 
+        strcpy(fname2, fname); 
+        strcpy(fname2, ".mod"); 
+        printf("fname2=%s\n", fname2); 
+        fout = fopen(fname2, "wb"); // Add ".mod" extension if it wasn't specified in the command-line argument 
+        free(fname2); 
+    }
+    else
+    {
+        fout = fopen(fname, "wb");
+    }
+
     printf("Starting to export to .mod....\n");
 
     if (strcmp(dmf->sys.name, "GAMEBOY") != 0) // If it's not a GameBoy 
@@ -22,9 +48,6 @@ void exportMOD(char *fname, DMFContents *dmf)
         printf("Error: Patterns must have 64 rows. \n");
         exit(1);
     }
-
-    FILE *fout = fopen(fname, "wb");
-    
 
     if (dmf->visualInfo.songNameLength > 20) 
     {

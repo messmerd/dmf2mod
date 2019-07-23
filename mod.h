@@ -1,3 +1,15 @@
+/*
+mod.h
+Written by Dalton Messmer <messmer.dalton@gmail.com>. 
+
+Provides functions for exporting the contents of a .dmf file 
+to ProTracker's .mod format. 
+
+Several limitations apply in order to export. For example, the 
+.dmf file must use the GameBoy system, patterns must have 64 
+rows, only one effect column is allowed per channel, etc.  
+*/
+
 #ifndef __MOD_H__
 #define __MOD_H__ 
 
@@ -8,6 +20,7 @@
 
 #include "dmf.h"
 
+// Exports a DMFContents struct "dmf" to a .mod file "fname" 
 void exportMOD(char *fname, DMFContents *dmf); 
 
 int8_t getProTrackerRepeatPatterns(DMFContents *dmf);  

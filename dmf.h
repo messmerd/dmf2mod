@@ -1,3 +1,12 @@
+/*
+dmf.h
+Written by Dalton Messmer <messmer.dalton@gmail.com>. 
+
+Provides functions for loading a .dmf file according to the 
+spec sheet at http://www.deflemask.com/DMF_SPECS.txt. 
+
+Requires zlib1.dll from the zlib compression library at https://zlib.net. 
+*/
 
 #ifndef __DMF_H__
 #define __DMF_H__
@@ -6,14 +15,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <assert.h>
 
+// For inflating .dmf files so that they can be read 
+#include "zlib.h"
+
+// Deflemask allows four effects columns per channel regardless of the system 
 #define MAX_EFFECTS_COLUMN_COUNT 4 
 
 typedef struct System
 {
-    unsigned char id;
+    uint8_t id;
     char *name;
-    unsigned char channels;
+    uint8_t channels;
 } System;
 
 typedef struct VisualInfo
@@ -36,24 +50,26 @@ typedef struct ModuleInfo
 typedef struct Instrument
 {
     char *name;
-    unsigned char mode;
+    uint8_t mode;
 
     // FM Instruments 
-    unsigned char fmALG, fmFB, fmLFO, fmLFO2;
-    unsigned char fmAM, fmAR, fmDR, fmMULT, fmRR, fmSL, fmTL, fmDT2, fmRS, fmDT, fmD2R, fmSSGMODE; 
+    uint8_t fmALG, fmFB, fmLFO, fmLFO2;
+    uint8_t fmAM, fmAR, fmDR, fmMULT, fmRR, fmSL, fmTL, fmDT2, fmRS, fmDT, fmD2R, fmSSGMODE; 
 
     // Standard Instruments
-    unsigned char stdVolEnvSize, stdArpEnvSize, stdDutyNoiseEnvSize, stdWavetableEnvSize;
+    uint8_t stdVolEnvSize, stdArpEnvSize, stdDutyNoiseEnvSize, stdWavetableEnvSize;
     int32_t *stdVolEnvValue, *stdArpEnvValue, *stdDutyNoiseEnvValue, *stdWavetableEnvValue; 
-    char stdVolEnvLoopPos, stdArpEnvLoopPos, stdDutyNoiseEnvLoopPos, stdWavetableEnvLoopPos; 
-    unsigned char stdArpMacroMode; 
+    int8_t stdVolEnvLoopPos, stdArpEnvLoopPos, stdDutyNoiseEnvLoopPos, stdWavetableEnvLoopPos; 
+    uint8_t stdArpMacroMode; 
 
-    unsigned char stdC64TriWaveEn, stdC64SawWaveEn, stdC64PulseWaveEn, stdC64NoiseWaveEn, 
+    // Standard Instruments - Commodore 64 exclusive 
+    uint8_t stdC64TriWaveEn, stdC64SawWaveEn, stdC64PulseWaveEn, stdC64NoiseWaveEn, 
         stdC64Attack, stdC64Decay, stdC64Sustain, stdC64Release, stdC64PulseWidth, stdC64RingModEn,
         stdC64SyncModEn, stdC64ToFilter, stdC64VolMacroToFilterCutoffEn, stdC64UseFilterValuesFromInst; 
-    unsigned char stdC64FilterResonance, stdC64FilterCutoff, stdC64FilterHighPass, stdC64FilterLowPass, stdC64FilterCH2Off; 
+    uint8_t stdC64FilterResonance, stdC64FilterCutoff, stdC64FilterHighPass, stdC64FilterLowPass, stdC64FilterCH2Off; 
 
-    unsigned char stdGBEnvVol, stdGBEnvDir, stdGBEnvLen, stdGBSoundLen;  
+    // Standard Instruments - GameBoy exclusive 
+    uint8_t stdGBEnvVol, stdGBEnvDir, stdGBEnvLen, stdGBSoundLen;  
 
 } Instrument;
 
@@ -111,7 +127,7 @@ typedef enum NOTE {
     OFF=100
 } NOTE;
 
-// Deflemask effects found across all systems: 
+// Deflemask effects shared by all systems: 
 typedef enum EFFECT {
     ARP=0x0, PORTUP=0x1, PORTDOWN=0x2, PORT2NOTE=0x3, VIBRATO=0x4, PORT2NOTEVOLSLIDE=0x5, VIBRATOVOLSLIDE=0x6,
     TREMOLO=0x7, PANNING=0x8, SETSPEEDVAL1=0x9, VOLSLIDE=0xA, POSJUMP=0xB, RETRIG=0xC, PATBREAK=0xD, 
@@ -120,27 +136,31 @@ typedef enum EFFECT {
     SETSPEEDVAL2=0xF
 } EFFECT; 
 
+// Deflemask effects exclusive to the GameBoy system:
 typedef enum GAMEBOY_EFFECT {
     SETWAVE=0x10, SETNOISEPOLYCOUNTERMODE=0x11, SETDUTYCYCLE=0x12, SETSWEEPTIMESHIFT=0x13, SETSWEEPDIR=0x14
 } GAMEBOY_EFFECT;
 
-void importDMF(char *fname, DMFContents *dmf); 
-void loadVisualInfo(FILE *fin, DMFContents *dmf); 
-void loadModuleInfo(FILE *fin, DMFContents *dmf); 
-void loadPatternMatrixValues(FILE *fin, DMFContents *dmf); 
-void loadInstrumentsData(FILE *fin, DMFContents *dmf); 
-void loadWavetablesData(FILE *fin, DMFContents *dmf); 
-void loadPatternsData(FILE *fin, DMFContents *dmf); 
-void loadPCMSamplesData(FILE *fin, DMFContents *dmf); 
+// To do: Add enums for effects exclusive to the rest of Deflemask's systems. 
 
-void freeDMF(DMFContents *dmf); 
+// Imports the .dmf file "fname" and stores it in the struct "dmf" 
+void importDMF(const char *fname, DMFContents *dmf); 
 
 System getSystem(uint8_t systemByte);
+void loadVisualInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
+void loadModuleInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
+void loadPatternMatrixValues(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
+void loadInstrumentsData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf);
+Instrument loadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType); 
+void loadWavetablesData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
+void loadPatternsData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
+PatternRow loadPatternRow(uint8_t **fBuff, uint32_t *pos, int effectsColumnsCount); 
+void loadPCMSamplesData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
+PCMSample loadPCMSample(uint8_t **fBuff, uint32_t *pos); 
 
-PatternRow loadPatternRow(FILE *filePointer, int effectsColumnsCount); 
+// Frees the dynamically allocated memory used by a DMFContents struct 
+void freeDMF(DMFContents *dmf); 
 
-Instrument loadInstrument(FILE *filePointer, System systemType);
-PCMSample loadPCMSample(FILE *filePointer); 
-
+const char *getFilenameExt(const char *fname); 
 
 #endif 

@@ -12,7 +12,7 @@ rows, only one effect column is allowed per channel, etc.
 
 #include "mod.h"
 
-void exportMOD(char *fname, DMFContents *dmf) 
+int exportMOD(char *fname, DMFContents *dmf) 
 {
     FILE *fout;
     if (strcmp(getFilenameExt(fname), "mod") != 0) 
@@ -34,19 +34,19 @@ void exportMOD(char *fname, DMFContents *dmf)
     if (strcmp(dmf->sys.name, "GAMEBOY") != 0) // If it's not a GameBoy 
     {
         printf("Sorry. Only the GameBoy system is currently supported. \n");
-        exit(1);
+        return 1;
     }
 
     if (dmf->moduleInfo.totalRowsInPatternMatrix > 128) // totalRowsInPatternMatrix is 1 more than it actually is 
     {
         printf("Error: There must be 128 or fewer rows in the pattern matrix.\n");
-        exit(1);
+        return 1;
     }
 
     if (dmf->moduleInfo.totalRowsPerPattern != 64) 
     {
         printf("Error: Patterns must have 64 rows. \n");
-        exit(1);
+        return 1;
     }
 
     if (dmf->visualInfo.songNameLength > 20) 
@@ -101,7 +101,7 @@ void exportMOD(char *fname, DMFContents *dmf)
     if (patternMatrixRowToProTrackerPattern == NULL || dmf->moduleInfo.totalRowsInPatternMatrix - duplicateIndices > 64) 
     {
         printf("Error: Too many unique rows of patterns in the pattern matrix. 64 is the maximum.\n");
-        exit(1);
+        return 1;
     }
 
     fwrite(patternMatrixRowToProTrackerPattern, 1, 128, fout);
@@ -115,12 +115,12 @@ void exportMOD(char *fname, DMFContents *dmf)
         if (dmf->channelEffectsColumnsCount[channel] > 1) 
         {
             printf("Error: Each channel can only have 1 effects column.\n");
-            //exit(1);
+            return 1;
         }
         if (dmf->patternMatrixMaxValues[channel] > 63) 
         {
             printf("Too many patterns. The maximum is 64 unique rows in the pattern matrix.\n", channel); 
-            exit(1); 
+            return 1;
         }
     }
 
@@ -129,9 +129,7 @@ void exportMOD(char *fname, DMFContents *dmf)
 
     for (int i = 0; i < dmf->moduleInfo.totalRowsInPatternMatrix; i++)  
     {
-        //printf("i=%u\n", i);
         pat_mat_row = proTrackerPatternToPatternMatrixRow[i];
-        //printf("  pat_mat_row=%u\n", pat_mat_row);
 
         if (pat_mat_row == -1) 
         {
@@ -144,19 +142,19 @@ void exportMOD(char *fname, DMFContents *dmf)
    
         for (int j = 0; j < 64; j++) 
         {
-            //printf("j=%u, ", j);
             for (int k = 0; k < dmf->sys.channels; k++) 
             {
-                //printf("k=%u", k);
                 if (dmf->patternValues[k][dmf->patternMatrixValues[k][pat_mat_row]][j].effectCode[0] == SETDUTYCYCLE) 
                 {
                     currentDutyCycle[k] = dmf->patternValues[k][dmf->patternMatrixValues[k][pat_mat_row]][j].effectValue[0]; 
                 }
-                //printf("...: ");
-                writeProTrackerPatternRow(fout, &dmf->patternValues[k][dmf->patternMatrixValues[k][pat_mat_row]][j], currentDutyCycle[k]);
+                if (writeProTrackerPatternRow(fout, &dmf->patternValues[k][dmf->patternMatrixValues[k][pat_mat_row]][j], currentDutyCycle[k])) 
+                {
+                    // Error occurred while writing the pattern row 
+                    return 1; 
+                }
             }
         }
-        
     }
     
     // Samples 
@@ -172,14 +170,14 @@ void exportMOD(char *fname, DMFContents *dmf)
         }
     }
 
-
-    printf("Done exporting to .mod!\n");
-
     free(proTrackerPatternToPatternMatrixRow); 
     free(patternMatrixRowToProTrackerPattern); 
 
     fclose(fout); 
 
+    printf("Done exporting to .mod!\n");
+
+    return 0; // Success 
 }
 
 
@@ -261,20 +259,24 @@ int8_t getProTrackerRepeatPatterns(DMFContents *dmf)
 }
 
 // Unfinished function 
-void writeProTrackerPatternRow(FILE *fout, PatternRow *pat, uint8_t dutyCycle) 
+int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, uint8_t dutyCycle) 
 {
-
-    if (pat->octave > 4)
-    {
-        printf("Error: Octave must be 4 or less.\n");
-    }
-
-    //printf("start func...");
     int8_t bytes[4];
     uint16_t period = 0;
+    uint16_t modOctave = pat->octave; 
+    if (pat->note == (NOTE)C) // C# is the start of next octave in .mod, not C 
+    {
+        modOctave++; 
+    }
+    if (modOctave > 4)
+    {
+        printf("Error: Octave must be 4 or less.\n");
+        return 1; 
+    }
+
     if (pat->note >= 1 && pat->note <= 12)  // A note 
     {
-        period = proTrackerPeriodTable[pat->octave][pat->note % 12]; 
+        period = proTrackerPeriodTable[modOctave][pat->note % 12]; 
     }
     // handle other note values here 
 
@@ -293,7 +295,7 @@ void writeProTrackerPatternRow(FILE *fout, PatternRow *pat, uint8_t dutyCycle)
     xxxxxxxxxxxx (12 bits) is the sample's period (or effect parameter)
     zzzzzzzzzzzz (12 bits) is the effect for this channel/division
     */
-   //printf("end func.\n");
+   return 0; // Success 
 }
 
 // GameBoy's range is:  C-1 -> C-8

@@ -130,22 +130,22 @@ const System Systems[10] = {
 	{.id = 0x08, .name = "YM2151", .channels = 13}
 };
 
-void importDMF(const char *fname, DMFContents *dmf)
+int importDMF(const char *fname, DMFContents *dmf)
 {
     printf("Starting to import the .dmf file...\n");
+
+    if (strcmp(getFilenameExt(fname), "dmf") != 0)
+    {
+        printf("Input file has the wrong file extension.\nPlease use a .dmf file.\n");
+        return 1;
+    }
 
     FILE *fptr = fopen(fname, "rb");
 
     if (fptr == NULL) 
     {
         printf("File not found.\n");
-        exit(1); 
-    }
-    
-    if (strcmp(getFilenameExt(fname), "dmf") != 0)
-    {
-        printf("Input file has the wrong file extension.\nPlease use a .dmf file.\n");
-        exit(1);
+        return 1; 
     }
 
     uint8_t *fBuff; 
@@ -160,7 +160,7 @@ void importDMF(const char *fname, DMFContents *dmf)
     {
         printf("Unsuccessful inflation.\n");
         zerr(ret);
-        exit(1);
+        return 1;
     }   
     
     uint32_t pos = 0; // The current buffer position 
@@ -214,6 +214,8 @@ void importDMF(const char *fname, DMFContents *dmf)
     free(fBuff);
 
     printf("Done loading .dmf file!\n\n");
+
+    return 0; // Success 
 }
 
 System getSystem(uint8_t systemByte)

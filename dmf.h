@@ -144,7 +144,7 @@ typedef enum GAMEBOY_EFFECT {
 // To do: Add enums for effects exclusive to the rest of Deflemask's systems. 
 
 // Imports the .dmf file "fname" and stores it in the struct "dmf" 
-void importDMF(const char *fname, DMFContents *dmf); 
+int importDMF(const char *fname, DMFContents *dmf); 
 
 System getSystem(uint8_t systemByte);
 void loadVisualInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 

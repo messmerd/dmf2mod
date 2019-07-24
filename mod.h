@@ -21,11 +21,11 @@ rows, only one effect column is allowed per channel, etc.
 #include "dmf.h"
 
 // Exports a DMFContents struct "dmf" to a .mod file "fname" 
-void exportMOD(char *fname, DMFContents *dmf); 
+int exportMOD(char *fname, DMFContents *dmf); 
 
 int8_t getProTrackerRepeatPatterns(DMFContents *dmf);  
 
-void writeProTrackerPatternRow(FILE *fout, PatternRow *pat, uint8_t dutyCycle); 
+int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, uint8_t dutyCycle); 
 
 // Deflemask/ProTracker pattern matrix row number to ProTracker pattern index 
 int8_t *patternMatrixRowToProTrackerPattern;

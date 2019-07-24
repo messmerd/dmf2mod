@@ -3,7 +3,7 @@ dmf2mod.c
 Written by Dalton Messmer <messmer.dalton@gmail.com>. 
 
 Converts Deflemask's GameBoy .dmf files to ProTracker's .mod files.
- 
+
 Usage: dmf2mod output_file.mod deflemask_gameboy_file.dmf
 */
 
@@ -29,12 +29,26 @@ int main(int argc, char* argv[])
     
     // Allocate space for storing the contents of one .dmf file 
     DMFContents *dmf = malloc(1 * sizeof(DMFContents));  
-    
+
     // Import the inflated .dmf file
-    importDMF(fin, dmf);
+    if (importDMF(fin, dmf)) 
+    {
+        // Error occurred during import  
+        freeDMF(dmf);
+        free(fin); 
+        free(fout);
+        exit(1);
+    }
     
     // Export to a .mod file 
-    exportMOD(fout, dmf); 
+    if (exportMOD(fout, dmf))
+    {
+        // Error occurred during export 
+        freeDMF(dmf);
+        free(fin); 
+        free(fout); 
+        exit(1);
+    } 
 
     // Deallocate memory 
     freeDMF(dmf);

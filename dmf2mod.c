@@ -4,7 +4,7 @@ Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
 Converts Deflemask's GameBoy .dmf files to ProTracker's .mod files.
 
-Usage: dmf2mod output_file.mod deflemask_gameboy_file.dmf
+Usage: .\dmf2mod.exe output_file.mod deflemask_gameboy_file.dmf
 */
 
 #include <stdio.h> 
@@ -20,7 +20,7 @@ int main(int argc, char* argv[])
     if (argc != 3)
     {
         printf("dmf2mod v0.1 \nCreated by Dalton Messmer <messmer.dalton@gmail.com>\n");
-        printf("Usage: dmf2mod output_file.mod deflemask_gameboy_file.dmf\n");
+        printf("Usage: .\\dmf2mod.exe output_file.mod deflemask_gameboy_file.dmf\n");
         exit(1);
     }
 

@@ -20,13 +20,14 @@ int exportMOD(char *fname, DMFContents *dmf)
         char *fname2 = malloc(sizeof(fname) + 4*sizeof(char)); 
         strcpy(fname2, fname); 
         strcpy(fname2, ".mod"); 
-        printf("fname2=%s\n", fname2); 
+        printf("Exporting to %s.\n", fname2);
         fout = fopen(fname2, "wb"); // Add ".mod" extension if it wasn't specified in the command-line argument 
         free(fname2); 
     }
     else
     {
         fout = fopen(fname, "wb");
+        printf("Exporting to %s.\n", fname);
     }
 
     printf("Starting to export to .mod....\n");
@@ -49,22 +50,16 @@ int exportMOD(char *fname, DMFContents *dmf)
         return 1;
     }
 
-    if (dmf->visualInfo.songNameLength > 20) 
+    // Print module name, truncating or padding with zeros as needed
+    for (int i = 0; i < 20; i++) 
     {
-        fwrite(dmf->visualInfo.songName, 1, 20, fout); 
-        printf("Song name is longer than 20 characters and will be truncated.\n");
-        printf("New title: %.20s\n", dmf->visualInfo.songName); 
-        
-    } 
-    else
-    {
-        fputs(dmf->visualInfo.songName, fout);  // Can include lowercase letters. Does ProTracker allow lowercase? 
-        if (dmf->visualInfo.songNameLength < 20) 
+        if (i < dmf->visualInfo.songNameLength) 
         {
-            for (int i = dmf->visualInfo.songNameLength; i < 20; i++) 
-            {
-                fputc(0, fout);
-            }
+            fputc(tolower(dmf->visualInfo.songName[i]), fout);
+        }
+        else
+        {
+            fputc(0, fout);
         }
     }
     
@@ -74,24 +69,30 @@ int exportMOD(char *fname, DMFContents *dmf)
     for (int i = 0; i < 4; i++)
     {
         fwrite(sqwSampleNames[i], 1, 22, fout);      // Sample i+1 - 22B - name 
-        fputc(sqwSampleLength >> 8, fout);           // Sample i+1 - 1B - length byte 0 - 0
-        fputc(sqwSampleLength | 0x00FF, fout);       // Sample i+1 - 1B - length byte 1 - 64
+        fputc(sqwSampleLength >> 9, fout);           // Sample i+1 - 1B - length byte 0 (+2 because 1st 2 bytes are ignored)
+        fputc(sqwSampleLength >> 1, fout);           // Sample i+1 - 1B - length byte 1 (+2 because 1st 2 bytes are ignored) 
         fputc(0, fout);                              // Sample i+1 - 1B - finetune value - 0 
-        fputc(64, fout);                             // Sample i+1 - 1B - volume - full volume
+        fputc(64, fout);                             // Sample i+1 - 1B - volume - full volume  
         fputc(0 , fout);                             // Sample i+1 - 1B - repeat offset byte 0 
         fputc(0 , fout);                             // Sample i+1 - 1B - repeat offset byte 1 
-        fputc(sqwSampleLength >> 8, fout);           // Sample i+1 - 1B - sample repeat length byte 0 - 0
-        fputc(sqwSampleLength | 0x00FF, fout);       // Sample i+1 - 1B - sample repeat length byte 1 - 64
+        fputc(sqwSampleLength >> 9, fout);           // Sample i+1 - 1B - sample repeat length byte 0 - 0   
+        fputc((sqwSampleLength >> 1) & 0x00FF, fout);       // Sample i+1 - 1B - sample repeat length byte 1 - 64 
     }
 
     // The 27 remaining samples are blank: 
-    for (int i = 0; i < 27*30; i++) 
+    for (int i = 0; i < 27; i++) 
     {
-        fputc(0, fout); 
+        // According to real ProTracker files viewed in a hex viewer, the 30th and final byte
+        //    of a blank sample is 0x01 and all 29 other bytes are 0x00. 
+        for (int j = 0; j < 29; j++) 
+        {
+            fputc(0, fout); 
+        }
+        fputc(1, fout); 
     }
 
-    fputc(dmf->moduleInfo.totalRowsInPatternMatrix, fout);   // Song length in patterns  
-    fputc(127, fout);                        // Useless byte that has to be here 
+    fputc(dmf->moduleInfo.totalRowsInPatternMatrix, fout);   // Song length in patterns (not total number of patterns) 
+    fputc(127, fout);                        // 0x7F - Useless byte that has to be here 
 
     int8_t duplicateIndices = 0;
     // The function below tries to find repeating rows of patterns in the pattern matrix so that fewer 
@@ -103,10 +104,11 @@ int exportMOD(char *fname, DMFContents *dmf)
         printf("Error: Too many unique rows of patterns in the pattern matrix. 64 is the maximum.\n");
         return 1;
     }
+    printf("duplicateIndices=%u\n", duplicateIndices); 
 
     fwrite(patternMatrixRowToProTrackerPattern, 1, 128, fout);
-
-    fprintf(fout, "M.K."); 
+    
+    fwrite("M.K.", 1, 4, fout);  // ProTracker uses "M!K!" if there's more than 64 pattern matrix rows...
 
     printf("Exporting pattern data...\n");
 
@@ -124,29 +126,37 @@ int exportMOD(char *fname, DMFContents *dmf)
         }
     }
 
-    uint8_t currentDutyCycle[4] = {0,0,0,0}; 
+    uint8_t currentDutyCycle[4] = {1,1,1,1}; // Default is 1 or a 12.5% duty cycle square wave. In mod, the first sample is sample #1.  
     int8_t pat_mat_row = -1; 
 
-    for (int i = 0; i < dmf->moduleInfo.totalRowsInPatternMatrix; i++)  
-    {
-        pat_mat_row = proTrackerPatternToPatternMatrixRow[i];
+    printf("dmf->moduleInfo.totalRowsInPatternMatrix - duplicateIndices = %u\n", dmf->moduleInfo.totalRowsInPatternMatrix - duplicateIndices);
 
+    // Iterate through ProTracker patterns:  
+    for (int i = 0; i < dmf->moduleInfo.totalRowsInPatternMatrix - duplicateIndices; i++)  
+    {
+        // Get the Deflemask pattern matrix number from the ProTracker pattern number 
+        pat_mat_row = proTrackerPatternToPatternMatrixRow[i];
+        printf("pat_mat_row = %u\n", pat_mat_row); 
         if (pat_mat_row == -1) 
         {
+            printf("Error in proTrackerPatternToPatternMatrixRow.\n");
+            return 1; 
+            /*
             for (int j = 0; j < 64*dmf->sys.channels; j++) 
             {
                 fputc(0, fout);
             }
             continue; 
+            */
         }
-   
+        // Iterate through rows in a pattern: 
         for (int j = 0; j < 64; j++) 
         {
             for (int k = 0; k < dmf->sys.channels; k++) 
             {
-                if (dmf->patternValues[k][dmf->patternMatrixValues[k][pat_mat_row]][j].effectCode[0] == SETDUTYCYCLE) 
+                if (dmf->patternValues[k][dmf->patternMatrixValues[k][pat_mat_row]][j].effectCode[0] == DMF_SETDUTYCYCLE) 
                 {
-                    currentDutyCycle[k] = dmf->patternValues[k][dmf->patternMatrixValues[k][pat_mat_row]][j].effectValue[0]; 
+                    currentDutyCycle[k] = dmf->patternValues[k][dmf->patternMatrixValues[k][pat_mat_row]][j].effectValue[0] + 1; // Add 1 b/c first mod sample is sample #1 
                 }
                 if (writeProTrackerPatternRow(fout, &dmf->patternValues[k][dmf->patternMatrixValues[k][pat_mat_row]][j], currentDutyCycle[k])) 
                 {
@@ -162,12 +172,11 @@ int exportMOD(char *fname, DMFContents *dmf)
 
     for (int i = 0; i < 4; i++) 
     {
-        fputc(0, fout); // Repeat information 
+        //fputc(0, fout); // Repeat information 
+        //fputc(0, fout); // Repeat information 
 
-        for (int j = 0; j < sqwSampleLength; j++) 
-        {
-            fwrite(sqwSampleDuty[i], 1, sqwSampleLength, fout); 
-        }
+        fwrite(sqwSampleDuty[i], 1, sqwSampleLength, fout); 
+
     }
 
     free(proTrackerPatternToPatternMatrixRow); 
@@ -183,13 +192,16 @@ int exportMOD(char *fname, DMFContents *dmf)
 
 int8_t getProTrackerRepeatPatterns(DMFContents *dmf) 
 {
-    // Return array of indices of pattern matrix rows that are identical 
-    // Assumes dmf->moduleInfo.totalRowsInPatternMatrix is 128 or fewer. And > 1. 
+    // Returns the number of groups of pattern matrix rows that are identical. For 
+    //    example, if rows 1, 7, and 9 are identical to each other and no other 
+    //    rows have matches, then it will return 1, because there was one group of
+    //    identical rows.  
+    // Assumes dmf->moduleInfo.totalRowsInPatternMatrix is 128 or fewer.
 
     // A hash table would be a better way of doing this, but since this is 
     //    only for 128 or fewer elements, I'm not going to bother implementing one. 
     
-    if (dmf->moduleInfo.totalRowsInPatternMatrix <= 1 || dmf->moduleInfo.totalRowsInPatternMatrix > 128) 
+    if (dmf->moduleInfo.totalRowsInPatternMatrix > 128 || dmf->moduleInfo.totalRowsInPatternMatrix < 1) 
     {
         return 0; 
     }
@@ -201,7 +213,8 @@ int8_t getProTrackerRepeatPatterns(DMFContents *dmf)
         patternMatrixRowToProTrackerPattern = (int8_t *)malloc(128 * sizeof(int8_t));  // maps Deflemask indices to PT indices
         if (patternMatrixRowToProTrackerPattern) 
         {
-            memset(patternMatrixRowToProTrackerPattern, (int8_t)-1, 128);
+            memset(patternMatrixRowToProTrackerPattern, (int8_t)-1, dmf->moduleInfo.totalRowsInPatternMatrix);
+            memset(patternMatrixRowToProTrackerPattern + dmf->moduleInfo.totalRowsInPatternMatrix, (int8_t)0, 128 - dmf->moduleInfo.totalRowsInPatternMatrix);
         }
         else
         {
@@ -226,9 +239,18 @@ int8_t getProTrackerRepeatPatterns(DMFContents *dmf)
     int8_t *r2pt = patternMatrixRowToProTrackerPattern;  
     int8_t *pt2r = proTrackerPatternToPatternMatrixRow;  
 
+    if (dmf->moduleInfo.totalRowsInPatternMatrix == 1) 
+    {
+        r2pt[0] = 0; // ? 
+        pt2r[0] = 0; // ?
+        printf("DEBUG: patternMatrixRowToProTrackerPattern[0] = %x", patternMatrixRowToProTrackerPattern[0]);
+        printf("DEBUG: proTrackerPatternToPatternMatrixRow[0] = %x", proTrackerPatternToPatternMatrixRow[0]);
+        return 0; 
+    }
+
     uint8_t currentProTrackerIndex = 0; 
     uint8_t duplicateCount = 0; 
-    for (int i = 0; i < dmf->moduleInfo.totalRowsInPatternMatrix - 1; i++) 
+    for (int i = 0; i < dmf->moduleInfo.totalRowsInPatternMatrix; i++) 
     {
         if (r2pt[i] >= 0) {continue; }  // Duplicate that has already been found 
         for (int j = i + 1; j < dmf->moduleInfo.totalRowsInPatternMatrix; j++) 
@@ -242,7 +264,8 @@ int8_t getProTrackerRepeatPatterns(DMFContents *dmf)
             {
                 r2pt[i] = currentProTrackerIndex; 
                 r2pt[j] = currentProTrackerIndex; 
-                pt2r[currentProTrackerIndex] = i; 
+                pt2r[currentProTrackerIndex] = i;
+                //printf("pt2r[%u] = %u\n", currentProTrackerIndex, i); 
                 duplicateCount++; 
             }
         }
@@ -250,6 +273,7 @@ int8_t getProTrackerRepeatPatterns(DMFContents *dmf)
         {
             r2pt[i] = currentProTrackerIndex; 
             pt2r[currentProTrackerIndex] = i; 
+            //printf("pt2r[%u] = %u\n", currentProTrackerIndex, i); 
         }
 
         currentProTrackerIndex++;
@@ -261,32 +285,46 @@ int8_t getProTrackerRepeatPatterns(DMFContents *dmf)
 // Unfinished function 
 int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, uint8_t dutyCycle) 
 {
-    int8_t bytes[4];
-    uint16_t period = 0;
-    uint16_t modOctave = pat->octave; 
-    if (pat->note == (NOTE)C) // C# is the start of next octave in .mod, not C 
+    if (pat->note == DMF_NOTE_EMPTY)  // No note is playing. Only handle effects.
     {
-        modOctave++; 
+        uint16_t effect = getProTrackerEffect(pat->effectCode[0], pat->effectValue[0]); //pat->effectCode;
+        fputc(0, fout);  // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
+        fputc(0, fout);         // Sample period/effect param. (lower 8 bits) 
+        fputc((effect & 0x0F00) >> 8, fout);  // Sample number (lower 4b) = 0 b/c there's no note; effect code (upper 4b)
+        fputc(effect & 0x00FF, fout);         // Effect code (lower 8 bits) 
     }
-    if (modOctave > 4)
+    else  // A note is playing 
     {
-        printf("Error: Octave must be 4 or less.\n");
-        return 1; 
+        uint16_t period = 0;
+
+        uint16_t modOctave = pat->octave - 2; // Transpose down two octaves because a C-4 in Deflemask is the same pitch as a C-2 in ProTracker. 
+        if (pat->note == DMF_NOTE_C) // C# is the start of next octave in .mod, not C- 
+        {
+            modOctave++; 
+        }
+
+        if (modOctave > 4)
+        {
+            printf("Error: Octave must be 4 or less. (Octave = %u)\n", modOctave);
+            //return 1; 
+            modOctave = 4; // !!!
+        }
+
+        if (pat->note >= 1 && pat->note <= 12)  // A note 
+        {
+            period = proTrackerPeriodTable[modOctave][pat->note % 12]; 
+        }
+        // handle other note values here 
+        
+        uint16_t effect = getProTrackerEffect(pat->effectCode[0], pat->effectValue[0]); 
+        
+        fputc((dutyCycle & 0xF0) | ((period & 0x0F00) >> 8), fout);  // Sample number (upper 4b); sample period/effect param. (upper 4b)
+        fputc(period & 0x00FF, fout);                                // Sample period/effect param. (lower 8 bits) 
+        fputc((dutyCycle << 4) | ((effect & 0x0F00) >> 8), fout);    // Sample number (lower 4b); effect code (upper 4b)
+        fputc(effect & 0x00FF, fout);                                // Effect code (lower 8 bits) 
+        
     }
-
-    if (pat->note >= 1 && pat->note <= 12)  // A note 
-    {
-        period = proTrackerPeriodTable[modOctave][pat->note % 12]; 
-    }
-    // handle other note values here 
-
-    uint16_t effect = 0; //pat->effectCode; 
-
-    fputc((dutyCycle & 0xF0) | ((period & 0x0F00) >> 8), fout);  // Sample number (upper 4b); sample period/effect param. (upper 4b)
-    fputc(period & 0x00FF, fout);                                // Sample period/effect param. (lower 8 bits) 
-    fputc((dutyCycle << 4) | ((effect & 0x0F00) >> 8), fout);    // Sample number (lower 4b); effect code (upper 4b)
-    fputc(effect & 0x00FF, fout);                                // Effect code (lower 8 bits) 
-
+    
     /*
     7654-3210 7654-3210 7654-3210 7654-3210
     wwww xxxx-xxxx-xxxx yyyy zzzz-zzzz-zzzz
@@ -298,8 +336,89 @@ int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, uint8_t dutyCycle)
    return 0; // Success 
 }
 
+
+uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
+{
+    // An effect is represented with 12 bits, which is 3 groups of 4 bits: [e][x][y]. 
+    // The effect code is [e] or [e][x], and the effect value is [x][y] or [y]. 
+    uint8_t ptEff = PT_NOEFFECT; 
+    uint8_t ptEffVal = PT_NOEFFECTVAL; 
+
+    switch (effectCode) 
+    {
+        case DMF_NOEFFECT:
+            ptEff = PT_NOEFFECT; break; // ? 
+        case DMF_ARP: 
+            ptEff = PT_ARP; break;
+        case DMF_PORTUP: 
+            ptEff = PT_PORTUP; break;
+        case DMF_PORTDOWN: 
+            ptEff = PT_PORTDOWN; break;
+        case DMF_PORT2NOTE:
+            ptEff = PT_PORT2NOTE; break;
+        case DMF_VIBRATO:
+            ptEff = PT_VIBRATO; break;
+        case DMF_PORT2NOTEVOLSLIDE:
+            ptEff = PT_PORT2NOTEVOLSLIDE; break;
+        case DMF_VIBRATOVOLSLIDE:
+            ptEff = PT_VIBRATOVOLSLIDE; break;
+        case DMF_TREMOLO:
+            ptEff = PT_TREMOLO; break;
+        case DMF_PANNING:
+            ptEff = PT_PANNING; break;
+        case DMF_SETSPEEDVAL1:
+            break; // ?
+        case DMF_VOLSLIDE: 
+            ptEff = PT_VOLSLIDE; break;
+        case DMF_POSJUMP:
+            ptEff = PT_POSJUMP; break;
+        case DMF_RETRIG:
+            ptEff = PT_RETRIGGERSAMPLE; break;  // ? 
+        case DMF_PATBREAK:
+            ptEff = PT_PATBREAK; break;
+        case DMF_ARPTICKSPEED: 
+            break; // ?
+        case DMF_NOTESLIDEUP: 
+            break; // ?
+        case DMF_NOTESLIDEDOWN:
+            break; // ? 
+        case DMF_SETVIBRATOMODE:
+            break; // ?
+        case DMF_SETFINEVIBRATODEPTH:
+            break; // ? 
+        case DMF_SETFINETUNE: 
+            break; // ?
+        case DMF_SETSAMPLESBANK:
+            break; // ? 
+        case DMF_NOTECUT:
+            ptEff = PT_CUTSAMPLE; break; // ? 
+        case DMF_NOTEDELAY:
+            ptEff = PT_DELAYSAMPLE; break; // ? 
+        case DMF_SYNCSIGNAL:
+            break; // This is only used when exporting as .vgm in Deflemask 
+        case DMF_SETGLOBALFINETUNE:
+            ptEff = PT_SETFINETUNE; break; // ? 
+        case DMF_SETSPEEDVAL2:
+            break; // ? 
+
+        // GameBoy exclusive: 
+        case DMF_SETWAVE:
+            break; // Need to handle this in the exportMOD function  !!!
+        case DMF_SETNOISEPOLYCOUNTERMODE:
+            break; // This is probably more than I need to worry about 
+        case DMF_SETDUTYCYCLE:
+            break; // This is handled in the exportMOD function 
+        case DMF_SETSWEEPTIMESHIFT:
+            break; // ? 
+        case DMF_SETSWEEPDIR: 
+            break; // ? 
+    }
+
+    return ((uint16_t)ptEff << 4) | ptEffVal; 
+}
+
 // GameBoy's range is:  C-1 -> C-8
-// ProTracker's range is:  C-1 -> B-3  (plus octaves 0 and 4 which are non-standard)
+// ProTracker's range is:  C-1 -> B-3  (plus octaves 0 and 4 which are non-standard) 
 uint16_t proTrackerPeriodTable[5][12] = {
     {1712,1616,1525,1440,1357,1281,1209,1141,1077,1017, 961, 907},  /* C-0 to B-0 */
     {856,808,762,720,678,640,604,570,538,508,480,453},              /* C-1 to B-1 */
@@ -309,7 +428,7 @@ uint16_t proTrackerPeriodTable[5][12] = {
 }; 
 
 
-const int16_t sqwSampleLength = 32;
+const uint16_t sqwSampleLength = 32;
 const int8_t sqwSampleDuty[4][32] = {
     {127, 127, 127, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, /* Duty cycle = 12.5% */ 
     {127, 127, 127, 127, 127, 127, 127, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, /* Duty cycle = 25% */ 

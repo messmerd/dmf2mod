@@ -16,6 +16,7 @@ Requires zlib1.dll from the zlib compression library at https://zlib.net.
 #include <string.h>
 #include <stdint.h>
 #include <assert.h>
+#include <stdbool.h>
 
 // For inflating .dmf files so that they can be read 
 #include "zlib.h"
@@ -23,12 +24,26 @@ Requires zlib1.dll from the zlib compression library at https://zlib.net.
 // Deflemask allows four effects columns per channel regardless of the system 
 #define MAX_EFFECTS_COLUMN_COUNT 4 
 
+#ifndef CMD_Options 
+    typedef struct CMD_Options {
+        bool useEffects; 
+    } CMD_Options;
+    #define CMD_Options CMD_Options
+#endif
+
 typedef struct System
 {
     uint8_t id;
     char *name;
     uint8_t channels;
 } System;
+
+// SYSTEM_TYPE values also correspond to indices in Systems array. 
+typedef enum SYSTEM_TYPE 
+{
+    SYS_ERROR, SYS_GENESIS, SYS_GENESIS_CH3, SYS_SMS, SYS_GAMEBOY, 
+    SYS_PCENGINE, SYS_NES, SYS_C64_SID_8580, SYS_C64_SID_6581, SYS_YM2151
+} SYSTEM_TYPE; 
 
 typedef struct VisualInfo
 {
@@ -124,7 +139,11 @@ typedef enum DMF_NOTE {
     DMF_NOTE_AS=10, 
     DMF_NOTE_B=11, 
     DMF_NOTE_C=12, 
-    DMF_NOTE_OFF=100
+    DMF_NOTE_OFF=100, 
+    
+    DMF_NOTE_NOINSTRUMENT=-1,
+    DMF_NOTE_NOVOLUME=-1,
+    DMF_NOTE_VOLUMEMAX=15 /* ??? */
 } DMF_NOTE;
 
 // Deflemask effects shared by all systems: 
@@ -144,8 +163,8 @@ typedef enum DMF_GAMEBOY_EFFECT {
 
 // To do: Add enums for effects exclusive to the rest of Deflemask's systems. 
 
-// Imports the .dmf file "fname" and stores it in the struct "dmf" 
-int importDMF(const char *fname, DMFContents *dmf); 
+// Imports the .dmf file "fname" and stores it in the struct "dmf" using the options "opt" 
+int importDMF(const char *fname, DMFContents *dmf, CMD_Options opt); 
 
 System getSystem(uint8_t systemByte);
 void loadVisualInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 

@@ -12,7 +12,9 @@ rows, only one effect column is allowed per channel, etc.
 
 #include "mod.h"
 
-int exportMOD(char *fname, DMFContents *dmf) 
+CMD_Options Opt;
+
+int exportMOD(char *fname, DMFContents *dmf, CMD_Options opt) 
 {
     FILE *fout;
     if (strcmp(getFilenameExt(fname), "mod") != 0) 
@@ -34,7 +36,7 @@ int exportMOD(char *fname, DMFContents *dmf)
 
     if (strcmp(dmf->sys.name, "GAMEBOY") != 0) // If it's not a GameBoy 
     {
-        printf("Sorry. Only the GameBoy system is currently supported. \n");
+        printf("Error: Only the GameBoy system is currently supported. \n");
         return 1;
     }
 
@@ -104,7 +106,7 @@ int exportMOD(char *fname, DMFContents *dmf)
         printf("Error: Too many unique rows of patterns in the pattern matrix. 64 is the maximum.\n");
         return 1;
     }
-    printf("duplicateIndices=%u\n", duplicateIndices); 
+    //printf("duplicateIndices=%u\n", duplicateIndices); 
 
     fwrite(patternMatrixRowToProTrackerPattern, 1, 128, fout);
     
@@ -114,7 +116,7 @@ int exportMOD(char *fname, DMFContents *dmf)
 
     for (int channel = 0; channel < dmf->sys.channels; channel++)
     {
-        if (dmf->channelEffectsColumnsCount[channel] > 1) 
+        if (dmf->channelEffectsColumnsCount[channel] > 1 && opt.useEffects) 
         {
             printf("Error: Each channel can only have 1 effects column.\n");
             return 1;
@@ -129,14 +131,24 @@ int exportMOD(char *fname, DMFContents *dmf)
     uint8_t currentDutyCycle[4] = {1,1,1,1}; // Default is 1 or a 12.5% duty cycle square wave. In mod, the first sample is sample #1.  
     int8_t pat_mat_row = -1; 
 
-    printf("dmf->moduleInfo.totalRowsInPatternMatrix - duplicateIndices = %u\n", dmf->moduleInfo.totalRowsInPatternMatrix - duplicateIndices);
+    //printf("dmf->moduleInfo.totalRowsInPatternMatrix - duplicateIndices = %u\n", dmf->moduleInfo.totalRowsInPatternMatrix - duplicateIndices);
+
+    // The current square wave duty cycle, note volume, and other information that the 
+    //      tracker stores for each channel while playing a tracker file.
+    MODChannelState *state = (MODChannelState *)malloc(4 * sizeof(MODChannelState)); 
+    for (int i = 0; i < 4; i++) 
+    {
+        state[i].dutyCycle = 1; // Default is 1 or a 12.5% duty cycle square wave. In mod, the first sample is sample #1.
+        state[i].volume = PT_NOTE_VOLUMEMAX; // The max volume for a channel in PT 
+        state[i].wavetable = 0; 
+    }
 
     // Iterate through ProTracker patterns:  
     for (int i = 0; i < dmf->moduleInfo.totalRowsInPatternMatrix - duplicateIndices; i++)  
     {
         // Get the Deflemask pattern matrix number from the ProTracker pattern number 
         pat_mat_row = proTrackerPatternToPatternMatrixRow[i];
-        printf("pat_mat_row = %u\n", pat_mat_row); 
+        //printf("pat_mat_row = %u\n", pat_mat_row); 
         if (pat_mat_row == -1) 
         {
             printf("Error in proTrackerPatternToPatternMatrixRow.\n");
@@ -156,9 +168,9 @@ int exportMOD(char *fname, DMFContents *dmf)
             {
                 if (dmf->patternValues[k][dmf->patternMatrixValues[k][pat_mat_row]][j].effectCode[0] == DMF_SETDUTYCYCLE) 
                 {
-                    currentDutyCycle[k] = dmf->patternValues[k][dmf->patternMatrixValues[k][pat_mat_row]][j].effectValue[0] + 1; // Add 1 b/c first mod sample is sample #1 
+                    state[k].dutyCycle = dmf->patternValues[k][dmf->patternMatrixValues[k][pat_mat_row]][j].effectValue[0] + 1; // Add 1 b/c first mod sample is sample #1 
                 }
-                if (writeProTrackerPatternRow(fout, &dmf->patternValues[k][dmf->patternMatrixValues[k][pat_mat_row]][j], currentDutyCycle[k])) 
+                if (writeProTrackerPatternRow(fout, &dmf->patternValues[k][dmf->patternMatrixValues[k][pat_mat_row]][j], &state[k], opt)) 
                 {
                     // Error occurred while writing the pattern row 
                     return 1; 
@@ -176,7 +188,6 @@ int exportMOD(char *fname, DMFContents *dmf)
         //fputc(0, fout); // Repeat information 
 
         fwrite(sqwSampleDuty[i], 1, sqwSampleLength, fout); 
-
     }
 
     free(proTrackerPatternToPatternMatrixRow); 
@@ -243,8 +254,8 @@ int8_t getProTrackerRepeatPatterns(DMFContents *dmf)
     {
         r2pt[0] = 0; // ? 
         pt2r[0] = 0; // ?
-        printf("DEBUG: patternMatrixRowToProTrackerPattern[0] = %x", patternMatrixRowToProTrackerPattern[0]);
-        printf("DEBUG: proTrackerPatternToPatternMatrixRow[0] = %x", proTrackerPatternToPatternMatrixRow[0]);
+        //printf("DEBUG: patternMatrixRowToProTrackerPattern[0] = %x", patternMatrixRowToProTrackerPattern[0]);
+        //printf("DEBUG: proTrackerPatternToPatternMatrixRow[0] = %x", proTrackerPatternToPatternMatrixRow[0]);
         return 0; 
     }
 
@@ -283,11 +294,49 @@ int8_t getProTrackerRepeatPatterns(DMFContents *dmf)
 }
 
 // Unfinished function 
-int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, uint8_t dutyCycle) 
+int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *state, CMD_Options opt) 
 {
+    uint16_t effect;
+    if (opt.useEffects) // If using effects 
+    {
+        effect = getProTrackerEffect(pat->effectCode[0], pat->effectValue[0]); 
+        if (pat->volume != state->volume && pat->volume != DMF_NOTE_NOVOLUME) // If the note volume changes 
+        {
+            if (effect != PT_NOEFFECT_CODE) // If an effect is used and the note volume changes  
+            {
+                /* Unlike Deflemask, setting the volume in ProTracker requires the use of 
+                    an effect, and only one effect can be used at a time per channel. 
+                    Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
+                    so it does not count.  
+                */
+                printf("Error: An effect and volume change cannot both appear in the same row of the same channel.\n");
+                return 1;
+            }
+            else // Only the volume changed 
+            {
+                uint8_t newVolume = round(pat->volume / 15.0 * 65.0); // Convert DMF volume to PT volume 
+                effect = ((uint16_t)PT_SETVOLUME << 4) | newVolume; // ??? 
+                //printf("Vol effect = %x, effect code = %d, effect val = %d, dmf vol = %d\n", effect, PT_SETVOLUME, newVolume, pat->volume);  
+                state->volume = pat->volume; // Update the state 
+            }
+        }
+    }
+    else // Don't use effects (except for volume) 
+    {
+        if (pat->volume != state->volume && pat->volume != DMF_NOTE_NOVOLUME) // If the volume changed, we still want to handle that 
+        {
+            uint8_t newVolume = round(pat->volume / 15.0 * 65.0); // Convert DMF volume to PT volume 
+            effect = ((uint16_t)PT_SETVOLUME << 4) | newVolume; // ??? 
+            state->volume = pat->volume; // Update the state 
+        }
+        else
+        {
+            effect = PT_NOEFFECT_CODE; // No effect  
+        } 
+    }
+
     if (pat->note == DMF_NOTE_EMPTY)  // No note is playing. Only handle effects.
     {
-        uint16_t effect = getProTrackerEffect(pat->effectCode[0], pat->effectValue[0]); //pat->effectCode;
         fputc(0, fout);  // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
         fputc(0, fout);         // Sample period/effect param. (lower 8 bits) 
         fputc((effect & 0x0F00) >> 8, fout);  // Sample number (lower 4b) = 0 b/c there's no note; effect code (upper 4b)
@@ -305,7 +354,7 @@ int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, uint8_t dutyCycle)
 
         if (modOctave > 4)
         {
-            printf("Error: Octave must be 4 or less. (Octave = %u)\n", modOctave);
+            printf("Warning: Octave must be 4 or less in MOD. (Octave = %u) Setting it to 4.\n", modOctave);
             //return 1; 
             modOctave = 4; // !!!
         }
@@ -314,25 +363,16 @@ int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, uint8_t dutyCycle)
         {
             period = proTrackerPeriodTable[modOctave][pat->note % 12]; 
         }
-        // handle other note values here 
         
-        uint16_t effect = getProTrackerEffect(pat->effectCode[0], pat->effectValue[0]); 
+        //uint16_t effect = getProTrackerEffect(pat->effectCode[0], pat->effectValue[0]); 
         
-        fputc((dutyCycle & 0xF0) | ((period & 0x0F00) >> 8), fout);  // Sample number (upper 4b); sample period/effect param. (upper 4b)
+        fputc((state->dutyCycle & 0xF0) | ((period & 0x0F00) >> 8), fout);  // Sample number (upper 4b); sample period/effect param. (upper 4b)
         fputc(period & 0x00FF, fout);                                // Sample period/effect param. (lower 8 bits) 
-        fputc((dutyCycle << 4) | ((effect & 0x0F00) >> 8), fout);    // Sample number (lower 4b); effect code (upper 4b)
+        fputc((state->dutyCycle << 4) | ((effect & 0x0F00) >> 8), fout);    // Sample number (lower 4b); effect code (upper 4b)
         fputc(effect & 0x00FF, fout);                                // Effect code (lower 8 bits) 
         
     }
-    
-    /*
-    7654-3210 7654-3210 7654-3210 7654-3210
-    wwww xxxx-xxxx-xxxx yyyy zzzz-zzzz-zzzz
 
-        wwwwyyyy (8 bits) is the sample for this channel/division
-    xxxxxxxxxxxx (12 bits) is the sample's period (or effect parameter)
-    zzzzzzzzzzzz (12 bits) is the effect for this channel/division
-    */
    return 0; // Success 
 }
 
@@ -341,6 +381,7 @@ uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
 {
     // An effect is represented with 12 bits, which is 3 groups of 4 bits: [e][x][y]. 
     // The effect code is [e] or [e][x], and the effect value is [x][y] or [y]. 
+    // Effect codes of the form [e] are stored as [e][0x0]. 
     uint8_t ptEff = PT_NOEFFECT; 
     uint8_t ptEffVal = PT_NOEFFECTVAL; 
 

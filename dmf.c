@@ -10,6 +10,8 @@ Requires zlib1.dll from the zlib compression library at https://zlib.net.
 
 #include "dmf.h"
 
+#define RI (*fBuff)[(*pos)++] // Read buffer at position pos, then Iterate 
+
 #if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(__CYGWIN__)
 #  include <fcntl.h>
 #  include <io.h>
@@ -130,7 +132,7 @@ const System Systems[10] = {
 	{.id = 0x08, .name = "YM2151", .channels = 13}
 };
 
-int importDMF(const char *fname, DMFContents *dmf)
+int importDMF(const char *fname, DMFContents *dmf, CMD_Options opt)
 {
     printf("Starting to import the .dmf file...\n");
 
@@ -230,7 +232,7 @@ System getSystem(uint8_t systemByte)
 
 void loadVisualInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf) 
 {
-    dmf->visualInfo.songNameLength = (*fBuff)[(*pos)++];    
+    dmf->visualInfo.songNameLength = RI;    
     dmf->visualInfo.songName = malloc((dmf->visualInfo.songNameLength + 1) * sizeof(char)); 
     strncpy(dmf->visualInfo.songName, &(*fBuff)[*pos], dmf->visualInfo.songNameLength + 1);
     dmf->visualInfo.songName[dmf->visualInfo.songNameLength] = '\0'; 
@@ -238,7 +240,7 @@ void loadVisualInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
 
     printf("Title: %s\n", dmf->visualInfo.songName);
 
-    dmf->visualInfo.songAuthorLength = (*fBuff)[(*pos)++];    
+    dmf->visualInfo.songAuthorLength = RI;    
     dmf->visualInfo.songAuthor = malloc((dmf->visualInfo.songAuthorLength + 1) * sizeof(char)); 
     strncpy(dmf->visualInfo.songAuthor, &(*fBuff)[*pos], dmf->visualInfo.songAuthorLength + 1);
     dmf->visualInfo.songAuthor[dmf->visualInfo.songAuthorLength] = '\0'; 
@@ -246,25 +248,25 @@ void loadVisualInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
 
     printf("Author: %s\n", dmf->visualInfo.songAuthor);
 
-    dmf->visualInfo.highlightAPatterns = (*fBuff)[(*pos)++];  
-    dmf->visualInfo.highlightBPatterns = (*fBuff)[(*pos)++]; 
+    dmf->visualInfo.highlightAPatterns = RI;  
+    dmf->visualInfo.highlightBPatterns = RI; 
 }
 
 void loadModuleInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
 {
-    dmf->moduleInfo.timeBase = (*fBuff)[(*pos)++];   
-    dmf->moduleInfo.tickTime1 = (*fBuff)[(*pos)++]; 
-    dmf->moduleInfo.tickTime2 = (*fBuff)[(*pos)++]; 
-    dmf->moduleInfo.framesMode = (*fBuff)[(*pos)++]; 
-    dmf->moduleInfo.usingCustomHZ = (*fBuff)[(*pos)++]; 
-    dmf->moduleInfo.customHZValue1 = (*fBuff)[(*pos)++]; 
-    dmf->moduleInfo.customHZValue2 = (*fBuff)[(*pos)++]; 
-    dmf->moduleInfo.customHZValue3 = (*fBuff)[(*pos)++]; 
-    dmf->moduleInfo.totalRowsPerPattern = (*fBuff)[(*pos)++]; 
-    dmf->moduleInfo.totalRowsPerPattern |= (*fBuff)[(*pos)++] << 8;
-    dmf->moduleInfo.totalRowsPerPattern |= (*fBuff)[(*pos)++] << 16;
-    dmf->moduleInfo.totalRowsPerPattern |= (*fBuff)[(*pos)++] << 24;
-    dmf->moduleInfo.totalRowsInPatternMatrix = (*fBuff)[(*pos)++]; 
+    dmf->moduleInfo.timeBase = RI;   
+    dmf->moduleInfo.tickTime1 = RI; 
+    dmf->moduleInfo.tickTime2 = RI; 
+    dmf->moduleInfo.framesMode = RI; 
+    dmf->moduleInfo.usingCustomHZ = RI; 
+    dmf->moduleInfo.customHZValue1 = RI; 
+    dmf->moduleInfo.customHZValue2 = RI; 
+    dmf->moduleInfo.customHZValue3 = RI; 
+    dmf->moduleInfo.totalRowsPerPattern = RI; 
+    dmf->moduleInfo.totalRowsPerPattern |= RI << 8;
+    dmf->moduleInfo.totalRowsPerPattern |= RI << 16;
+    dmf->moduleInfo.totalRowsPerPattern |= RI << 24;
+    dmf->moduleInfo.totalRowsInPatternMatrix = RI; 
 
     /*
     printf("timeBase: %u\n", dmf->moduleInfo.timeBase);  
@@ -296,7 +298,7 @@ void loadPatternMatrixValues(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
         dmf->patternMatrixValues[i] = (uint8_t *)malloc(dmf->moduleInfo.totalRowsInPatternMatrix * sizeof(uint8_t));
         for (int j = 0; j < dmf->moduleInfo.totalRowsInPatternMatrix; j++)
         {
-            dmf->patternMatrixValues[i][j] = (*fBuff)[(*pos)++]; 
+            dmf->patternMatrixValues[i][j] = RI; 
             if (dmf->patternMatrixValues[i][j] > dmf->patternMatrixMaxValues[i]) 
             {
                 dmf->patternMatrixMaxValues[i] = dmf->patternMatrixValues[i][j]; 
@@ -307,7 +309,7 @@ void loadPatternMatrixValues(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
 
 void loadInstrumentsData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
 {
-    dmf->totalInstruments = (*fBuff)[(*pos)++];
+    dmf->totalInstruments = RI;
     dmf->instruments = (Instrument *)malloc(dmf->totalInstruments * sizeof(Instrument)); 
 
     for (int i = 0; i < dmf->totalInstruments; i++)
@@ -320,133 +322,132 @@ Instrument loadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType)
 {
     Instrument inst; 
 
-    uint8_t name_size = (*fBuff)[(*pos)++];    
+    uint8_t name_size = RI;    
     inst.name = malloc((name_size + 1) * sizeof(char)); 
     strncpy(inst.name, &(*fBuff)[*pos], name_size + 1);
     inst.name[name_size] = '\0'; 
     *pos += name_size; 
 
-    inst.mode = (*fBuff)[(*pos)++]; // 1 = FM; 0 = Standard 
+    inst.mode = RI; // 1 = FM; 0 = Standard 
     
     if (inst.mode == 1) // FM instrument 
     {
-        inst.fmALG = (*fBuff)[(*pos)++]; 
-        inst.fmFB = (*fBuff)[(*pos)++]; 
-        inst.fmLFO = (*fBuff)[(*pos)++]; 
-        inst.fmLFO2 = (*fBuff)[(*pos)++]; 
+        inst.fmALG = RI; 
+        inst.fmFB = RI; 
+        inst.fmLFO = RI; 
+        inst.fmLFO2 = RI; 
 
-        int TOTAL_OPERATORS = 1;  // I'm not sure what toal operators is or where I'm supposed to get it from 
+        int TOTAL_OPERATORS = 1;  // I'm not sure what total operators is or where I'm supposed to get it from 
         for (int i = 0; i < TOTAL_OPERATORS; i++)
         {
-            inst.fmAM = (*fBuff)[(*pos)++]; 
-            inst.fmAR = (*fBuff)[(*pos)++]; 
-            inst.fmDR = (*fBuff)[(*pos)++]; 
-            inst.fmMULT = (*fBuff)[(*pos)++]; 
-            inst.fmRR = (*fBuff)[(*pos)++]; 
-            inst.fmSL = (*fBuff)[(*pos)++]; 
-            inst.fmTL = (*fBuff)[(*pos)++]; 
-            inst.fmDT2 = (*fBuff)[(*pos)++]; 
-            inst.fmRS = (*fBuff)[(*pos)++]; 
-            inst.fmDT = (*fBuff)[(*pos)++]; 
-            inst.fmD2R = (*fBuff)[(*pos)++]; 
-            inst.fmSSGMODE = (*fBuff)[(*pos)++]; 
+            inst.fmAM = RI; 
+            inst.fmAR = RI; 
+            inst.fmDR = RI; 
+            inst.fmMULT = RI; 
+            inst.fmRR = RI; 
+            inst.fmSL = RI; 
+            inst.fmTL = RI; 
+            inst.fmDT2 = RI; 
+            inst.fmRS = RI; 
+            inst.fmDT = RI; 
+            inst.fmD2R = RI; 
+            inst.fmSSGMODE = RI; 
         }
     }
     else if (inst.mode == 0) // Standard instrument 
     {
-        if (strcmp(systemType.name, "GAMEBOY") != 0)  // Not a GameBoy  
+        if (strcmp(systemType.name, Systems[SYS_GAMEBOY].name) != 0)  // Not a GameBoy  
         {
             // Volume macro 
-            inst.stdVolEnvSize = (*fBuff)[(*pos)++]; 
+            inst.stdVolEnvSize = RI; 
             inst.stdVolEnvValue = (int32_t *)malloc(inst.stdVolEnvSize * sizeof(int32_t));
             for (int i = 0; i < inst.stdVolEnvSize; i++)
             {
                 // 4 bytes, little-endian 
-                inst.stdVolEnvValue[i] = (*fBuff)[(*pos)++]; 
-                inst.stdVolEnvValue[i] |= (*fBuff)[(*pos)++] << 8;
-                inst.stdVolEnvValue[i] |= (*fBuff)[(*pos)++] << 16;
-                inst.stdVolEnvValue[i] |= (*fBuff)[(*pos)++] << 24;
+                inst.stdVolEnvValue[i] = RI; 
+                inst.stdVolEnvValue[i] |= RI << 8;
+                inst.stdVolEnvValue[i] |= RI << 16;
+                inst.stdVolEnvValue[i] |= RI << 24;
             }
             if (inst.stdVolEnvSize > 0) 
-                inst.stdVolEnvLoopPos = (*fBuff)[(*pos)++]; 
+                inst.stdVolEnvLoopPos = RI; 
         }
 
         // Arpeggio macro 
-        inst.stdArpEnvSize = (*fBuff)[(*pos)++]; 
+        inst.stdArpEnvSize = RI; 
         inst.stdArpEnvValue = (int32_t *)malloc(inst.stdArpEnvSize * sizeof(int32_t));
         for (int i = 0; i < inst.stdArpEnvSize; i++)
         {
             // 4 bytes, little-endian 
-            inst.stdArpEnvValue[i] = (*fBuff)[(*pos)++]; 
-            inst.stdArpEnvValue[i] |= (*fBuff)[(*pos)++] << 8;
-            inst.stdArpEnvValue[i] |= (*fBuff)[(*pos)++] << 16;
-            inst.stdArpEnvValue[i] |= (*fBuff)[(*pos)++] << 24;
+            inst.stdArpEnvValue[i] = RI; 
+            inst.stdArpEnvValue[i] |= RI << 8;
+            inst.stdArpEnvValue[i] |= RI << 16;
+            inst.stdArpEnvValue[i] |= RI << 24;
         }
 
         if (inst.stdArpEnvSize > 0)
-            inst.stdArpEnvLoopPos = (*fBuff)[(*pos)++]; 
-        inst.stdArpMacroMode = (*fBuff)[(*pos)++]; 
+            inst.stdArpEnvLoopPos = RI; 
+        inst.stdArpMacroMode = RI; 
 
         // Duty/Noise macro 
-        inst.stdDutyNoiseEnvSize = (*fBuff)[(*pos)++]; 
+        inst.stdDutyNoiseEnvSize = RI; 
         inst.stdDutyNoiseEnvValue = (int32_t *)malloc(inst.stdDutyNoiseEnvSize * sizeof(int32_t));
         for (int i = 0; i < inst.stdDutyNoiseEnvSize; i++)
         {
             // 4 bytes, little-endian 
-            inst.stdDutyNoiseEnvValue[i] = (*fBuff)[(*pos)++]; 
-            inst.stdDutyNoiseEnvValue[i] |= (*fBuff)[(*pos)++] << 8;
-            inst.stdDutyNoiseEnvValue[i] |= (*fBuff)[(*pos)++] << 16;
-            inst.stdDutyNoiseEnvValue[i] |= (*fBuff)[(*pos)++] << 24;
+            inst.stdDutyNoiseEnvValue[i] = RI; 
+            inst.stdDutyNoiseEnvValue[i] |= RI << 8;
+            inst.stdDutyNoiseEnvValue[i] |= RI << 16;
+            inst.stdDutyNoiseEnvValue[i] |= RI << 24;
         }
         if (inst.stdDutyNoiseEnvSize > 0) 
-            inst.stdDutyNoiseEnvLoopPos = (*fBuff)[(*pos)++]; 
+            inst.stdDutyNoiseEnvLoopPos = RI; 
 
         // Wavetable macro 
-        inst.stdWavetableEnvSize = (*fBuff)[(*pos)++]; 
+        inst.stdWavetableEnvSize = RI; 
         inst.stdWavetableEnvValue = (int32_t *)malloc(inst.stdWavetableEnvSize * sizeof(int32_t));
         for (int i = 0; i < inst.stdWavetableEnvSize; i++)
         {
             // 4 bytes, little-endian 
-            inst.stdWavetableEnvValue[i] = (*fBuff)[(*pos)++]; 
-            inst.stdWavetableEnvValue[i] |= (*fBuff)[(*pos)++] << 8;
-            inst.stdWavetableEnvValue[i] |= (*fBuff)[(*pos)++] << 16;
-            inst.stdWavetableEnvValue[i] |= (*fBuff)[(*pos)++] << 24;
+            inst.stdWavetableEnvValue[i] = RI; 
+            inst.stdWavetableEnvValue[i] |= RI << 8;
+            inst.stdWavetableEnvValue[i] |= RI << 16;
+            inst.stdWavetableEnvValue[i] |= RI << 24;
         }
         if (inst.stdWavetableEnvSize > 0) 
-            inst.stdWavetableEnvLoopPos = (*fBuff)[(*pos)++]; 
+            inst.stdWavetableEnvLoopPos = RI; 
 
         // Per system data
-        if (strcmp(systemType.name, "C64_SID_8580") == 0 || strcmp(systemType.name, "C64_SID_6581") == 0) // Using Commodore 64 
+        if (strcmp(systemType.name, Systems[SYS_C64_SID_8580].name) == 0 || strcmp(systemType.name, Systems[SYS_C64_SID_6581].name) == 0) // Using Commodore 64 
         {
-            
-            inst.stdC64TriWaveEn = (*fBuff)[(*pos)++]; 
-            inst.stdC64SawWaveEn = (*fBuff)[(*pos)++]; 
-            inst.stdC64PulseWaveEn = (*fBuff)[(*pos)++]; 
-            inst.stdC64NoiseWaveEn = (*fBuff)[(*pos)++]; 
-            inst.stdC64Attack = (*fBuff)[(*pos)++]; 
-            inst.stdC64Decay = (*fBuff)[(*pos)++]; 
-            inst.stdC64Sustain = (*fBuff)[(*pos)++]; 
-            inst.stdC64Release = (*fBuff)[(*pos)++]; 
-            inst.stdC64PulseWidth = (*fBuff)[(*pos)++]; 
-            inst.stdC64RingModEn = (*fBuff)[(*pos)++]; 
-            inst.stdC64SyncModEn = (*fBuff)[(*pos)++]; 
-            inst.stdC64ToFilter = (*fBuff)[(*pos)++]; 
-            inst.stdC64VolMacroToFilterCutoffEn = (*fBuff)[(*pos)++]; 
-            inst.stdC64UseFilterValuesFromInst = (*fBuff)[(*pos)++]; 
+            inst.stdC64TriWaveEn = RI; 
+            inst.stdC64SawWaveEn = RI; 
+            inst.stdC64PulseWaveEn = RI; 
+            inst.stdC64NoiseWaveEn = RI; 
+            inst.stdC64Attack = RI; 
+            inst.stdC64Decay = RI; 
+            inst.stdC64Sustain = RI; 
+            inst.stdC64Release = RI; 
+            inst.stdC64PulseWidth = RI; 
+            inst.stdC64RingModEn = RI; 
+            inst.stdC64SyncModEn = RI; 
+            inst.stdC64ToFilter = RI; 
+            inst.stdC64VolMacroToFilterCutoffEn = RI; 
+            inst.stdC64UseFilterValuesFromInst = RI; 
             
             // Filter globals 
-            inst.stdC64FilterResonance = (*fBuff)[(*pos)++]; 
-            inst.stdC64FilterCutoff = (*fBuff)[(*pos)++]; 
-            inst.stdC64FilterHighPass = (*fBuff)[(*pos)++]; 
-            inst.stdC64FilterLowPass = (*fBuff)[(*pos)++]; 
-            inst.stdC64FilterCH2Off = (*fBuff)[(*pos)++]; 
+            inst.stdC64FilterResonance = RI; 
+            inst.stdC64FilterCutoff = RI; 
+            inst.stdC64FilterHighPass = RI; 
+            inst.stdC64FilterLowPass = RI; 
+            inst.stdC64FilterCH2Off = RI; 
         }
-        else if (strcmp(systemType.name, "GAMEBOY") == 0) // Using GameBoy 
+        else if (strcmp(systemType.name, Systems[SYS_GAMEBOY].name) == 0) // Using GameBoy 
         {
-            inst.stdGBEnvVol = (*fBuff)[(*pos)++]; 
-            inst.stdGBEnvDir = (*fBuff)[(*pos)++]; 
-            inst.stdGBEnvLen = (*fBuff)[(*pos)++]; 
-            inst.stdGBSoundLen = (*fBuff)[(*pos)++]; 
+            inst.stdGBEnvVol = RI; 
+            inst.stdGBEnvDir = RI; 
+            inst.stdGBEnvLen = RI; 
+            inst.stdGBSoundLen = RI; 
         }
     }
 
@@ -455,25 +456,25 @@ Instrument loadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType)
 
 void loadWavetablesData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf) 
 {
-    dmf->totalWavetables = (*fBuff)[(*pos)++]; 
+    dmf->totalWavetables = RI; 
     
     dmf->wavetableSizes = (uint32_t *)malloc(dmf->totalWavetables * sizeof(uint32_t));     
     dmf->wavetableValues = (uint32_t **)malloc(dmf->totalWavetables * sizeof(uint32_t *)); 
 
     for (int i = 0; i < dmf->totalWavetables; i++)
     {
-        dmf->wavetableSizes[i] = (*fBuff)[(*pos)++]; 
-        dmf->wavetableSizes[i] |= (*fBuff)[(*pos)++] << 8;
-        dmf->wavetableSizes[i] |= (*fBuff)[(*pos)++] << 16;
-        dmf->wavetableSizes[i] |= (*fBuff)[(*pos)++] << 24;
+        dmf->wavetableSizes[i] = RI; 
+        dmf->wavetableSizes[i] |= RI << 8;
+        dmf->wavetableSizes[i] |= RI << 16;
+        dmf->wavetableSizes[i] |= RI << 24;
 
         dmf->wavetableValues[i] = (uint32_t *)malloc(dmf->wavetableSizes[i] * sizeof(uint32_t)); 
         for (int j = 0; j < dmf->wavetableSizes[i]; j++)
         {
-            dmf->wavetableValues[i][j] = (*fBuff)[(*pos)++]; 
-            dmf->wavetableValues[i][j] |= (*fBuff)[(*pos)++] << 8;
-            dmf->wavetableValues[i][j] |= (*fBuff)[(*pos)++] << 16;
-            dmf->wavetableValues[i][j] |= (*fBuff)[(*pos)++] << 24;
+            dmf->wavetableValues[i][j] = RI; 
+            dmf->wavetableValues[i][j] |= RI << 8;
+            dmf->wavetableValues[i][j] |= RI << 16;
+            dmf->wavetableValues[i][j] |= RI << 24;
         }
     }
 }
@@ -487,7 +488,7 @@ void loadPatternsData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
 
     for (int channel = 0; channel < dmf->sys.channels; channel++)
     {
-        dmf->channelEffectsColumnsCount[channel] = (*fBuff)[(*pos)++]; 
+        dmf->channelEffectsColumnsCount[channel] = RI; 
 
         // Maybe use calloc instead of malloc in the line below?     
         dmf->patternValues[channel] = (PatternRow **)malloc((dmf->patternMatrixMaxValues[channel] + 1) * sizeof(PatternRow *));
@@ -519,30 +520,30 @@ PatternRow loadPatternRow(uint8_t **fBuff, uint32_t *pos, int effectsColumnsCoun
 {
     PatternRow pat; 
 
-    pat.note = (*fBuff)[(*pos)++]; 
-    pat.note |= (*fBuff)[(*pos)++] << 8; 
-    pat.octave = (*fBuff)[(*pos)++]; 
-    pat.octave |= (*fBuff)[(*pos)++] << 8; 
-    pat.volume = (*fBuff)[(*pos)++]; 
-    pat.volume |= (*fBuff)[(*pos)++] << 8; 
+    pat.note = RI; 
+    pat.note |= RI << 8; 
+    pat.octave = RI; 
+    pat.octave |= RI << 8; 
+    pat.volume = RI; 
+    pat.volume |= RI << 8; 
 
     for (int col = 0; col < effectsColumnsCount; col++)
     {
-        pat.effectCode[col] = (*fBuff)[(*pos)++]; 
-        pat.effectCode[col] |= (*fBuff)[(*pos)++] << 8; 
-        pat.effectValue[col] = (*fBuff)[(*pos)++]; 
-        pat.effectValue[col] |= (*fBuff)[(*pos)++] << 8; 
+        pat.effectCode[col] = RI; 
+        pat.effectCode[col] |= RI << 8; 
+        pat.effectValue[col] = RI; 
+        pat.effectValue[col] |= RI << 8; 
     }
 
-    pat.instrument = (*fBuff)[(*pos)++]; 
-    pat.instrument |= (*fBuff)[(*pos)++] << 8; 
+    pat.instrument = RI; 
+    pat.instrument |= RI << 8; 
 
     return pat;
 }
 
 void loadPCMSamplesData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
 {
-    dmf->totalPCMSamples = (*fBuff)[(*pos)++]; 
+    dmf->totalPCMSamples = RI; 
     dmf->pcmSamples = (PCMSample *)malloc(dmf->totalPCMSamples * sizeof(PCMSample));
 
     for (int sample = 0; sample < dmf->totalPCMSamples; sample++) 
@@ -556,27 +557,27 @@ PCMSample loadPCMSample(uint8_t **fBuff, uint32_t *pos)
 {
     PCMSample sample; 
 
-    sample.size = (*fBuff)[(*pos)++];
-    sample.size |= (*fBuff)[(*pos)++] << 8;
-    sample.size |= (*fBuff)[(*pos)++] << 16;
-    sample.size |= (*fBuff)[(*pos)++] << 24;
+    sample.size = RI;
+    sample.size |= RI << 8;
+    sample.size |= RI << 16;
+    sample.size |= RI << 24;
 
-    uint8_t name_size = (*fBuff)[(*pos)++]; 
+    uint8_t name_size = RI; 
     sample.name = (char *)malloc(name_size * sizeof(char)); 
     strncpy(sample.name, &(*fBuff)[*pos], name_size + 1);
     sample.name[name_size] = '\0'; 
     *pos += name_size; 
 
-    sample.rate = (*fBuff)[(*pos)++]; 
-    sample.pitch = (*fBuff)[(*pos)++]; 
-    sample.amp = (*fBuff)[(*pos)++]; 
-    sample.bits = (*fBuff)[(*pos)++]; 
+    sample.rate = RI; 
+    sample.pitch = RI; 
+    sample.amp = RI; 
+    sample.bits = RI; 
 
     sample.data = (uint16_t *)malloc(sample.size * sizeof(uint16_t *)); 
     for (uint32_t i = 0; i < sample.size; i++) 
     {
-        sample.data[i] = (*fBuff)[(*pos)++]; 
-        sample.data[i] |= (*fBuff)[(*pos)++] << 8; 
+        sample.data[i] = RI; 
+        sample.data[i] |= RI << 8; 
     }
 
     return sample; 

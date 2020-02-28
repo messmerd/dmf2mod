@@ -68,6 +68,8 @@ int main(int argc, char* argv[])
                 else 
                 {
                     printf("Error: Unrecognized option '%s'.\n", argv[i]); 
+                    free(fin);
+                    free(fout);
                     exit(1);
                 }
             }

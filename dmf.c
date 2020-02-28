@@ -10,7 +10,7 @@ Requires zlib1.dll from the zlib compression library at https://zlib.net.
 
 #include "dmf.h"
 
-#define RI (*fBuff)[(*pos)++] // Read buffer at position pos, then Iterate 
+#define RI (*fBuff)[(*pos)++] // Read buffer at position pos, then Increment pos  
 
 #if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(__CYGWIN__)
 #  include <fcntl.h>
@@ -330,6 +330,13 @@ Instrument loadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType)
 
     inst.mode = RI; // 1 = FM; 0 = Standard 
     
+    // Initialize to NULL in case malloc isn't used on them later: 
+    inst.stdVolEnvValue = NULL; 
+    inst.stdArpEnvValue = NULL;
+    inst.stdDutyNoiseEnvValue = NULL; 
+    inst.stdWavetableEnvValue = NULL; 
+
+
     if (inst.mode == 1) // FM instrument 
     {
         inst.fmALG = RI; 
@@ -356,7 +363,7 @@ Instrument loadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType)
     }
     else if (inst.mode == 0) // Standard instrument 
     {
-        if (strcmp(systemType.name, Systems[SYS_GAMEBOY].name) != 0)  // Not a GameBoy  
+        if (systemType.id != Systems[SYS_GAMEBOY].id)  // Not a GameBoy  
         {
             // Volume macro 
             inst.stdVolEnvSize = RI; 
@@ -418,7 +425,7 @@ Instrument loadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType)
             inst.stdWavetableEnvLoopPos = RI; 
 
         // Per system data
-        if (strcmp(systemType.name, Systems[SYS_C64_SID_8580].name) == 0 || strcmp(systemType.name, Systems[SYS_C64_SID_6581].name) == 0) // Using Commodore 64 
+        if (systemType.id == Systems[SYS_C64_SID_8580].id || systemType.id == Systems[SYS_C64_SID_6581].id) // Using Commodore 64 
         {
             inst.stdC64TriWaveEn = RI; 
             inst.stdC64SawWaveEn = RI; 
@@ -442,7 +449,7 @@ Instrument loadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType)
             inst.stdC64FilterLowPass = RI; 
             inst.stdC64FilterCH2Off = RI; 
         }
-        else if (strcmp(systemType.name, Systems[SYS_GAMEBOY].name) == 0) // Using GameBoy 
+        else if (systemType.id == Systems[SYS_GAMEBOY].id) // Using GameBoy 
         {
             inst.stdGBEnvVol = RI; 
             inst.stdGBEnvDir = RI; 

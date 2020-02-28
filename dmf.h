@@ -20,6 +20,7 @@ Requires zlib1.dll from the zlib compression library at https://zlib.net.
 
 // For inflating .dmf files so that they can be read 
 #include "zlib.h"
+#include "zconf.h"
 
 // Deflemask allows four effects columns per channel regardless of the system 
 #define MAX_EFFECTS_COLUMN_COUNT 4 

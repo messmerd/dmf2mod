@@ -20,7 +20,7 @@ If you are having issues with the zlib dll, try recompiling it from the source c
 Options:
 ```
 --help                   Displays the help message.
---noeffects              Ignore Deflemask effects during conversion (except for set duty cycle effect).
+--noeffects              Ignore Deflemask effects (except for Set Duty Cycle).
 ```
  
 Created by Dalton Messmer <messmer.dalton(at)gmail(dot)com>.

@@ -111,5 +111,5 @@ void printHelp()
     printf("Usage: .\\dmf2mod.exe output_file.mod deflemask_gameboy_file.dmf [options]\n");
     printf("Options:\n");
     printf("%-25s%s\n", "--help", "Display this help message.");
-    printf("%-25s%s\n", "--noeffects", "Ignore Deflemask effects column(s) during conversion."); 
+    printf("%-25s%s\n", "--noeffects", "Ignore Deflemask effects (except for Set Duty Cycle)."); 
 }

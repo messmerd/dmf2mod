@@ -11,11 +11,31 @@ For example, .dmf files must use the Game Boy system, patterns must have 64 rows
 Other programmers may find the dmf.c/dmf.h source files helpful for writing programs that utilize .dmf files, since those source files contain everything needed to import a .dmf file. You have my permission to do whatever you want with any of dmf2mod's code (except the zlib code which isn't mine).
 
 ## Build    
-Download and extract the repository then run make.bat to get the executable file. 
- 
-Note that `gcc` must be installed and added to the PATH in order to build. 
+Clone the repository using: 
 
-If you are having issues with the zlib dll, try recompiling it from the source code at https://zlib.net.
+```git clone --recursive https://github.com/messmerd/dmf2mod.git``` 
+(This ensures that the zlib repository is cloned as well.)
+
+Go to the dmf2mod directory: 
+
+```cd ./dmf2mod ```
+
+Next, run the build script. 
+
+In Windows, use:
+
+```./build.bat``` 
+
+In Linux or Mac, use:
+
+```
+sudo chmod +x ./build
+sudo ./build 
+```
+
+Note that `gcc` and `make` must be installed and added to the PATH in order to build. 
+
+If you can't get it to work, please send me an email at the address at the bottom. 
 
 ## Usage 
 ```
@@ -27,4 +47,5 @@ Options:
 --noeffects              Ignore Deflemask effects (except for Set Duty Cycle).
 ```
  
-Created by Dalton Messmer <messmer.dalton(at)gmail(dot)com>.
+Created by Dalton Messmer <messmer.dalton(at)gmail(dot)com>. 
+Zlib created by Jean-loup Gailly and Mark Adler (https://zlib.net/).

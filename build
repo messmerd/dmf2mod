@@ -1,0 +1,13 @@
+#!/bin/sh
+
+# Build script for Linux / Mac 
+
+cd ./zlib
+sudo ./configure
+sudo make
+sudo cp -f "zlib.h" "../zlib.h"
+sudo cp -f "zconf.h" "../zconf.h"
+sudo cp -f "libz.a" "../libz.a"
+cd ../
+sudo make 
+sudo mv "./dmf2mod.exe" "./dmf2mod"

@@ -4,8 +4,8 @@ HEADER	= mod.h dmf.h zconf.h zlib.h
 OUT	= dmf2mod.exe
 CC	 = gcc
 # Use '-Wall' flag for warnings.
-FLAGS	 = -g -c
-LFLAGS	 = -lm -lz
+FLAGS	 = -g -c -Wall 
+LFLAGS	 = -lm -L. -lz
 
 all: $(OBJS)
 	$(CC) -g $(OBJS) -o $(OUT) $(LFLAGS)

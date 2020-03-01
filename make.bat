@@ -1,1 +1,0 @@
-gcc dmf2mod.c dmf.c mod.c -o dmf2mod.exe -lz

@@ -1,6 +1,8 @@
 language: c
 compiler: gcc
-script: make
+script: 
+  - ./build
+  - ./dmf2mod
 os:
   - linux
   - osx

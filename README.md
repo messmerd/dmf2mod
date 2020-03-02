@@ -1,6 +1,4 @@
-
-
-dmf2mod [![Build Status](https://travis-ci.org/messmerd/dmf2mod.svg?branch=master)](https://travis-ci.org/messmerd/dmf2mod)
+dmf2mod [![Build status](https://ci.appveyor.com/api/projects/status/uvds55gsh593bcnl?svg=true)](https://ci.appveyor.com/project/messmerd/dmf2mod) [![Build Status](https://travis-ci.org/messmerd/dmf2mod.svg?branch=master)](https://travis-ci.org/messmerd/dmf2mod) 
 ======
 
 A cross-platform command-line utility for converting Deflemask's Game Boy .dmf files to ProTracker's .mod tracker files.
@@ -13,8 +11,7 @@ Other programmers may find the dmf.c/dmf.h source files helpful for writing prog
 ## Build    
 Clone the repository using: 
 
-```git clone --recursive https://github.com/messmerd/dmf2mod.git``` 
-(This ensures that the zlib repository is cloned as well.)
+```git clone --recursive https://github.com/messmerd/dmf2mod.git``` <p>(This ensures that the zlib repository is cloned as well.)
 
 Go to the dmf2mod directory: 
 
@@ -48,4 +45,5 @@ Options:
 ```
  
 Created by Dalton Messmer <messmer.dalton(at)gmail(dot)com>. 
+
 Zlib created by Jean-loup Gailly and Mark Adler (https://zlib.net/).

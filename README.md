@@ -44,6 +44,17 @@ Options:
 --noeffects              Ignore Deflemask effects (except for Set Duty Cycle).
 ```
  
+## To Do
+Currently dmf2mod only converts notes, volume changes, and the Set Duty Cycle effect. 
+
+In later updates, I plan to add: 
+- Wave channel 
+- Noise channel 
+- More effects 
+- Tempo 
+- ... 
+ 
+______
 Created by Dalton Messmer <messmer.dalton(at)gmail(dot)com>. 
 
-Zlib created by Jean-loup Gailly and Mark Adler (https://zlib.net/).
+Zlib library created by Jean-loup Gailly and Mark Adler (https://zlib.net/).

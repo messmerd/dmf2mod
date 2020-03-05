@@ -227,7 +227,7 @@ System getSystem(uint8_t systemByte)
         if (Systems[i].id == systemByte) 
             return Systems[i];
     }
-    return Systems[0]; // Error: System byte invalid  
+    return Systems[SYS_ERROR]; // Error: System byte invalid  
 }
 
 void loadVisualInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf) 
@@ -533,6 +533,14 @@ PatternRow loadPatternRow(uint8_t **fBuff, uint32_t *pos, int effectsColumnsCoun
     pat.octave |= RI << 8; 
     pat.volume = RI; 
     pat.volume |= RI << 8; 
+
+    //if (pat.note == DMF_NOTE_OFF)
+    //    printf("Wow, note off\n");
+
+    if (pat.note == 0 && pat.octave == 0) 
+    {
+        pat.note = DMF_NOTE_EMPTY; 
+    }
 
     for (int col = 0; col < effectsColumnsCount; col++)
     {

@@ -84,7 +84,7 @@ typedef struct Instrument
         stdC64SyncModEn, stdC64ToFilter, stdC64VolMacroToFilterCutoffEn, stdC64UseFilterValuesFromInst; 
     uint8_t stdC64FilterResonance, stdC64FilterCutoff, stdC64FilterHighPass, stdC64FilterLowPass, stdC64FilterCH2Off; 
 
-    // Standard Instruments - GameBoy exclusive 
+    // Standard Instruments - Game Boy exclusive 
     uint8_t stdGBEnvVol, stdGBEnvDir, stdGBEnvLen, stdGBSoundLen;  
 
 } Instrument;
@@ -127,7 +127,7 @@ typedef struct DMFContents
 } DMFContents; 
 
 typedef enum DMF_NOTE {
-    DMF_NOTE_EMPTY=0, 
+    DMF_NOTE_EMPTY=101, 
     DMF_NOTE_CS=1, 
     DMF_NOTE_D=2, 
     DMF_NOTE_DS=3, 
@@ -157,12 +157,17 @@ typedef enum DMF_EFFECT {
     DMF_SETSPEEDVAL2=0xF
 } DMF_EFFECT; 
 
-// Deflemask effects exclusive to the GameBoy system:
+// Deflemask effects exclusive to the Game Boy system:
 typedef enum DMF_GAMEBOY_EFFECT {
     DMF_SETWAVE=0x10, DMF_SETNOISEPOLYCOUNTERMODE=0x11, DMF_SETDUTYCYCLE=0x12, DMF_SETSWEEPTIMESHIFT=0x13, DMF_SETSWEEPDIR=0x14
 } DMF_GAMEBOY_EFFECT;
 
 // To do: Add enums for effects exclusive to the rest of Deflemask's systems. 
+
+// Deflemask Game Boy channels 
+typedef enum DMF_GAMEBOY_CHANNEL {
+    DMF_GAMEBOY_SQW1=0, DMF_GAMEBOY_SQW2=1, DMF_GAMEBOY_WAVE=2, DMF_GAMEBOY_NOISE=3
+} DMF_GAMEBOY_CHANNEL; 
 
 // Imports the .dmf file "fname" and stores it in the struct "dmf" using the options "opt" 
 int importDMF(const char *fname, DMFContents *dmf, CMD_Options opt); 

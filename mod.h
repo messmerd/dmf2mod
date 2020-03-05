@@ -48,9 +48,12 @@ typedef enum PT_EFFECT {
 //      tracker stores for each channel while playing a tracker file.
 typedef struct MODChannelState
 {
+    DMF_GAMEBOY_CHANNEL channel; 
     uint8_t dutyCycle; 
-    int16_t volume;
     uint8_t wavetable;
+    bool sampleChanged; // True if dutyCycle or wavetable just changed
+    int16_t volume;
+    bool notePlaying;
 } MODChannelState; 
 
 #define PT_NOTE_VOLUMEMAX 64

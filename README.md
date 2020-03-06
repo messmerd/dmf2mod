@@ -45,9 +45,10 @@ Options:
 ```
  
 ## To Do
-Currently dmf2mod only converts notes, volume changes, and the following effects: 
-- 10xx - Set WAVE 
-- 12xx - Set Duty Cycle 
+Currently, dmf2mod converts notes, volume changes, and the following Deflemask effects: 
+- **Bxx**  - Position Jump
+- **10xx** - Set WAVE 
+- **12xx** - Set Duty Cycle 
 
 In later updates, I plan to add: 
 - Noise channel 

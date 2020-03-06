@@ -158,14 +158,13 @@ int exportMOD(char *fname, DMFContents *dmf, CMD_Options opt)
         }
         if (dmf->patternMatrixMaxValues[channel] > 63) 
         {
-            printf("Too many patterns. The maximum is 64 unique rows in the pattern matrix.\n", channel);
+            printf("Too many patterns. The maximum is 64 unique rows in the pattern matrix.\n");
             free(proTrackerPatternToPatternMatrixRow); 
             free(patternMatrixRowToProTrackerPattern);
             return 1;
         }
     }
 
-    uint8_t currentDutyCycle[4] = {1,1,1,1}; // Default is 1 or a 12.5% duty cycle square wave. In mod, the first sample is sample #1.  
     int8_t pat_mat_row = -1; 
 
     //printf("dmf->moduleInfo.totalRowsInPatternMatrix - duplicateIndices = %u\n", dmf->moduleInfo.totalRowsInPatternMatrix - duplicateIndices);

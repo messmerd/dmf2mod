@@ -110,8 +110,8 @@ int main(int argc, char* argv[])
 void printHelp()
 {
     printf("dmf2mod v%s \nCreated by Dalton Messmer <messmer.dalton@gmail.com>\n", DMF2MOD_VERSION);
-    printf("Usage: .\\dmf2mod.exe output_file.mod deflemask_gameboy_file.dmf [options]\n");
+    printf("Usage: .\\dmf2mod.exe output_file.mod deflemask_game_boy_file.dmf [options]\n");
     printf("Options:\n");
     printf("%-25s%s\n", "--help", "Display this help message.");
-    printf("%-25s%s\n", "--noeffects", "Ignore Deflemask effects (except for Set Duty Cycle)."); 
+    printf("%-25s%s\n", "--noeffects", "Ignore Deflemask effects (except 10xx and 12xx)."); 
 }

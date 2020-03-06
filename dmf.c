@@ -169,7 +169,7 @@ int importDMF(const char *fname, DMFContents *dmf, CMD_Options opt)
 
     ///////////////// FORMAT FLAGS  
     char header[17]; 
-    strncpy(header, fBuff, 16); 
+    strncpy(header, (char *)fBuff, 16); 
     pos += 16; 
     
     if (strncmp(header, ".DelekDefleMask.", 16) != 0)
@@ -234,7 +234,7 @@ void loadVisualInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
 {
     dmf->visualInfo.songNameLength = RI;    
     dmf->visualInfo.songName = malloc((dmf->visualInfo.songNameLength + 1) * sizeof(char)); 
-    strncpy(dmf->visualInfo.songName, &(*fBuff)[*pos], dmf->visualInfo.songNameLength + 1);
+    strncpy(dmf->visualInfo.songName, (char *)(&(*fBuff)[*pos]), dmf->visualInfo.songNameLength + 1);
     dmf->visualInfo.songName[dmf->visualInfo.songNameLength] = '\0'; 
     *pos += dmf->visualInfo.songNameLength; 
 
@@ -242,7 +242,7 @@ void loadVisualInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
 
     dmf->visualInfo.songAuthorLength = RI;    
     dmf->visualInfo.songAuthor = malloc((dmf->visualInfo.songAuthorLength + 1) * sizeof(char)); 
-    strncpy(dmf->visualInfo.songAuthor, &(*fBuff)[*pos], dmf->visualInfo.songAuthorLength + 1);
+    strncpy(dmf->visualInfo.songAuthor, (char *)(&(*fBuff)[*pos]), dmf->visualInfo.songAuthorLength + 1);
     dmf->visualInfo.songAuthor[dmf->visualInfo.songAuthorLength] = '\0'; 
     *pos += dmf->visualInfo.songAuthorLength; 
 
@@ -324,7 +324,7 @@ Instrument loadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType)
 
     uint8_t name_size = RI;    
     inst.name = malloc((name_size + 1) * sizeof(char)); 
-    strncpy(inst.name, &(*fBuff)[*pos], name_size + 1);
+    strncpy(inst.name, (char *)(&(*fBuff)[*pos]), name_size + 1);
     inst.name[name_size] = '\0'; 
     *pos += name_size; 
 
@@ -579,7 +579,7 @@ PCMSample loadPCMSample(uint8_t **fBuff, uint32_t *pos)
 
     uint8_t name_size = RI; 
     sample.name = (char *)malloc(name_size * sizeof(char)); 
-    strncpy(sample.name, &(*fBuff)[*pos], name_size + 1);
+    strncpy(sample.name, (char *)(&(*fBuff)[*pos]), name_size + 1);
     sample.name[name_size] = '\0'; 
     *pos += name_size; 
 

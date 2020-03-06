@@ -41,14 +41,15 @@ If you can't get it to work, please send me an email at the address at the botto
 Options:
 ```
 --help                   Displays the help message.
---noeffects              Ignore Deflemask effects (except for Set Duty Cycle).
+--noeffects              Ignore Deflemask effects (except for Set Duty Cycle and Set Wave).
 ```
  
 ## To Do
-Currently dmf2mod only converts notes, volume changes, and the Set Duty Cycle effect. 
+Currently dmf2mod only converts notes, volume changes, and the following effects: 
+- 10xx - Set WAVE 
+- 12xx - Set Duty Cycle 
 
 In later updates, I plan to add: 
-- Wave channel 
 - Noise channel 
 - More effects 
 - Tempo 

@@ -6,7 +6,7 @@ Provides functions for exporting the contents of a .dmf file
 to ProTracker's .mod format. 
 
 Several limitations apply in order to export. For example, the 
-.dmf file must use the GameBoy system, patterns must have 64 
+.dmf file must use the Game Boy system, patterns must have 64 
 rows, only one effect column is allowed per channel, etc.  
 */
 
@@ -39,9 +39,9 @@ int exportMOD(char *fname, DMFContents *dmf, CMD_Options opt)
 
     printf("Starting to export to .mod....\n");
     
-    if (dmf->sys.id != Systems[SYS_GAMEBOY].id) // If it's not a GameBoy 
+    if (dmf->sys.id != Systems[SYS_GAMEBOY].id) // If it's not a Game Boy 
     {
-        printf("Error: Only the GameBoy system is currently supported. \n");
+        printf("Error: Only the Game Boy system is currently supported. \n");
         return 1;
     }
 
@@ -189,20 +189,12 @@ int exportMOD(char *fname, DMFContents *dmf, CMD_Options opt)
     {
         // Get the Deflemask pattern matrix number from the ProTracker pattern number 
         pat_mat_row = proTrackerPatternToPatternMatrixRow[i];
-        //printf("pat_mat_row = %u\n", pat_mat_row); 
         if (pat_mat_row == -1) 
         {
             printf("Error in proTrackerPatternToPatternMatrixRow.\n");
             free(proTrackerPatternToPatternMatrixRow); 
             free(patternMatrixRowToProTrackerPattern);
             return 1; 
-            /*
-            for (int j = 0; j < 64*dmf->sys.channels; j++) 
-            {
-                fputc(0, fout);
-            }
-            continue; 
-            */
         }
         // Iterate through rows in a pattern: 
         for (int j = 0; j < 64; j++) 
@@ -355,85 +347,14 @@ int8_t getProTrackerRepeatPatterns(DMFContents *dmf)
     return duplicateCount; 
 }
 
-// Unfinished function 
+// Writes 4 bytes of pattern row information to the .mod file 
 int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *state, CMD_Options opt) 
 {
     uint16_t effect;
-    if (opt.useEffects) // If using effects 
-    {
-        effect = getProTrackerEffect(pat->effectCode[0], pat->effectValue[0]); 
-        if (pat->volume != state->volume && pat->volume != DMF_NOTE_NOVOLUME) // If the note volume changes 
-        {
-            if (effect != PT_NOEFFECT_CODE) // If an effect is already being used    
-            {
-                /* Unlike Deflemask, setting the volume in ProTracker requires the use of 
-                    an effect, and only one effect can be used at a time per channel. 
-                    Same with turning a note off, which requires the EC0 command as far as I know. 
-                    Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
-                    so it does not count.  
-                */
-                printf("Error: An effect and a volume change (or note OFF) cannot both appear in the same row of the same channel.\n");
-                return 1;
-            }
-            else // Only the volume changed 
-            {
-                uint8_t newVolume = round(pat->volume / 15.0 * 65.0); // Convert DMF volume to PT volume 
-                effect = ((uint16_t)PT_SETVOLUME << 4) | newVolume; // ??? 
-                //printf("Vol effect = %x, effect code = %d, effect val = %d, dmf vol = %d\n", effect, PT_SETVOLUME, newVolume, pat->volume);  
-                state->volume = pat->volume; // Update the state 
-            }
-        } 
 
-        if (pat->note == DMF_NOTE_OFF && state->notePlaying) // If the note needs to be turned off 
-        {
-            if (effect != PT_NOEFFECT_CODE) // If an effect is already being used 
-            {
-                /* Unlike Deflemask, setting the volume in ProTracker requires the use of 
-                    an effect, and only one effect can be used at a time per channel. 
-                    Same with turning a note off, which requires the EC0 command as far as I know. 
-                    Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
-                    so it does not count.  
-                */
-                printf("Error: An effect and a note OFF (or volume change) cannot both appear in the same row of the same channel.\n");
-                return 1;
-            }
-            else // No effects except the note OFF 
-            {
-                effect = (uint16_t)PT_CUTSAMPLE << 4; // Cut sample effect with value 0. 
-            }
-        }
-    }
-    else // Don't use effects (except for volume and note OFF) 
+    if (checkEffects(pat, state, opt, &effect))
     {
-        char total_effects = 0;
-        if (pat->volume != state->volume && pat->volume != DMF_NOTE_NOVOLUME) // If the volume changed, we still want to handle that 
-        {
-            uint8_t newVolume = round(pat->volume / 15.0 * 65.0); // Convert DMF volume to PT volume 
-            effect = ((uint16_t)PT_SETVOLUME << 4) | newVolume; // ??? 
-            state->volume = pat->volume; // Update the state 
-            total_effects++;
-        }
-        if (pat->note == DMF_NOTE_OFF && state->notePlaying) // If the note needs to be turned off 
-        {
-            effect = (uint16_t)PT_CUTSAMPLE << 4; // Cut sample effect with value 0. 
-            total_effects++;
-        }
-
-        if (total_effects > 1) 
-        {
-            /* Unlike Deflemask, setting the volume in ProTracker requires the use of 
-                an effect, and only one effect can be used at a time per channel. 
-                Same with turning a note off, which requires the EC0 command as far as I know. 
-                Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
-                so it does not count.  
-            */
-            printf("Error: An effect and a note OFF / volume change cannot both appear in the same row of the same channel.\n");
-            return 1;
-        }
-        else if (total_effects == 0)
-        {
-            effect = PT_NOEFFECT_CODE; // No effect  
-        } 
+        return 1; // An error occurred 
     }
 
     if (pat->note == DMF_NOTE_EMPTY)  // No note is playing. Only handle effects.
@@ -457,7 +378,6 @@ int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *stat
     }
     else  // A note is playing 
     {
-        state->notePlaying = true; 
         uint16_t period = 0;
 
         uint16_t modOctave = pat->octave - 2; // Transpose down two octaves because a C-4 in Deflemask is the same pitch as a C-2 in ProTracker. 
@@ -477,11 +397,9 @@ int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *stat
         {
             period = proTrackerPeriodTable[modOctave][pat->note % 12]; 
         }
-        
-        //uint16_t effect = getProTrackerEffect(pat->effectCode[0], pat->effectValue[0]); 
 
         uint8_t sampleNumber;
-        if (!state->sampleChanged) // Sample hasn't changed (same duty cycle or wavetable as before)
+        if (!state->sampleChanged && state->notePlaying) // Sample hasn't changed (same duty cycle or wavetable as before) and a note was playing 
         {
             sampleNumber = 0; // No sample. Keeps the previous sample number and prevents channel volume from being reset.  
         }
@@ -505,11 +423,93 @@ int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *stat
         fputc(period & 0x00FF, fout);                                // Sample period/effect param. (lower 8 bits) 
         fputc((sampleNumber << 4) | ((effect & 0x0F00) >> 8), fout);    // Sample number (lower 4b); effect code (upper 4b)
         fputc(effect & 0x00FF, fout);                                // Effect code (lower 8 bits)  
+        
+        state->notePlaying = true; 
     }
 
    return 0; // Success 
 }
 
+int checkEffects(PatternRow *pat, MODChannelState *state, CMD_Options opt, uint16_t *effect)
+{
+    if (opt.useEffects) // If using effects 
+    {
+        *effect = getProTrackerEffect(pat->effectCode[0], pat->effectValue[0]); // Effects must be in first row 
+        if (pat->volume != state->volume && pat->volume != DMF_NOTE_NOVOLUME) // If the note volume changes 
+        {
+            if (*effect != PT_NOEFFECT_CODE) // If an effect is already being used    
+            {
+                /* Unlike Deflemask, setting the volume in ProTracker requires the use of 
+                    an effect, and only one effect can be used at a time per channel. 
+                    Same with turning a note off, which requires the EC0 command as far as I know. 
+                    Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
+                    so it does not count.  
+                */
+                printf("Error: An effect and a volume change (or note OFF) cannot both appear in the same row of the same channel.\n");
+                return 1;
+            }
+            else // Only the volume changed 
+            {
+                uint8_t newVolume = round(pat->volume / 15.0 * 65.0); // Convert DMF volume to PT volume 
+                *effect = ((uint16_t)PT_SETVOLUME << 4) | newVolume; // ??? 
+                //printf("Vol effect = %x, effect code = %d, effect val = %d, dmf vol = %d\n", effect, PT_SETVOLUME, newVolume, pat->volume);  
+                state->volume = pat->volume; // Update the state 
+            }
+        } 
+
+        if (pat->note == DMF_NOTE_OFF && state->notePlaying) // If the note needs to be turned off 
+        {
+            if (*effect != PT_NOEFFECT_CODE) // If an effect is already being used 
+            {
+                /* Unlike Deflemask, setting the volume in ProTracker requires the use of 
+                    an effect, and only one effect can be used at a time per channel. 
+                    Same with turning a note off, which requires the EC0 command as far as I know. 
+                    Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
+                    so it does not count.  
+                */
+                printf("Error: An effect and a note OFF (or volume change) cannot both appear in the same row of the same channel.\n");
+                return 1;
+            }
+            else // No effects except the note OFF 
+            {
+                *effect = (uint16_t)PT_CUTSAMPLE << 4; // Cut sample effect with value 0. 
+            }
+        }
+    }
+    else // Don't use effects (except for volume and note OFF) 
+    {
+        uint8_t total_effects = 0;
+        if (pat->volume != state->volume && pat->volume != DMF_NOTE_NOVOLUME) // If the volume changed, we still want to handle that 
+        {
+            uint8_t newVolume = round(pat->volume / 15.0 * 65.0); // Convert DMF volume to PT volume 
+            *effect = ((uint16_t)PT_SETVOLUME << 4) | newVolume; // ??? 
+            state->volume = pat->volume; // Update the state 
+            total_effects++;
+        }
+        if (pat->note == DMF_NOTE_OFF && state->notePlaying) // If the note needs to be turned off 
+        {
+            *effect = (uint16_t)PT_CUTSAMPLE << 4; // Cut sample effect with value 0. 
+            total_effects++;
+        }
+
+        if (total_effects > 1) 
+        {
+            /* Unlike Deflemask, setting the volume in ProTracker requires the use of 
+                an effect, and only one effect can be used at a time per channel. 
+                Same with turning a note off, which requires the EC0 command as far as I know. 
+                Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
+                so it does not count.  
+            */
+            printf("Error: An effect and a note OFF / volume change cannot both appear in the same row of the same channel.\n");
+            return 1;
+        }
+        else if (total_effects == 0)
+        {
+            *effect = PT_NOEFFECT_CODE; // No effect  
+        } 
+    }
+    return 0; // Success 
+}
 
 uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
 {
@@ -546,7 +546,9 @@ uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
         case DMF_VOLSLIDE: 
             ptEff = PT_VOLSLIDE; break;
         case DMF_POSJUMP:
-            ptEff = PT_POSJUMP; break;
+            ptEff = PT_POSJUMP; 
+            ptEffVal = patternMatrixRowToProTrackerPattern[effectValue];  
+            break;
         case DMF_RETRIG:
             ptEff = PT_RETRIGGERSAMPLE; break;  // ? 
         case DMF_PATBREAK:
@@ -566,7 +568,8 @@ uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
         case DMF_SETSAMPLESBANK:
             break; // ? 
         case DMF_NOTECUT:
-            ptEff = PT_CUTSAMPLE; break; // ? 
+            ptEff = PT_CUTSAMPLE; break; // ?
+            ptEffVal = 0; // Cut note immediately  
         case DMF_NOTEDELAY:
             ptEff = PT_DELAYSAMPLE; break; // ? 
         case DMF_SYNCSIGNAL:
@@ -576,23 +579,24 @@ uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
         case DMF_SETSPEEDVAL2:
             break; // ? 
 
-        // GameBoy exclusive: 
+        // Game Boy exclusive: 
         case DMF_SETWAVE:
-            break; // Need to handle this in the exportMOD function  !!!
+            break; // This is handled in the exportMOD function and writeProTrackerPatternRow function 
         case DMF_SETNOISEPOLYCOUNTERMODE:
             break; // This is probably more than I need to worry about 
         case DMF_SETDUTYCYCLE:
-            break; // This is handled in the exportMOD function 
+            break; // This is handled in the exportMOD function and writeProTrackerPatternRow function 
         case DMF_SETSWEEPTIMESHIFT:
             break; // ? 
         case DMF_SETSWEEPDIR: 
             break; // ? 
+
     }
 
     return ((uint16_t)ptEff << 4) | ptEffVal; 
 }
 
-// GameBoy's range is:  C-1 -> C-8
+// Game Boy's range is:  C-1 -> C-8
 // ProTracker's range is:  C-1 -> B-3  (plus octaves 0 and 4 which are non-standard) 
 uint16_t proTrackerPeriodTable[5][12] = {
     {1712,1616,1525,1440,1357,1281,1209,1141,1077,1017, 961, 907},  /* C-0 to B-0 */

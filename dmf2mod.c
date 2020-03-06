@@ -2,9 +2,9 @@
 dmf2mod.c
 Written by Dalton Messmer <messmer.dalton@gmail.com>. 
 
-Converts Deflemask's GameBoy .dmf files to ProTracker's .mod files.
+Converts Deflemask's Game Boy .dmf files to ProTracker's .mod files.
 
-Usage: .\dmf2mod.exe output_file.mod deflemask_gameboy_file.dmf
+Usage: .\dmf2mod.exe output_file.mod deflemask_game_boy_file.dmf [options]
 */
 
 #include <stdio.h> 
@@ -47,7 +47,7 @@ int main(int argc, char* argv[])
         }
         else
         {
-            printf("Error: Format must be: .\\dmf2mod.exe output_file.mod deflemask_gameboy_file.dmf [options]\n");
+            printf("Error: Format must be: .\\dmf2mod.exe output_file.mod deflemask_game_boy_file.dmf [options]\n");
             exit(1);
         }
     }

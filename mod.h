@@ -6,7 +6,7 @@ Provides functions for exporting the contents of a .dmf file
 to ProTracker's .mod format. 
 
 Several limitations apply in order to export. For example, the 
-.dmf file must use the GameBoy system, patterns must have 64 
+.dmf file must use the Game Boy system, patterns must have 64 
 rows, only one effect column is allowed per channel, etc.  
 */
 
@@ -65,6 +65,7 @@ int8_t getProTrackerRepeatPatterns(DMFContents *dmf);
 
 int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *state, CMD_Options opt); 
 uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue);
+int checkEffects(PatternRow *pat, MODChannelState *state, CMD_Options opt, uint16_t *effect); 
 
 // Deflemask/ProTracker pattern matrix row number to ProTracker pattern index 
 int8_t *patternMatrixRowToProTrackerPattern;

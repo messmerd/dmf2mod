@@ -363,7 +363,7 @@ Instrument loadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType)
     }
     else if (inst.mode == 0) // Standard instrument 
     {
-        if (systemType.id != Systems[SYS_GAMEBOY].id)  // Not a GameBoy  
+        if (systemType.id != Systems[SYS_GAMEBOY].id)  // Not a Game Boy  
         {
             // Volume macro 
             inst.stdVolEnvSize = RI; 
@@ -449,7 +449,7 @@ Instrument loadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType)
             inst.stdC64FilterLowPass = RI; 
             inst.stdC64FilterCH2Off = RI; 
         }
-        else if (systemType.id == Systems[SYS_GAMEBOY].id) // Using GameBoy 
+        else if (systemType.id == Systems[SYS_GAMEBOY].id) // Using Game Boy 
         {
             inst.stdGBEnvVol = RI; 
             inst.stdGBEnvDir = RI; 

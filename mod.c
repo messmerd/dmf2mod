@@ -151,18 +151,21 @@ int exportMOD(char *fname, DMFContents *dmf, CMD_Options opt)
     {
         if (dmf->channelEffectsColumnsCount[channel] > 1 && opt.useEffects) 
         {
+            // TODO: Allow any amount of effects columns but only use first effect it finds   
             printf("Error: Each channel can only have 1 effects column.\n");
             free(proTrackerPatternToPatternMatrixRow); 
             free(patternMatrixRowToProTrackerPattern);
             return 1;
         }
-        if (dmf->patternMatrixMaxValues[channel] > 63) 
-        {
-            printf("Too many patterns. The maximum is 64 unique rows in the pattern matrix.\n");
-            free(proTrackerPatternToPatternMatrixRow); 
-            free(patternMatrixRowToProTrackerPattern);
-            return 1;
-        }
+        
+    }
+
+    if (dmf->moduleInfo.totalRowsInPatternMatrix > 63) // !!! dmf->patternMatrixMaxValues[channel] isn't the number of rows 
+    {
+        printf("Too many patterns. The maximum is 64 rows in the pattern matrix.\n");
+        free(proTrackerPatternToPatternMatrixRow); 
+        free(patternMatrixRowToProTrackerPattern);
+        return 1;
     }
 
     int8_t pat_mat_row = -1; 
@@ -596,8 +599,167 @@ uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
     return ((uint16_t)ptEff << 4) | ptEffVal; 
 }
 
-// Game Boy's range is:  C-1 -> C-8
+
+// Unfinished 
+Note noteConvert(Note n, DMF_GAMEBOY_CHANNEL chan, bool downsamplingNeeded) 
+{
+    //uint8_t ptPitch, ptOctave; 
+    //if (n.octave)
+    /*
+    if (n.octave > 6)
+    {
+        printf("Warning: Octave must be 4 or less in MOD. (Octave = %u) Setting it to 4.\n");
+    }
+    */ 
+    return (Note){n.pitch % 12, n.octave - 2};
+}
+
+void initialCheck(DMFContents *dmf, Note *lowestSQWNote, Note *highestSQWNote, Note *lowestWAVENote, Note *highestWAVENote)
+{
+    // This function loops through all DMF pattern contents to find the highest and lowest notes 
+    //  on both the SQW channels and the WAVE channel. It also finds which SQW duty cycles are 
+    //  used and which wavetables are used and stores this info in sampMap. 
+    //  The function finalizeSampMap must be called after this one before you can fully use sampMap. 
+
+    // See declaration of sampMap for more information. 
+    sampMap = (int8_t *)calloc(8 + dmf->totalWavetables*2, sizeof(int8_t));
+    sampMap[0] = 1;  // Mark 12.5% duty cycle as used - low note range 
+    sampMap[4] = 1;  // Mark 12.5% duty cycle as used - high note range 
+    sampMap[8] = 1;  // Mark wavetable #0 as used - low note range 
+    sampMap[8 + dmf->totalWavetables] = 1;  // Mark wavetable #0 as used - high note range  
+
+    // C-8
+    lowestSQWNote->pitch = DMF_NOTE_C; 
+    lowestSQWNote->octave = 8;
+
+    // C-2
+    highestSQWNote->pitch = DMF_NOTE_C; 
+    highestSQWNote->octave = 2;
+
+    // C-8
+    lowestWAVENote->pitch = DMF_NOTE_C; 
+    lowestWAVENote->octave = 8;
+
+    // C-2
+    highestWAVENote->pitch = DMF_NOTE_C; 
+    highestWAVENote->octave = 2;
+
+    // This cuts down on the amount of code needed in the nested for loop below  
+    Note *currentChannelHighest, *currentChannelLowest; 
+
+    // Loop through SQ1, SQ2, and WAVE channels 
+    for (DMF_GAMEBOY_CHANNEL chan = DMF_GAMEBOY_SQW1; chan <= DMF_GAMEBOY_WAVE; chan++)  
+    {
+        if (chan < DMF_GAMEBOY_WAVE) // If a SQW channel 
+        {
+            currentChannelLowest = lowestSQWNote; 
+            currentChannelHighest = highestSQWNote; 
+        }
+        else if (chan == DMF_GAMEBOY_WAVE) // If the WAVE channel 
+        {
+            currentChannelLowest = lowestWAVENote; 
+            currentChannelHighest = highestWAVENote; 
+        }
+            
+        // Loop through Deflemask patterns 
+        for (int i = 0; i < dmf->moduleInfo.totalRowsInPatternMatrix; i++)  
+        {
+            for (int j = 0; j < 64; j++) // Row within pattern 
+            {
+                PatternRow pat = dmf->patternValues[chan][dmf->patternMatrixValues[chan][i]][j];
+                
+                if (pat.note >= 1 && pat.note <= 12) // A note 
+                {
+                    if (pat.octave + (pat.note % 12) / 12.f > currentChannelHighest->octave + (currentChannelHighest->pitch % 12) / 12.f) 
+                    {
+                        // Found a new highest note 
+                        currentChannelHighest->octave = pat.octave; 
+                        currentChannelHighest->pitch = pat.note;  
+                    }
+                    if (pat.octave + (pat.note % 12) / 12.f < currentChannelLowest->octave + (currentChannelLowest->pitch % 12) / 12.f) 
+                    {
+                        // Found a new lowest note 
+                        currentChannelLowest->octave = pat.octave; 
+                        currentChannelLowest->pitch = pat.note;
+                    }
+                }
+
+                // Find which SQW duty cycles are used and which wavetables are used. 
+                for (int col = 0; col < dmf->channelEffectsColumnsCount[chan]; col++)
+                {
+                    if (chan < DMF_GAMEBOY_WAVE && pat.effectCode[col] == DMF_SETDUTYCYCLE) 
+                    {
+                        if (pat.effectValue[col] > 3 || pat.effectValue[col] < 1) // Must be valid. (Also ones with value == 0 are added at the start)
+                            continue; 
+                        if (sampMap[pat.effectValue[col]] == 0) // If this duty cycle is not marked as used yet
+                        {
+                            sampMap[pat.effectValue[col]] = 1;      // Mark this duty cycle as used - low note range 
+                            sampMap[pat.effectValue[col] + 4] = 1;  // Mark this duty cycle as used - high note range 
+                            break; 
+                        }   
+                    }
+                    else if (chan == DMF_GAMEBOY_WAVE && pat.effectCode[col] == DMF_SETWAVE) 
+                    {
+                        if (pat.effectValue[col] > 3 || pat.effectValue[col] < 1) // Must be valid. (Also ones with value == 0 are added at the start)
+                            continue;
+                        if (sampMap[pat.effectValue[col]] == 0) // If this wavetable is not marked as used yet
+                        {
+                            sampMap[pat.effectValue[col] + 8] = 1;      // Mark this wavetable as used - low note range 
+                            sampMap[pat.effectValue[col] + 8 + dmf->totalWavetables] = 1;  // Mark this wavetable as used - high note range 
+                            break; 
+                        }   
+                    }
+                }  
+            }
+        } 
+    }
+}
+
+uint8_t finalizeSampMap(uint8_t totalWavetables, bool doubleSQWSamples, bool doubleWavetableSamples) 
+{
+    // The function initialCheck must be called before this one. 
+
+    uint8_t ptSampleNum = 0; 
+    for (int i = 0; i < 8 + totalWavetables * 2; i++) 
+    {
+        // If on the square wave samples for high note range, and they aren't needed  
+        if (!doubleSQWSamples && i >= 4 && i <= 7) 
+        {
+            sampMap[i] = -1; // No PT sample needed for this square wave sample 
+        }
+
+        // If on the wavetable samples for high note range, and they aren't needed  
+        if (!doubleWavetableSamples && i >= 7 + totalWavetables && i <= 11 + totalWavetables) 
+        {
+            sampMap[i] = -1; // No PT sample needed for this wavetable sample 
+        }
+
+        if (sampMap[i]) // If sample is used 
+        {
+            sampMap[i] = ptSampleNum + 1;  // Plus 1 because PT sample #0 is special.  
+            ptSampleNum++; 
+        }
+        else // If sample is not used 
+        {
+            // No PT sample needed for this square wave sample or wavetable sample
+            sampMap[i] = -1;  
+        }
+    }
+    return ptSampleNum; // Return the number of PT samples that will be needed 
+}
+
+// Game Boy's range is:  C-1 -> C-8 (though in testing this, the range seems to be C-2 -> C-8 in Deflemask)
 // ProTracker's range is:  C-1 -> B-3  (plus octaves 0 and 4 which are non-standard) 
+//      This is C#3 -> C-5 in Deflemask for the square wave samples I'm using. 
+//      ProTracker should have a finetune value of -8 so that a PT C-1 == a Deflemask C-3. 
+
+// If I upsample current 32-length PT square wave samples to double length (64), then C-1 -> B-3 in PT will be C-2 -> B-4 in Deflemask. ("low note range")
+// If I downsample current 32-length PT square wave samples to quarter length (8), then C-1 -> B-3 in PT will be C-5 -> B-7 in Deflemask. ("high note range")
+//      ^^^ Assuming all samples have finetune value of -8.
+//          If finetune == 0, then it would cover Deflemask's highest note for the GB (C-8), but not the lowest (C-2). 
+// I would have to downsample wavetables in order to achieve notes of C-6 or higher. 
+//      And in order to reach Deflemask's highest GB note (C-8), I would need to downsample the wavetables to 1/4 of the values it normally has.  
+
 uint16_t proTrackerPeriodTable[5][12] = {
     {1712,1616,1525,1440,1357,1281,1209,1141,1077,1017, 961, 907},  /* C-0 to B-0 */
     {856,808,762,720,678,640,604,570,538,508,480,453},              /* C-1 to B-1 */
@@ -609,10 +771,10 @@ uint16_t proTrackerPeriodTable[5][12] = {
 
 const uint16_t sqwSampleLength = 32;
 const int8_t sqwSampleDuty[4][32] = {
-    {127, 127, 127, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, /* Duty cycle = 12.5% */ 
-    {127, 127, 127, 127, 127, 127, 127, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, /* Duty cycle = 25% */ 
-    {127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, /* Duty cycle = 50% */ 
-    {127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 127, 0, 0, 0, 0, 0, 0, 0, 0} /* Duty cycle = 75% */ 
+    { 127,  127,  127,  127, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128}, /* Duty cycle = 12.5% */ 
+    { 127,  127,  127,  127,  127,  127,  127,  127, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128}, /* Duty cycle = 25%   */ 
+    { 127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128, -128}, /* Duty cycle = 50%   */ 
+    { 127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127,  127, -128, -128, -128, -128, -128, -128, -128, -128}  /* Duty cycle = 75%   */ 
 };
 const char sqwSampleNames[4][22] = {"SQUARE - Duty 12.5\%   ", "SQUARE - Duty 25\%     ", "SQUARE - Duty 50\%     ", "SQUARE - Duty 75\%     "};
 

@@ -268,20 +268,6 @@ void loadModuleInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
     dmf->moduleInfo.totalRowsPerPattern |= RI << 24;
     dmf->moduleInfo.totalRowsInPatternMatrix = RI; 
 
-    /*
-    printf("timeBase: %u\n", dmf->moduleInfo.timeBase);  
-    printf("tickTime1: %u\n", dmf->moduleInfo.tickTime1);  
-    printf("tickTime2: %u\n", dmf->moduleInfo.tickTime2);  
-    printf("framesMode: %u\n", dmf->moduleInfo.framesMode);  // If this is called "Step" in Deflemask, then this is good 
-    printf("usingCustomHZ: %u\n", dmf->moduleInfo.usingCustomHZ);    // Whether the "Custom" clock box is checked? 
-    printf("customHZValue1: %u\n", dmf->moduleInfo.customHZValue1);  // Hz clock
-    printf("customHZValue2: %u\n", dmf->moduleInfo.customHZValue2);  // Hz clock
-    printf("customHZValue3: %u\n", dmf->moduleInfo.customHZValue3);  // Hz clock
-
-    printf("totalRowsPerPattern: %u\n", dmf->moduleInfo.totalRowsPerPattern);  
-    printf("totalRowsInPatternMatrix: %u or %x\n", dmf->moduleInfo.totalRowsInPatternMatrix, dmf->moduleInfo.totalRowsInPatternMatrix); // Good. 
-    */
-
     // NOTE: In previous .dmp versions, arpeggio tick speed is stored here!!! 
 
 }

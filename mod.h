@@ -56,6 +56,11 @@ typedef struct MODChannelState
     bool notePlaying;
 } MODChannelState; 
 
+typedef struct Note 
+{
+    uint8_t pitch, octave;  
+} Note; 
+
 #define PT_NOTE_VOLUMEMAX 64
 
 // Exports a DMFContents struct "dmf" to a .mod file "fname" using the options "opt" 
@@ -67,12 +72,22 @@ int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *stat
 uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue);
 int checkEffects(PatternRow *pat, MODChannelState *state, CMD_Options opt, uint16_t *effect); 
 
+Note noteConvert(Note n, DMF_GAMEBOY_CHANNEL chan, bool downsamplingNeeded);
+void initialCheck(DMFContents *dmf, Note *lowestSQWNote, Note *highestSQWNote, Note *lowestWAVENote, Note *highestWAVENote); 
+uint8_t finalizeSampMap(uint8_t totalWavetables, bool doubleSQWSamples, bool doubleWavetableSamples);  
+
 // Deflemask/ProTracker pattern matrix row number to ProTracker pattern index 
 int8_t *patternMatrixRowToProTrackerPattern;
 
 // ProTracker pattern index to Deflemask/ProTracker pattern matrix row number. 
 // If a pattern is used more than once, the first pattern matrix row number where it appears is used 
 int8_t *proTrackerPatternToPatternMatrixRow;
+
+// For index 0 thru 3 ---> gives PT sample number of duty cycle samples 12.5% thru 75%. (low note range)
+// For index 4 thru 7 ---> gives PT sample number of duty cycle samples 12.5% thru 75%. (high note range)
+// For index 8 thru 7 + totalWavetables ---> gives PT sample number of wavetable samples 0 thru n. (low note range)
+// For index 7 + totalWavetables thru 11 + totalWavetables ---> gives PT sample number of wavetable samples 0 thru n. (high note range)
+int8_t *sampMap; 
 
 const uint16_t sqwSampleLength;
 const int8_t sqwSampleDuty[4][32];

@@ -60,8 +60,8 @@ typedef struct MODChannelState
 //   patterns that the Position Jump (Bxx) effect skips over. (Ignore loops)  
 //   Keep a copy of the main state for each channel, and once it reaches the  
 //   jump destination, overwrite the current state with the copied state. 
-bool stateSuspended = false; // true == currently in part that a Position Jump skips over 
-int8_t jumpDestination = -1; // Pattern matrix row where you are jumping to. Not a loop.   
+bool stateSuspended; // true == currently in part that a Position Jump skips over 
+int8_t jumpDestination; // Pattern matrix row where you are jumping to. Not a loop.   
 
 typedef struct Note 
 {

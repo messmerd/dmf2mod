@@ -182,6 +182,8 @@ int exportMOD(char *fname, DMFContents *dmf, CMD_Options opt)
     }
 
     int16_t effectCode, effectValue;  
+    stateSuspended = false; // true == currently in part that a Position Jump skips over 
+    jumpDestination = -1; // Pattern matrix row where you are jumping to. Not a loop.
 
     // Loop through ProTracker pattern matrix rows (corresponds to pattern numbers):  
     for (int patMatRow = 0; patMatRow < dmf->moduleInfo.totalRowsInPatternMatrix; patMatRow++)

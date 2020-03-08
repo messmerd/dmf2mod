@@ -10,6 +10,10 @@ Several limitations apply in order to export. For example, the
 rows, only one effect column is allowed per channel, etc.  
 */
 
+// TODO: Position jump (Bxx) effects can probably mess up the PT sample number that is being used. 
+//          For example, if a position jump skips over a 10xx or 12xx effect, dmf2mod will change 
+//          the PT sample number when it should stay the same. Need a more robust way of resolving this.  
+
 #include "mod.h"
 
 extern const System Systems[10]; 
@@ -72,6 +76,16 @@ int exportMOD(char *fname, DMFContents *dmf, CMD_Options opt)
     
     ///////////////// EXPORT SAMPLE INFO 
     
+    /*
+    Note lowestSQWNote, highestSQWNote, lowestWAVENote, highestWAVENote; 
+
+    initialCheck(dmf, &lowestSQWNote, &highestSQWNote, &lowestWAVENote, &highestWAVENote);
+    printf("lowestSQWNote=%i,%i\n", lowestSQWNote.pitch, lowestSQWNote.octave); 
+    printf("highestSQWNote=%i,%i\n", highestSQWNote.pitch, highestSQWNote.octave); 
+    printf("lowestWAVENote=%i,%i\n", lowestWAVENote.pitch, lowestWAVENote.octave); 
+    printf("highestWAVENote=%i,%i\n", highestWAVENote.pitch, highestWAVENote.octave); 
+    */ 
+
     // Export 4 square wave samples 
     for (int i = 0; i < 4; i++)
     {
@@ -123,23 +137,17 @@ int exportMOD(char *fname, DMFContents *dmf, CMD_Options opt)
     fputc(dmf->moduleInfo.totalRowsInPatternMatrix, fout);   // Song length in patterns (not total number of patterns) 
     fputc(127, fout);                        // 0x7F - Useless byte that has to be here 
 
-    patternMatrixRowToProTrackerPattern = NULL; 
-    proTrackerPatternToPatternMatrixRow = NULL; 
-    int8_t duplicateIndices = 0;
-    // The function below tries to find repeating rows of patterns in the pattern matrix so that fewer 
-    //   ProTracker patterns are needed. This could allow some .dmf files to successfully be converted 
-    //   to .mod that wouldn't otherwise. It also assigns the ProTracker pattern indices. 
-    duplicateIndices = getProTrackerRepeatPatterns(dmf);
-    if (patternMatrixRowToProTrackerPattern == NULL || dmf->moduleInfo.totalRowsInPatternMatrix - duplicateIndices > 64) 
+    if (dmf->moduleInfo.totalRowsInPatternMatrix > 64) 
     {
-        printf("Error: Too many unique rows of patterns in the pattern matrix. 64 is the maximum.\n");
-        free(proTrackerPatternToPatternMatrixRow); 
-        free(patternMatrixRowToProTrackerPattern);
+        printf("Error: Too many rows of patterns in the pattern matrix. 64 is the maximum.\n");
         return 1;
     }
-    //printf("duplicateIndices=%u\n", duplicateIndices); 
 
-    fwrite(patternMatrixRowToProTrackerPattern, 1, 128, fout);
+    // Pattern matrix (Each ProTracker pattern number is the same as its pattern matrix row number)
+    for (uint8_t i = 0; i < dmf->moduleInfo.totalRowsInPatternMatrix; i++) 
+        fputc(i, fout); 
+    for (uint8_t i = dmf->moduleInfo.totalRowsInPatternMatrix; i < 128; i++) 
+        fputc(0, fout);
     
     fwrite("M.K.", 1, 4, fout);  // ProTracker uses "M!K!" if there's more than 64 pattern matrix rows...
 
@@ -153,28 +161,14 @@ int exportMOD(char *fname, DMFContents *dmf, CMD_Options opt)
         {
             // TODO: Allow any amount of effects columns but only use first effect it finds   
             printf("Error: Each channel can only have 1 effects column.\n");
-            free(proTrackerPatternToPatternMatrixRow); 
-            free(patternMatrixRowToProTrackerPattern);
             return 1;
         }
         
     }
 
-    if (dmf->moduleInfo.totalRowsInPatternMatrix > 63) // !!! dmf->patternMatrixMaxValues[channel] isn't the number of rows 
-    {
-        printf("Too many patterns. The maximum is 64 rows in the pattern matrix.\n");
-        free(proTrackerPatternToPatternMatrixRow); 
-        free(patternMatrixRowToProTrackerPattern);
-        return 1;
-    }
-
-    int8_t pat_mat_row = -1; 
-
-    //printf("dmf->moduleInfo.totalRowsInPatternMatrix - duplicateIndices = %u\n", dmf->moduleInfo.totalRowsInPatternMatrix - duplicateIndices);
-
     // The current square wave duty cycle, note volume, and other information that the 
     //      tracker stores for each channel while playing a tracker file.
-    MODChannelState *state = (MODChannelState *)malloc(4 * sizeof(MODChannelState)); 
+    MODChannelState state[Systems[SYS_GAMEBOY].channels], stateJumpCopy[Systems[SYS_GAMEBOY].channels]; 
     for (int i = 0; i < 4; i++) 
     {
         state[i].channel = i;   // Set channel types: SQ1, SQ2, WAVE, NOISE. 
@@ -183,44 +177,66 @@ int exportMOD(char *fname, DMFContents *dmf, CMD_Options opt)
         state[i].sampleChanged = true; // Whether dutyCycle or wavetable recently changed 
         state[i].volume = PT_NOTE_VOLUMEMAX; // The max volume for a channel in PT 
         state[i].notePlaying = false; // Whether a note is currently playing on a channel 
+
+        stateJumpCopy[i] = state[i]; // Shallow copy, but it's ok since there are no pointers to anything. 
     }
 
-    int16_t effectCode, effectValue; 
+    int16_t effectCode, effectValue;  
 
-    // Iterate through ProTracker patterns:  
-    for (int i = 0; i < dmf->moduleInfo.totalRowsInPatternMatrix - duplicateIndices; i++)  
+    // Loop through ProTracker pattern matrix rows (corresponds to pattern numbers):  
+    for (int patMatRow = 0; patMatRow < dmf->moduleInfo.totalRowsInPatternMatrix; patMatRow++)
     {
-        // Get the Deflemask pattern matrix number from the ProTracker pattern number 
-        pat_mat_row = proTrackerPatternToPatternMatrixRow[i];
-        if (pat_mat_row == -1) 
+        // Loop through rows in a pattern: 
+        for (int patRow = 0; patRow < 64; patRow++) 
         {
-            printf("Error in proTrackerPatternToPatternMatrixRow.\n");
-            free(proTrackerPatternToPatternMatrixRow); 
-            free(patternMatrixRowToProTrackerPattern);
-            return 1; 
-        }
-        // Iterate through rows in a pattern: 
-        for (int j = 0; j < 64; j++) 
-        {
-            for (int k = 0; k < dmf->sys.channels; k++) 
+            // Loop through channels: 
+            for (int chan = 0; chan < Systems[SYS_GAMEBOY].channels; chan++) 
             {
-                effectCode = dmf->patternValues[k][dmf->patternMatrixValues[k][pat_mat_row]][j].effectCode[0];
-                effectValue = dmf->patternValues[k][dmf->patternMatrixValues[k][pat_mat_row]][j].effectValue[0]; 
-                if (effectCode == DMF_SETDUTYCYCLE && state[k].dutyCycle != effectValue + 1) // If sqw channel duty cycle needs to change 
+                effectCode = dmf->patternValues[chan][dmf->patternMatrixValues[chan][patMatRow]][patRow].effectCode[0];
+                effectValue = dmf->patternValues[chan][dmf->patternMatrixValues[chan][patMatRow]][patRow].effectValue[0]; 
+                
+                // If just arrived at jump destination: 
+                if (patMatRow == jumpDestination && patRow == 0 && stateSuspended) 
                 {
-                    state[k].dutyCycle = effectValue + 1; // Add 1 b/c first mod sample is sample #1 
-                    state[k].sampleChanged = true; 
+                    //printf("---Restoring state. patMatRow=%i\n", patMatRow); 
+                    // Restore state copies 
+                    for (int v = 0; v < Systems[SYS_GAMEBOY].channels; v++) 
+                    {
+                        state[v] = stateJumpCopy[v]; 
+                    }
+                    stateSuspended = false; 
+                    jumpDestination = -1; 
                 }
-                else if (effectCode == DMF_SETWAVE && state[k].wavetable != effectValue + 5) // If wave channel wavetable needs to change 
+                
+                // If a Position Jump command was found and it's not in a section skipped by another Position Jump:  
+                if (effectCode == DMF_POSJUMP && !stateSuspended) 
                 {
-                    state[k].wavetable = effectValue + 5; // Add 5 b/c first wavetable sample is sample #5 
-                    state[k].sampleChanged = true; 
+                    //printf("---Jump found and Should suspend state here? effectValue==%i, patMatRow=%i\n", effectValue, patMatRow); 
+                    if (effectValue >= patMatRow) // If not a loop 
+                    {
+                        //printf("------Not a loop. Saving copy...\n");
+                        // Save copies of states  
+                        for (int v = 0; v < Systems[SYS_GAMEBOY].channels; v++) 
+                        {
+                            stateJumpCopy[v] = state[v]; 
+                        }
+                        stateSuspended = true; 
+                        jumpDestination = effectValue; 
+                    }
                 }
-                if (writeProTrackerPatternRow(fout, &dmf->patternValues[k][dmf->patternMatrixValues[k][pat_mat_row]][j], &state[k], opt)) 
+                else if (effectCode == DMF_SETDUTYCYCLE && state[chan].dutyCycle != effectValue + 1) // If sqw channel duty cycle needs to change 
+                {
+                    state[chan].dutyCycle = effectValue + 1; // Add 1 b/c first mod sample is sample #1 
+                    state[chan].sampleChanged = true; 
+                }
+                else if (effectCode == DMF_SETWAVE && state[chan].wavetable != effectValue + 5) // If wave channel wavetable needs to change 
+                {
+                    state[chan].wavetable = effectValue + 5; // Add 5 b/c first wavetable sample is sample #5 
+                    state[chan].sampleChanged = true; 
+                }
+                if (writeProTrackerPatternRow(fout, &dmf->patternValues[chan][dmf->patternMatrixValues[chan][patMatRow]][patRow], &state[chan], opt)) 
                 {
                     // Error occurred while writing the pattern row 
-                    free(proTrackerPatternToPatternMatrixRow); 
-                    free(patternMatrixRowToProTrackerPattern); 
                     return 1; 
                 }
             }
@@ -247,9 +263,6 @@ int exportMOD(char *fname, DMFContents *dmf, CMD_Options opt)
         }
     }
 
-    free(proTrackerPatternToPatternMatrixRow); 
-    free(patternMatrixRowToProTrackerPattern); 
-
     fclose(fout); 
 
     printf("Done exporting to .mod!\n");
@@ -257,98 +270,6 @@ int exportMOD(char *fname, DMFContents *dmf, CMD_Options opt)
     return 0; // Success 
 }
 
-// This function is pretty nasty, but it works. Needs to be written in a better way.  
-int8_t getProTrackerRepeatPatterns(DMFContents *dmf) 
-{
-    // Returns the number of groups of pattern matrix rows that are identical. For 
-    //    example, if rows 1, 7, and 9 are identical to each other and no other 
-    //    rows have matches, then it will return 1, because there was one group of
-    //    identical rows.  
-    // Assumes dmf->moduleInfo.totalRowsInPatternMatrix is 128 or fewer.
-
-    // A hash table would be a better way of doing this, but since this is 
-    //    only for 128 or fewer elements, I'm not going to bother implementing one. 
-    
-    if (dmf->moduleInfo.totalRowsInPatternMatrix > 128 || dmf->moduleInfo.totalRowsInPatternMatrix < 1) 
-    {
-        return 0; 
-    }
-
-    uint8_t **patMatVal = dmf->patternMatrixValues; 
-    
-    if (patternMatrixRowToProTrackerPattern == NULL) 
-    {
-        patternMatrixRowToProTrackerPattern = (int8_t *)malloc(128 * sizeof(int8_t));  // maps Deflemask indices to PT indices
-        if (patternMatrixRowToProTrackerPattern) 
-        {
-            memset(patternMatrixRowToProTrackerPattern, (int8_t)-1, dmf->moduleInfo.totalRowsInPatternMatrix);
-            memset(patternMatrixRowToProTrackerPattern + dmf->moduleInfo.totalRowsInPatternMatrix, (int8_t)0, 128 - dmf->moduleInfo.totalRowsInPatternMatrix);
-        }
-        else
-        {
-            return 0; 
-        }
-    }
-
-    if (proTrackerPatternToPatternMatrixRow == NULL)
-    {
-        proTrackerPatternToPatternMatrixRow = (int8_t *)malloc(128 * sizeof(int8_t));
-        if (proTrackerPatternToPatternMatrixRow) 
-        {
-            memset(proTrackerPatternToPatternMatrixRow, (int8_t)-1, 128);
-        }
-        else
-        {
-            return 0; 
-        }
-    }
-
-    // Unnecessary but a shorter name is nice: 
-    int8_t *r2pt = patternMatrixRowToProTrackerPattern;  
-    int8_t *pt2r = proTrackerPatternToPatternMatrixRow;  
-
-    if (dmf->moduleInfo.totalRowsInPatternMatrix == 1) 
-    {
-        r2pt[0] = 0; // ? 
-        pt2r[0] = 0; // ?
-        //printf("DEBUG: patternMatrixRowToProTrackerPattern[0] = %x", patternMatrixRowToProTrackerPattern[0]);
-        //printf("DEBUG: proTrackerPatternToPatternMatrixRow[0] = %x", proTrackerPatternToPatternMatrixRow[0]);
-        return 0; 
-    }
-
-    uint8_t currentProTrackerIndex = 0; 
-    uint8_t duplicateCount = 0; 
-    for (int i = 0; i < dmf->moduleInfo.totalRowsInPatternMatrix; i++) 
-    {
-        if (r2pt[i] >= 0) {continue; }  // Duplicate that has already been found 
-        for (int j = i + 1; j < dmf->moduleInfo.totalRowsInPatternMatrix; j++) 
-        {
-            //if (d2pt[j] >= 0) {continue; }  // Duplicate that has already been found 
-            
-            if (patMatVal[0][i] == patMatVal[0][j]
-             && patMatVal[1][i] == patMatVal[1][j]
-              && patMatVal[2][i] == patMatVal[2][j]
-               && patMatVal[3][i] == patMatVal[3][j])
-            {
-                r2pt[i] = currentProTrackerIndex; 
-                r2pt[j] = currentProTrackerIndex; 
-                pt2r[currentProTrackerIndex] = i;
-                //printf("pt2r[%u] = %u\n", currentProTrackerIndex, i); 
-                duplicateCount++; 
-            }
-        }
-        if (r2pt[i] < 0) // This row has no duplicate 
-        {
-            r2pt[i] = currentProTrackerIndex; 
-            pt2r[currentProTrackerIndex] = i; 
-            //printf("pt2r[%u] = %u\n", currentProTrackerIndex, i); 
-        }
-
-        currentProTrackerIndex++;
-    }
-
-    return duplicateCount; 
-}
 
 // Writes 4 bytes of pattern row information to the .mod file 
 int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *state, CMD_Options opt) 
@@ -384,7 +305,7 @@ int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *stat
         uint16_t period = 0;
 
         uint16_t modOctave = pat->octave - 2; // Transpose down two octaves because a C-4 in Deflemask is the same pitch as a C-2 in ProTracker. 
-        if (pat->note == DMF_NOTE_C) // C# is the start of next octave in .mod, not C- 
+        if (pat->note == DMF_NOTE_C) // C# is the start of next octave in .dmf, not C- 
         {
             modOctave++; 
         }
@@ -550,7 +471,7 @@ uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
             ptEff = PT_VOLSLIDE; break;
         case DMF_POSJUMP:
             ptEff = PT_POSJUMP; 
-            ptEffVal = patternMatrixRowToProTrackerPattern[effectValue];  
+            ptEffVal = effectValue;  
             break;
         case DMF_RETRIG:
             ptEff = PT_RETRIGGERSAMPLE; break;  // ? 
@@ -628,21 +549,24 @@ void initialCheck(DMFContents *dmf, Note *lowestSQWNote, Note *highestSQWNote, N
     sampMap[8] = 1;  // Mark wavetable #0 as used - low note range 
     sampMap[8 + dmf->totalWavetables] = 1;  // Mark wavetable #0 as used - high note range  
 
-    // C-8
+    // The following are impossible notes which won't change if there are no 
+    //  notes on the square wave channels or wave channel respectively: 
+
+    // C-10
     lowestSQWNote->pitch = DMF_NOTE_C; 
-    lowestSQWNote->octave = 8;
+    lowestSQWNote->octave = 10;
 
-    // C-2
+    // C-0
     highestSQWNote->pitch = DMF_NOTE_C; 
-    highestSQWNote->octave = 2;
+    highestSQWNote->octave = 0;
 
-    // C-8
+    // C-10
     lowestWAVENote->pitch = DMF_NOTE_C; 
-    lowestWAVENote->octave = 8;
+    lowestWAVENote->octave = 10;
 
-    // C-2
+    // C-0
     highestWAVENote->pitch = DMF_NOTE_C; 
-    highestWAVENote->octave = 2;
+    highestWAVENote->octave = 0;
 
     // This cuts down on the amount of code needed in the nested for loop below  
     Note *currentChannelHighest, *currentChannelLowest; 
@@ -670,13 +594,14 @@ void initialCheck(DMFContents *dmf, Note *lowestSQWNote, Note *highestSQWNote, N
                 
                 if (pat.note >= 1 && pat.note <= 12) // A note 
                 {
-                    if (pat.octave + (pat.note % 12) / 12.f > currentChannelHighest->octave + (currentChannelHighest->pitch % 12) / 12.f) 
+                    // I'm keeping the notes in the .dmf form where the 1st note of an octave is C# and not C-. I can convert it later.
+                    if (pat.octave + pat.note / 13.f > currentChannelHighest->octave + currentChannelHighest->pitch / 13.f) 
                     {
                         // Found a new highest note 
                         currentChannelHighest->octave = pat.octave; 
                         currentChannelHighest->pitch = pat.note;  
                     }
-                    if (pat.octave + (pat.note % 12) / 12.f < currentChannelLowest->octave + (currentChannelLowest->pitch % 12) / 12.f) 
+                    if (pat.octave + pat.note / 13.f < currentChannelLowest->octave + currentChannelLowest->pitch / 13.f) 
                     {
                         // Found a new lowest note 
                         currentChannelLowest->octave = pat.octave; 

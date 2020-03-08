@@ -520,8 +520,10 @@ PatternRow loadPatternRow(uint8_t **fBuff, uint32_t *pos, int effectsColumnsCoun
     pat.volume = RI; 
     pat.volume |= RI << 8; 
 
-    //if (pat.note == DMF_NOTE_OFF)
-    //    printf("Wow, note off\n");
+    // NOTE: C# is considered the 1st note of an octave rather than C- like in the Deflemask program. 
+
+    //if (pat.note >= 1 && pat.note <= 12)
+    //    printf("---NOTE = %i,%i\n", pat.note, pat.octave);
 
     if (pat.note == 0 && pat.octave == 0) 
     {

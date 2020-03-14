@@ -40,6 +40,7 @@ If you can't get it to work, please send me an email at the address at the botto
 ``` 
 Options:
 ```
+--allowdownsampling      Allow wavetables to lose information through downsampling.
 --help                   Displays the help message.
 --noeffects              Ignore Deflemask effects (except for Set Duty Cycle and Set Wave).
 ```

@@ -28,9 +28,54 @@ Requires zlib1.dll from the zlib compression library at https://zlib.net.
 #ifndef CMD_Options 
     typedef struct CMD_Options {
         bool useEffects; 
+        bool allowDownsampling; 
     } CMD_Options;
     #define CMD_Options CMD_Options
 #endif
+
+typedef enum DMF_NOTE {
+    DMF_NOTE_EMPTY=101, 
+    DMF_NOTE_CS=1, 
+    DMF_NOTE_D=2, 
+    DMF_NOTE_DS=3, 
+    DMF_NOTE_E=4, 
+    DMF_NOTE_F=5, 
+    DMF_NOTE_FS=6, 
+    DMF_NOTE_G=7, 
+    DMF_NOTE_GS=8, 
+    DMF_NOTE_A=9, 
+    DMF_NOTE_AS=10, 
+    DMF_NOTE_B=11, 
+    DMF_NOTE_C=12, 
+    DMF_NOTE_OFF=100, 
+    
+    DMF_NOTE_NOINSTRUMENT=-1,
+    DMF_NOTE_NOVOLUME=-1,
+    DMF_NOTE_VOLUMEMAX=15 /* ??? */
+} DMF_NOTE;
+
+// Deflemask effects shared by all systems: 
+typedef enum DMF_EFFECT {
+    DMF_NOEFFECT=-1, DMF_NOEFFECTVAL=-1,
+    DMF_ARP=0x0, DMF_PORTUP=0x1, DMF_PORTDOWN=0x2, DMF_PORT2NOTE=0x3, DMF_VIBRATO=0x4, DMF_PORT2NOTEVOLSLIDE=0x5, DMF_VIBRATOVOLSLIDE=0x6,
+    DMF_TREMOLO=0x7, DMF_PANNING=0x8, DMF_SETSPEEDVAL1=0x9, DMF_VOLSLIDE=0xA, DMF_POSJUMP=0xB, DMF_RETRIG=0xC, DMF_PATBREAK=0xD, 
+    DMF_ARPTICKSPEED=0xE0, DMF_NOTESLIDEUP=0xE1, DMF_NOTESLIDEDOWN=0xE2, DMF_SETVIBRATOMODE=0xE3, DMF_SETFINEVIBRATODEPTH=0xE4, 
+    DMF_SETFINETUNE=0xE5, DMF_SETSAMPLESBANK=0xEB, DMF_NOTECUT=0xEC, DMF_NOTEDELAY=0xED, DMF_SYNCSIGNAL=0xEE, DMF_SETGLOBALFINETUNE=0xEF, 
+    DMF_SETSPEEDVAL2=0xF
+} DMF_EFFECT; 
+
+// Deflemask effects exclusive to the Game Boy system:
+typedef enum DMF_GAMEBOY_EFFECT {
+    DMF_SETWAVE=0x10, DMF_SETNOISEPOLYCOUNTERMODE=0x11, DMF_SETDUTYCYCLE=0x12, DMF_SETSWEEPTIMESHIFT=0x13, DMF_SETSWEEPDIR=0x14
+} DMF_GAMEBOY_EFFECT;
+
+// To do: Add enums for effects exclusive to the rest of Deflemask's systems. 
+
+typedef struct Note 
+{
+    uint16_t pitch; 
+    uint16_t octave;  
+} Note; 
 
 typedef struct System
 {
@@ -99,8 +144,7 @@ typedef struct PCMSample
 
 typedef struct PatternRow
 {
-    uint16_t note; 
-    uint16_t octave; 
+    Note note; 
     int16_t volume; 
     int16_t effectCode[MAX_EFFECTS_COLUMN_COUNT];
     int16_t effectValue[MAX_EFFECTS_COLUMN_COUNT];
@@ -125,44 +169,6 @@ typedef struct DMFContents
     uint8_t totalPCMSamples; 
     PCMSample *pcmSamples; 
 } DMFContents; 
-
-typedef enum DMF_NOTE {
-    DMF_NOTE_EMPTY=101, 
-    DMF_NOTE_CS=1, 
-    DMF_NOTE_D=2, 
-    DMF_NOTE_DS=3, 
-    DMF_NOTE_E=4, 
-    DMF_NOTE_F=5, 
-    DMF_NOTE_FS=6, 
-    DMF_NOTE_G=7, 
-    DMF_NOTE_GS=8, 
-    DMF_NOTE_A=9, 
-    DMF_NOTE_AS=10, 
-    DMF_NOTE_B=11, 
-    DMF_NOTE_C=12, 
-    DMF_NOTE_OFF=100, 
-    
-    DMF_NOTE_NOINSTRUMENT=-1,
-    DMF_NOTE_NOVOLUME=-1,
-    DMF_NOTE_VOLUMEMAX=15 /* ??? */
-} DMF_NOTE;
-
-// Deflemask effects shared by all systems: 
-typedef enum DMF_EFFECT {
-    DMF_NOEFFECT=-1, DMF_NOEFFECTVAL=-1,
-    DMF_ARP=0x0, DMF_PORTUP=0x1, DMF_PORTDOWN=0x2, DMF_PORT2NOTE=0x3, DMF_VIBRATO=0x4, DMF_PORT2NOTEVOLSLIDE=0x5, DMF_VIBRATOVOLSLIDE=0x6,
-    DMF_TREMOLO=0x7, DMF_PANNING=0x8, DMF_SETSPEEDVAL1=0x9, DMF_VOLSLIDE=0xA, DMF_POSJUMP=0xB, DMF_RETRIG=0xC, DMF_PATBREAK=0xD, 
-    DMF_ARPTICKSPEED=0xE0, DMF_NOTESLIDEUP=0xE1, DMF_NOTESLIDEDOWN=0xE2, DMF_SETVIBRATOMODE=0xE3, DMF_SETFINEVIBRATODEPTH=0xE4, 
-    DMF_SETFINETUNE=0xE5, DMF_SETSAMPLESBANK=0xEB, DMF_NOTECUT=0xEC, DMF_NOTEDELAY=0xED, DMF_SYNCSIGNAL=0xEE, DMF_SETGLOBALFINETUNE=0xEF, 
-    DMF_SETSPEEDVAL2=0xF
-} DMF_EFFECT; 
-
-// Deflemask effects exclusive to the Game Boy system:
-typedef enum DMF_GAMEBOY_EFFECT {
-    DMF_SETWAVE=0x10, DMF_SETNOISEPOLYCOUNTERMODE=0x11, DMF_SETDUTYCYCLE=0x12, DMF_SETSWEEPTIMESHIFT=0x13, DMF_SETSWEEPDIR=0x14
-} DMF_GAMEBOY_EFFECT;
-
-// To do: Add enums for effects exclusive to the rest of Deflemask's systems. 
 
 // Deflemask Game Boy channels 
 typedef enum DMF_GAMEBOY_CHANNEL {

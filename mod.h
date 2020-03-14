@@ -26,6 +26,7 @@ rows, only one effect column is allowed per channel, etc.
 #ifndef CMD_Options 
     typedef struct CMD_Options {
         bool useEffects; 
+        bool allowDownsampling; 
     } CMD_Options;
     #define CMD_Options CMD_Options
 #endif
@@ -44,62 +45,8 @@ typedef enum PT_EFFECT {
     PT_SETSPEED=0xF0
 } PT_EFFECT; 
 
-// The current square wave duty cycle, note volume, and other information that the 
-//      tracker stores for each channel while playing a tracker file.
-typedef struct MODChannelState
-{
-    DMF_GAMEBOY_CHANNEL channel; 
-    uint8_t dutyCycle; 
-    uint8_t wavetable;
-    bool sampleChanged; // True if dutyCycle or wavetable just changed
-    int16_t volume;
-    bool notePlaying;
-} MODChannelState; 
-
-// The main MODChannelState structs should NOT update during patterns or parts of 
-//   patterns that the Position Jump (Bxx) effect skips over. (Ignore loops)  
-//   Keep a copy of the main state for each channel, and once it reaches the  
-//   jump destination, overwrite the current state with the copied state. 
-bool stateSuspended; // true == currently in part that a Position Jump skips over 
-int8_t jumpDestination; // Pattern matrix row where you are jumping to. Not a loop.   
-
-typedef struct Note 
-{
-    uint8_t pitch, octave;  
-} Note; 
-
-#define PT_NOTE_VOLUMEMAX 64
-
-// Exports a DMFContents struct "dmf" to a .mod file "fname" using the options "opt" 
-int exportMOD(char *fname, DMFContents *dmf, CMD_Options opt);  
-
-int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *state, CMD_Options opt); 
-uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue);
-int checkEffects(PatternRow *pat, MODChannelState *state, CMD_Options opt, uint16_t *effect); 
-
-Note noteConvert(Note n, DMF_GAMEBOY_CHANNEL chan, bool downsamplingNeeded);
-void initialCheck(DMFContents *dmf, Note *lowestSQWNote, Note *highestSQWNote, Note *lowestWAVENote, Note *highestWAVENote); 
-uint8_t finalizeSampMap(uint8_t totalWavetables, bool doubleSQWSamples, bool doubleWavetableSamples);  
-
-
-// For index 0 thru 3 ---> gives PT sample number of SQW samples with duty cycles 12.5% thru 75%. (low note range)
-// For index 4 thru 7 ---> gives PT sample number of SQW samples with duty cycles 12.5% thru 75%. (high note range)
-// For index 8 thru 7 + totalWavetables ---> gives PT sample number of wavetable samples 0 thru n. (low note range)
-// For index 7 + totalWavetables thru 11 + totalWavetables ---> gives PT sample number of wavetable samples 0 thru n. (high note range)
-int8_t *sampMap; 
-
-// Whether to use two versions of certain square wave samples to achieve virtually the same note range in ProTracker as in Deflemask.  
-bool doubleSQWSamples;
-
-// Whether to use two versions of certain wavetable samples to achieve virtually the same note range in ProTracker as in Deflemask. 
-//  May require loss of sample data through downsampling.
-bool doubleWavetableSamples; 
-
-const uint16_t sqwSampleLength;
-const int8_t sqwSampleDuty[4][32];
-const char sqwSampleNames[4][22];
-
-uint16_t proTrackerPeriodTable[5][12]; 
+// Exports a DMFContents struct "dmfContents" to a .mod file "fname" using the options "options" 
+int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options);  
 
 #endif 
 

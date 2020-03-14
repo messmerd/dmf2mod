@@ -511,23 +511,20 @@ void loadPatternsData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
 
 PatternRow loadPatternRow(uint8_t **fBuff, uint32_t *pos, int effectsColumnsCount)
 {
-    PatternRow pat; 
-
-    pat.note = RI; 
-    pat.note |= RI << 8; 
-    pat.octave = RI; 
-    pat.octave |= RI << 8; 
+    PatternRow pat;  
+    pat.note = (Note){0, 0};
+    pat.note.pitch = RI; 
+    pat.note.pitch |= RI << 8; // Unused byte. Storing it anyway. 
+    pat.note.octave = RI; 
+    pat.note.octave |= RI << 8; // Unused byte. Storing it anyway.  
     pat.volume = RI; 
     pat.volume |= RI << 8; 
 
     // NOTE: C# is considered the 1st note of an octave rather than C- like in the Deflemask program. 
 
-    //if (pat.note >= 1 && pat.note <= 12)
-    //    printf("---NOTE = %i,%i\n", pat.note, pat.octave);
-
-    if (pat.note == 0 && pat.octave == 0) 
+    if (pat.note.pitch == 0 && pat.note.octave == 0) 
     {
-        pat.note = DMF_NOTE_EMPTY; 
+        pat.note.pitch = DMF_NOTE_EMPTY; 
     }
 
     for (int col = 0; col < effectsColumnsCount; col++)

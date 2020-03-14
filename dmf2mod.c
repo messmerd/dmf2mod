@@ -18,20 +18,14 @@ Usage: .\dmf2mod.exe output_file.mod deflemask_game_boy_file.dmf [options]
 
 #define DMF2MOD_VERSION "0.1" 
 
-#ifndef CMD_Options 
-    typedef struct CMD_Options {
-        bool useEffects; 
-    } CMD_Options;
-    #define CMD_Options CMD_Options
-#endif
-
 void printHelp(); 
 
 int main(int argc, char* argv[])
 {
     char *fin, *fout; 
     CMD_Options opt;
-    opt.useEffects = true; // By default, use Deflemask effects column   
+    opt.useEffects = true; // By default, use Deflemask effects column 
+    opt.allowDownsampling = false; // By default, wavetables cannot lose information through downsampling   
 
     if (argc == 1) 
     {
@@ -65,9 +59,13 @@ int main(int argc, char* argv[])
                 {
                     opt.useEffects = false; 
                 } 
+                else if (strcmp(argv[i], "--allowdownsampling") == 0)
+                {
+                    opt.allowDownsampling = true; // Allow wavetables to lose information through downsampling
+                }
                 else 
                 {
-                    printf("Error: Unrecognized option '%s'.\n", argv[i]); 
+                    printf("Error: Unrecognized option '%s'\n", argv[i]); 
                     free(fin);
                     free(fout);
                     exit(1);
@@ -112,6 +110,7 @@ void printHelp()
     printf("dmf2mod v%s \nCreated by Dalton Messmer <messmer.dalton@gmail.com>\n", DMF2MOD_VERSION);
     printf("Usage: .\\dmf2mod.exe output_file.mod deflemask_game_boy_file.dmf [options]\n");
     printf("Options:\n");
+    printf("%-25s%s\n","--allowdownsampling", "Allow wavetables to lose information through downsampling.");
     printf("%-25s%s\n", "--help", "Display this help message.");
     printf("%-25s%s\n", "--noeffects", "Ignore Deflemask effects (except 10xx and 12xx)."); 
 }

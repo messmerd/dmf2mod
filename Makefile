@@ -3,9 +3,8 @@ SOURCE	= dmf2mod.c mod.c dmf.c
 HEADER	= mod.h dmf.h zconf.h zlib.h
 OUT	= dmf2mod.exe
 CC	 = gcc
-# Use '-Wall' flag for warnings.
-FLAGS	 = -g -c -Wall 
-LFLAGS	 = -lm -L. -lz
+FLAGS	 = -g -c -Wall -Wno-unknown-pragmas
+LFLAGS	 = -lm -lz -L./zlib
 
 all: $(OBJS)
 	$(CC) -g $(OBJS) -o $(OUT) $(LFLAGS)

@@ -4,7 +4,7 @@ HEADER	= mod.h dmf.h zconf.h zlib.h
 OUT	= dmf2mod.exe
 CC	 = gcc
 FLAGS	 = -g -c -Wall -Wno-unknown-pragmas
-LFLAGS	 = -lm -lz -L./zlib
+LFLAGS	 = -lm -lz -L"./zlib" 
 
 all: $(OBJS)
 	$(CC) -g $(OBJS) -o $(OUT) $(LFLAGS)

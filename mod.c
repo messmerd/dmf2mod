@@ -487,9 +487,10 @@ int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
             }
         }
     }
-    else // Don't use effects (except for volume and note OFF) 
+    else // Don't use effects (except for Volume change, Note OFF, or Position Jump)  
     {
         uint8_t total_effects = 0;
+        int16_t volumeCopy = state->volume; // Save copy in case the volume change is canceled later 
         if (pat->volume != state->volume && pat->volume != DMF_NOTE_NOVOLUME) // If the volume changed, we still want to handle that 
         {
             uint8_t newVolume = round(pat->volume / 15.0 * 65.0); // Convert DMF volume to PT volume 
@@ -500,7 +501,14 @@ int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
         if (pat->note.pitch == DMF_NOTE_OFF && state->notePlaying) // If the note needs to be turned off 
         {
             *effect = (uint16_t)PT_CUTSAMPLE << 4; // Cut sample effect with value 0. 
+            state->volume = volumeCopy; // Cancel volume change if it occurred above.  
             total_effects++;
+        }
+        if (pat->effectCode[0] == DMF_POSJUMP) // Position Jump. Has priority over volume changes and note cuts. 
+        {
+            *effect = ((uint16_t)PT_POSJUMP << 4) | pat->effectValue[0]; // Effects must be in first row  
+            state->volume = volumeCopy; // Cancel volume change if it occurred above.  
+            total_effects++; 
         }
 
         if (total_effects > 1) 
@@ -511,7 +519,7 @@ int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
                 Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
                 so it does not count.  
             */
-            printf("Error: An effect and a note OFF / volume change cannot both appear in the same row of the same channel.\n");
+            printf("Error: No more than one Note OFF, Volume Change, or Position Jump can appear in the same row of the same channel.\n");
             return 1;
         }
         else if (total_effects == 0)
@@ -966,7 +974,7 @@ void exportSampleInfo(FILE *fout, int8_t ptSampleNumLow, int8_t ptSampleNumHigh,
                 }
                 else  // WAVE 
                 {
-                    fprintf(fout, "Wavetable #%-2i         ", index - 4);
+                    fprintf(fout, "Wavetable #%-2i         ", index - 4); 
                 }
             }  
         }
@@ -985,7 +993,7 @@ void exportSampleInfo(FILE *fout, int8_t ptSampleNumLow, int8_t ptSampleNumHigh,
             }
             else  // WAVE 
             {
-                fprintf(fout, "Wavetable #%-2i (high)  ", index - 4 - dmf->totalWavetables); 
+                fprintf(fout, "Wavetable #%-2i (high)  ", index - 8 - dmf->totalWavetables); 
             }
             
         }
@@ -1059,7 +1067,7 @@ void exportSampleDataHelper(FILE *fout, uint8_t ptSampleNum, uint8_t index)
             {
                 // Convert from DMF sample values (0 to 15) to PT sample values (-128 to 127). 
                 fputc((int8_t)((dmf->wavetableValues[waveNum][i / 2] / 15.f * 255.f) - 128.f), fout); 
-                fputc((int8_t)((dmf->wavetableValues[waveNum][i / 2] / 15.f * 255.f) - 128.f), fout); 
+                //fputc((int8_t)((dmf->wavetableValues[waveNum][i / 2] / 15.f * 255.f) - 128.f), fout); 
             }
             else if (sampleLength[index] == 32) // Normal length 
             {
@@ -1094,9 +1102,9 @@ void exportSampleDataHelper(FILE *fout, uint8_t ptSampleNum, uint8_t index)
 
     If I upsample current 32-length PT square wave samples to double length (64), then C-1 -> B-3 in PT will be C-2 -> B-4 in Deflemask GUI. ("low note range")
     If I downsample current 32-length PT square wave samples to quarter length (8), then C-1 -> B-3 in PT will be C-5 -> B-7 in Deflemask GUI. ("high note range")
-            If finetune == 0, then it would cover Deflemask's highest note for the GB (C-8), but not the lowest (C-2). 
+            If finetune == 0, then it would cover Deflemask's lowest note for the GB (C-2), but not the highest (C-10). 
     I would have to downsample wavetables in order to achieve notes of C-6 or higher. 
-      And in order to reach Deflemask's highest GB note (C-8), I would need to downsample the wavetables to 1/4 of the values it normally has.  
+      And in order to reach Deflemask's 2nd highest GB note (B-7), I would need to downsample the wavetables to 1/4 of the values it normally has.  
 */
 
 uint16_t proTrackerPeriodTable[5][12] = {

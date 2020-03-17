@@ -40,9 +40,9 @@ If you can't get it to work, please send me an email at the address at the botto
 ``` 
 Options:
 ```
---allowdownsampling      Allow wavetables to lose information through downsampling.
+--downsample             Allow wavetables to lose information through downsampling. 
+--effects=<MIN, MAX>     The number of ProTracker effects to use. (Default: MAX) 
 --help                   Displays the help message.
---noeffects              Ignore Deflemask effects (except for Set Duty Cycle and Set Wave).
 ```
  
 ## To Do
@@ -50,11 +50,14 @@ Currently, dmf2mod converts notes, volume changes, and the following Deflemask e
 - **Bxx**  - Position Jump
 - **10xx** - Set WAVE 
 - **12xx** - Set Duty Cycle 
-
+ 
+SQ1, SQ2, and WAVE channels are supported. 
+ 
 In later updates, I plan to add: 
+- Pattern Break (Dxx) 
+- Initial Tempo / Tempo changes 
 - Noise channel 
 - More effects 
-- Tempo 
 - ... 
  
 ______

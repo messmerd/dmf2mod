@@ -25,7 +25,7 @@ rows, only one effect column is allowed per channel, etc.
 
 #ifndef CMD_Options 
     typedef struct CMD_Options {
-        bool useEffects; 
+        uint8_t effects; // 0 == none; 1 == minimum; 2 == maximum 
         bool allowDownsampling; 
     } CMD_Options;
     #define CMD_Options CMD_Options

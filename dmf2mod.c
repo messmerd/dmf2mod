@@ -24,7 +24,7 @@ int main(int argc, char* argv[])
 {
     char *fin, *fout; 
     CMD_Options opt;
-    opt.useEffects = true; // By default, use Deflemask effects column 
+    opt.effects = 2; // By default, use maximum number of effects (2).  
     opt.allowDownsampling = false; // By default, wavetables cannot lose information through downsampling   
 
     if (argc == 1) 
@@ -55,11 +55,25 @@ int main(int argc, char* argv[])
             // Check which options were provided   
             for (int i = 3; i < argc; i++) 
             {
-                if (strcmp(argv[i], "--noeffects") == 0) 
+                if (strncmp(argv[i], "--effects=", 10) == 0) 
                 {
-                    opt.useEffects = false; 
+                    if (strcmp(&(argv[i][10]), "MAX") == 0 || strcmp(&(argv[i][10]), "max") == 0) 
+                    {
+                        opt.effects = 2; // Maximum effects 
+                    }
+                    else if (strcmp(&(argv[i][10]), "MIN") == 0 || strcmp(&(argv[i][10]), "min") == 0)
+                    {
+                        opt.effects = 1; // Minimum effects 
+                    }
+                    else 
+                    {
+                        printf("Error: For the option '--effects=', the acceptable values are: MIN and MAX.\n"); 
+                        free(fin);
+                        free(fout);
+                        exit(1);
+                    }
                 } 
-                else if (strcmp(argv[i], "--allowdownsampling") == 0)
+                else if (strcmp(argv[i], "--downsample") == 0)
                 {
                     opt.allowDownsampling = true; // Allow wavetables to lose information through downsampling
                 }
@@ -110,7 +124,7 @@ void printHelp()
     printf("dmf2mod v%s \nCreated by Dalton Messmer <messmer.dalton@gmail.com>\n", DMF2MOD_VERSION);
     printf("Usage: .\\dmf2mod.exe output_file.mod deflemask_game_boy_file.dmf [options]\n");
     printf("Options:\n");
-    printf("%-25s%s\n","--allowdownsampling", "Allow wavetables to lose information through downsampling.");
-    printf("%-25s%s\n", "--help", "Display this help message.");
-    printf("%-25s%s\n", "--noeffects", "Ignore Deflemask effects (except 10xx and 12xx)."); 
+    printf("%-25s%s\n","--downsample", "Allow wavetables to lose information through downsampling.");
+    printf("%-25s%s\n", "--effects=<MIN, MAX>", "The number of ProTracker effects to use. (Default: MAX)"); 
+    printf("%-25s%s\n", "--help", "Display this help message.");   
 }

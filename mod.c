@@ -13,6 +13,8 @@ rows, only one effect column is allowed per channel, etc.
 // TODO: Right now, only effect column 0 is used. But two dmf effects 
 //      could potentially be used if one of them is 10xx or 12xx. Need to allow for that. 
 
+// TODO: Add '--effects=NONE' option, which does not use any ProTracker effects. 
+
 #include "mod.h"
 
 extern const System Systems[10]; 
@@ -105,19 +107,20 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
     
     if (dmf->sys.id != Systems[SYS_GAMEBOY].id) // If it's not a Game Boy 
     {
-        printf("Error: Only the Game Boy system is currently supported. \n");
+        printf("ERROR: Only the Game Boy system is currently supported. \n");
         return 1;
     }
 
     if (dmf->moduleInfo.totalRowsInPatternMatrix > 128) // totalRowsInPatternMatrix is 1 more than it actually is 
     {
-        printf("Error: There must be 128 or fewer rows in the pattern matrix.\n");
+        printf("ERROR: There must be 128 or fewer rows in the pattern matrix.\n"); 
         return 1;
     }
 
     if (dmf->moduleInfo.totalRowsPerPattern != 64) 
     {
-        printf("Error: Patterns must have 64 rows. \n");
+        printf("ERROR: Patterns must have 64 rows. \n");
+        printf("A workaround for this issue is planned for a future update to dmf2mod.\n"); 
         return 1;
     }
 
@@ -187,7 +190,7 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
 
     if (dmf->moduleInfo.totalRowsInPatternMatrix > 64) 
     {
-        printf("Error: Too many rows of patterns in the pattern matrix. 64 is the maximum.\n");
+        printf("ERROR: Too many rows of patterns in the pattern matrix. 64 is the maximum.\n");
         free(noteRangeStart); 
         free(sampMap); 
         free(sampleLength);
@@ -208,18 +211,20 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
     #pragma region EXPORT_PATTERN_DATA 
     printf("Exporting pattern data...\n");
 
+    /*
     for (int channel = 0; channel < dmf->sys.channels; channel++)
     {
-        if (dmf->channelEffectsColumnsCount[channel] > 1 && opt.useEffects) 
+        if (dmf->channelEffectsColumnsCount[channel] > 1 && opt.effects == 2) 
         {
             // TODO: Allow any amount of effects columns but only use first effect it finds   
             free(noteRangeStart); 
             free(sampMap); 
             free(sampleLength);
-            printf("Error: Each channel can only have 1 effects column.\n");
+            printf("ERROR: Each channel can only have 1 effects column.\n");
             return 1;
         }
     }
+    */ 
 
     // The current square wave duty cycle, note volume, and other information that the 
     //      tracker stores for each channel while playing a tracker file.
@@ -443,7 +448,7 @@ int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *stat
 
 int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
 {
-    if (opt.useEffects) // If using effects 
+    if (opt.effects == 2) // If using maximum amount of effects 
     {
         *effect = getProTrackerEffect(pat->effectCode[0], pat->effectValue[0]); // Effects must be in first row 
         if (pat->volume != state->volume && pat->volume != DMF_NOTE_NOVOLUME) // If the note volume changes 
@@ -456,7 +461,8 @@ int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
                     Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
                     so it does not count.  
                 */
-                printf("Error: An effect and a volume change (or note OFF) cannot both appear in the same row of the same channel.\n");
+                printf("ERROR: An effect and a volume change (or note OFF) cannot both appear in the same row of the same channel.\n");
+                printf("Try fixing this issue in Deflemask or use the '--effects=MIN' option.\n"); 
                 return 1;
             }
             else // Only the volume changed 
@@ -478,7 +484,8 @@ int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
                     Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
                     so it does not count.  
                 */
-                printf("Error: An effect and a note OFF (or volume change) cannot both appear in the same row of the same channel.\n");
+                printf("ERROR: An effect and a note OFF (or volume change) cannot both appear in the same row of the same channel.\n");
+                printf("Try fixing this issue in Deflemask or use the '--effects=MIN' option.\n");
                 return 1;
             }
             else // No effects except the note OFF 
@@ -519,7 +526,7 @@ int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
                 Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
                 so it does not count.  
             */
-            printf("Error: No more than one Note OFF, Volume Change, or Position Jump can appear in the same row of the same channel.\n");
+            printf("ERROR: No more than one Note OFF, Volume Change, or Position Jump can appear in the same row of the same channel.\n");
             return 1;
         }
         else if (total_effects == 0)
@@ -831,10 +838,8 @@ int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
                 // If between C-4 and B-6 (Deflemask tracker note format) and none of the above options work 
                 if (i >= 4 && !opt.allowDownsampling) // If on a wavetable instrument and can't downsample it 
                 {
-                    free(noteRangeStart); 
-                    free(sampMap); 
-                    free(sampleLength);
-                    printf("ERROR: Cannot use wavetable instrument #%i without loss of information.\n", i - 4); 
+                    printf("ERROR: Cannot use wavetable instrument #%i without loss of information.\n", i - 4);
+                    printf("Try using the '--downsample' option.\n");  
                     return -1; 
                 }
                 sampleLength[indexLow] = 16;
@@ -847,10 +852,8 @@ int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
                 // If between C-5 and B-7 (Deflemask tracker note format)  
                 if (i >= 4 && !opt.allowDownsampling) // If on a wavetable instrument and can't downsample it
                 {
-                    free(noteRangeStart); 
-                    free(sampMap); 
-                    free(sampleLength);
                     printf("ERROR: Cannot use wavetable instrument #%i without loss of information.\n", i - 4);
+                    printf("Try using the '--downsample' option.\n"); 
                     return -1; 
                 }
                 sampleLength[indexLow] = 8; 
@@ -862,10 +865,8 @@ int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
                 // If between C#5 and C-8 (highest note) (Deflemask tracker note format):
                 if (i >= 4 && !opt.allowDownsampling) // If on a wavetable instrument and can't downsample it
                 {
-                    free(noteRangeStart); 
-                    free(sampMap); 
-                    free(sampleLength);
                     printf("ERROR: Cannot use wavetable instrument #%i without loss of information.\n", i - 4);
+                    printf("Try using the '--downsample' option.\n"); 
                     return -1; 
                 }
                 finetune = 0; // One semitone up from B = C- ??? was 7
@@ -890,10 +891,8 @@ int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
             // If on a wavetable sample and cannot downsample it: 
             if (i >= 4 && !opt.allowDownsampling) 
             {
-                free(noteRangeStart); 
-                free(sampMap); 
-                free(sampleLength);
                 printf("ERROR: Cannot use wavetable instrument #%i without loss of information.\n", i - 4);
+                printf("Try using the '--downsample' option.\n"); 
                 return -1; 
             }
 
@@ -905,22 +904,28 @@ int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
             noteRangeStart[indexHigh].pitch = DMF_NOTE_C;
             finetune = 0; 
 
+            if (noteCompare(&highestNote[i], &(Note){DMF_NOTE_C, 7}) == 0)
+            {
+                printf("WARNING: Can't use the highest Deflemask note (C-8) on some MOD players including ProTracker.\n");
+            }
+
+            /*
             // If lowest possible note is needed:
             if (noteCompare(&lowestNote[i], &(Note){DMF_NOTE_C, 1}) == 0) 
             {
                 // If highest and lowest possible notes are both needed:
                 if (noteCompare(&highestNote[i], &(Note){DMF_NOTE_C, 7}) == 0)
                 {
-                    printf("WARNING: Can't use the highest Deflemask note (C-8).\n");
-                    ///printf("WARNING: Can't use both the highest note (C-8) and the lowest note (C-2).\n");
+                    ///printf("WARNING: Can't use the highest Deflemask note (C-8).\n");
+                    //printf("WARNING: Can't use both the highest note (C-8) and the lowest note (C-2).\n");
                 }
-                /*
                 else // Only highest possible note is needed 
                 {
                     finetune = 7; // One semitone up from B = C-  ???  
                 }
-                */
+                
             }
+            */
 
             sampMap[indexLow] = ptSampleNum; // Assign PT sample number to this square wave / WAVE sample 
             sampMap[indexHigh] = ptSampleNum + 1; // Assign PT sample number to this square wave / WAVE sample 

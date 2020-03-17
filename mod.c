@@ -429,6 +429,14 @@ int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *stat
         {
             sampleNumber = state->onHighNoteRange ? sampMap[indexLow + totalSqwWave] : sampMap[indexLow]; // Get new PT sample number
             state->sampleChanged = false; // Just changed the sample, so resetting this for next time. 
+            if (effect == PT_NOEFFECT_CODE) 
+            {
+                // When you change PT samples, the channel volume resets, so 
+                //  if there are still no effects are being used on this pattern row, 
+                //  use a volume change effect to set the volume to where it needs to be. 
+                uint8_t newVolume = round(state->volume / 15.0 * 65.0); // Convert DMF volume to PT volume 
+                effect = ((uint16_t)PT_SETVOLUME << 4) | newVolume; 
+            } 
         }
         else // Noise channel 
         {

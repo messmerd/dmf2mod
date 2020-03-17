@@ -190,6 +190,9 @@ PatternRow loadPatternRow(uint8_t **fBuff, uint32_t *pos, int effectsColumnsCoun
 void loadPCMSamplesData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
 PCMSample loadPCMSample(uint8_t **fBuff, uint32_t *pos); 
 
+// Returns the initial bpm of the module when given ModuleInfo 
+double getBPM(const ModuleInfo *info);  
+
 // Frees the dynamically allocated memory used by a DMFContents struct 
 void freeDMF(DMFContents *dmf); 
 

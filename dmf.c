@@ -268,6 +268,7 @@ void loadModuleInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
     dmf->moduleInfo.totalRowsPerPattern |= RI << 24;
     dmf->moduleInfo.totalRowsInPatternMatrix = RI; 
 
+    printf("bpm=%f.\n", getBPM(&dmf->moduleInfo)); 
     // NOTE: In previous .dmp versions, arpeggio tick speed is stored here!!! 
 
 }
@@ -581,6 +582,39 @@ PCMSample loadPCMSample(uint8_t **fBuff, uint32_t *pos)
     }
 
     return sample; 
+}
+
+double getBPM(const ModuleInfo *info)
+{
+    // Returns the initial bpm of the module when given ModuleInfo 
+    unsigned int globalTick; 
+    if (info->usingCustomHZ) 
+    {
+        if (info->customHZValue1 == 0) // No digits filled in 
+        {
+            // NTSC is used by default if custom global tick box is selected but the value is left blank: 
+            globalTick = 60; 
+        }
+        else if (info->customHZValue2 == 0) // One digit filled in 
+        {
+            globalTick = (info->customHZValue1 - 48); 
+        }
+        else if (info->customHZValue3 == 0) // Two digits filled in
+        {
+            globalTick = (info->customHZValue1 - 48) * 10 + (info->customHZValue2 - 48); 
+        }
+        else // All three digits filled in 
+        {
+            globalTick = (info->customHZValue1 - 48) * 100 + (info->customHZValue2 - 48) * 10 + (info->customHZValue3 - 48); 
+        }
+    }
+    else
+    {
+        globalTick = info->framesMode ? 60 : 50; // NTSC (60 Hz) or PAL (50 Hz)  
+    }
+    
+    // Experimentally determined equation for bpm:  
+    return (15.0 * globalTick) / ((info->timeBase + 1) * (info->tickTime1 + info->tickTime2)); 
 }
 
 void freeDMF(DMFContents *dmf) 

@@ -38,7 +38,7 @@ int8_t initSamples(FILE *fout, Note **lowestNote, Note **highestNote);
 int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote);  
 void exportSampleInfo(FILE *fout, int8_t ptSampleNumLow, int8_t ptSampleNumHigh, uint8_t indexLow, uint8_t indexHigh, int8_t finetune);
 
-int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *state, uint8_t totalSqwWave); 
+int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *state); 
 uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue);
 int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect); 
 
@@ -46,6 +46,8 @@ int8_t noteCompare(Note *n1, Note *n2);
 
 void exportSampleData(FILE *fout);
 void exportSampleDataHelper(FILE *fout, uint8_t ptSampleNum, uint8_t index); 
+
+uint8_t getPTTempo(double bpm); 
 
 CMD_Options opt; 
 DMFContents *dmf; 
@@ -79,11 +81,15 @@ int8_t *sampleLength;
 
 uint16_t proTrackerPeriodTable[5][12]; 
 
+bool usingSetupPattern; // Whether to use a pattern at the start of the module to set up the initial tempo and other stuff. 
+
 int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options) 
 {
     FILE *fout;
     dmf = dmfContents; // Allow any function in this file to access DMF contents w/o passing it as an argument.
     opt = options;     // Allow any function in this file to access CMD options w/o passing it as an argument. 
+
+    usingSetupPattern = true; // If needed, this could be set as a part of a command-line option 
 
     ///////////////// EXPORT SONG NAME  
 
@@ -111,7 +117,7 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
         return 1;
     }
 
-    if (dmf->moduleInfo.totalRowsInPatternMatrix > 128) // totalRowsInPatternMatrix is 1 more than it actually is 
+    if (dmf->moduleInfo.totalRowsInPatternMatrix + (int)usingSetupPattern > 128) // totalRowsInPatternMatrix is 1 more than it actually is 
     {
         printf("ERROR: There must be 128 or fewer rows in the pattern matrix.\n"); 
         return 1;
@@ -120,7 +126,7 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
     if (dmf->moduleInfo.totalRowsPerPattern != 64) 
     {
         printf("ERROR: Patterns must have 64 rows. \n");
-        printf("A workaround for this issue is planned for a future update to dmf2mod.\n"); 
+        printf("       A workaround for this issue is planned for a future update to dmf2mod.\n"); 
         return 1;
     }
 
@@ -185,10 +191,10 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
     #pragma region EXPORT_OTHER_INFO 
     printf("Exporting other information...\n");
 
-    fputc(dmf->moduleInfo.totalRowsInPatternMatrix, fout);   // Song length in patterns (not total number of patterns) 
+    fputc(dmf->moduleInfo.totalRowsInPatternMatrix + (int)usingSetupPattern, fout);   // Song length in patterns (not total number of patterns) 
     fputc(127, fout);                        // 0x7F - Useless byte that has to be here 
 
-    if (dmf->moduleInfo.totalRowsInPatternMatrix > 64) 
+    if (dmf->moduleInfo.totalRowsInPatternMatrix + (int)usingSetupPattern > 64) 
     {
         printf("ERROR: Too many rows of patterns in the pattern matrix. 64 is the maximum.\n");
         free(noteRangeStart); 
@@ -198,9 +204,9 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
     }
 
     // Pattern matrix (Each ProTracker pattern number is the same as its pattern matrix row number)
-    for (uint8_t i = 0; i < dmf->moduleInfo.totalRowsInPatternMatrix; i++) 
+    for (uint8_t i = 0; i < dmf->moduleInfo.totalRowsInPatternMatrix + (int)usingSetupPattern; i++) 
         fputc(i, fout); 
-    for (uint8_t i = dmf->moduleInfo.totalRowsInPatternMatrix; i < 128; i++) 
+    for (uint8_t i = dmf->moduleInfo.totalRowsInPatternMatrix + (int)usingSetupPattern; i < 128; i++) 
         fputc(0, fout);
     
     fwrite("M.K.", 1, 4, fout);  // ProTracker uses "M!K!" if there's more than 64 pattern matrix rows...
@@ -211,21 +217,48 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
     #pragma region EXPORT_PATTERN_DATA 
     printf("Exporting pattern data...\n");
 
-    /*
-    for (int channel = 0; channel < dmf->sys.channels; channel++)
+    if (usingSetupPattern) 
     {
-        if (dmf->channelEffectsColumnsCount[channel] > 1 && opt.effects == 2) 
+        // Export initial tempo (An approximation. ProTracker can only support Deflemask tempo between 16 and 127.5 bpm.) 
+        uint16_t effect = ((uint16_t)PT_SETSPEED << 4) | getPTTempo(getBPM(&dmf->moduleInfo));
+        fputc(0, fout);  // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
+        fputc(0, fout);  // Sample period/effect param. (lower 8 bits) 
+        fputc((effect & 0x0F00) >> 8, fout); // Sample number (lower 4b); effect code (upper 4b)
+        fputc(effect & 0x00FF, fout); // Effect code (lower 8 bits) 
+
+        // Export position jump (once the Pattern Break effect is implemented, it can be used instead.) 
+        effect = ((uint16_t)PT_POSJUMP << 4) | 1; // Jump to next pattern 
+        fputc(0, fout);  // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
+        fputc(0, fout);  // Sample period/effect param. (lower 8 bits) 
+        fputc((effect & 0x0F00) >> 8, fout); // Sample number (lower 4b); effect code (upper 4b)
+        fputc(effect & 0x00FF, fout); // Effect code (lower 8 bits) 
+
+        // Blank (WAVE channel)
+        fputc(0, fout); // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
+        fputc(0, fout); // Sample period/effect param. (lower 8 bits) 
+        fputc(0, fout); // Sample number (lower 4b); effect code (upper 4b)
+        fputc(0, fout); // Effect code (lower 8 bits) 
+
+        // Blank (NOISE channel)
+        fputc(0, fout); // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
+        fputc(0, fout); // Sample period/effect param. (lower 8 bits) 
+        fputc(0, fout); // Sample number (lower 4b); effect code (upper 4b)
+        fputc(0, fout); // Effect code (lower 8 bits) 
+        
+        // Loop through the rest of the rows in 1st pattern: 
+        for (int patRow = 1; patRow < 64; patRow++) 
         {
-            // TODO: Allow any amount of effects columns but only use first effect it finds   
-            free(noteRangeStart); 
-            free(sampMap); 
-            free(sampleLength);
-            printf("ERROR: Each channel can only have 1 effects column.\n");
-            return 1;
+            // Loop through channels: 
+            for (int chan = 0; chan < Systems[SYS_GAMEBOY].channels; chan++) 
+            {
+                fputc(0, fout); // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
+                fputc(0, fout); // Sample period/effect param. (lower 8 bits) 
+                fputc(0, fout); // Sample number (lower 4b); effect code (upper 4b)
+                fputc(0, fout); // Effect code (lower 8 bits) 
+            }
         }
     }
-    */ 
-
+    
     // The current square wave duty cycle, note volume, and other information that the 
     //      tracker stores for each channel while playing a tracker file.
     MODChannelState state[Systems[SYS_GAMEBOY].channels], stateJumpCopy[Systems[SYS_GAMEBOY].channels]; 
@@ -308,7 +341,7 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
                     }
                 }
                 
-                if (writeProTrackerPatternRow(fout, &dmf->patternValues[chan][dmf->patternMatrixValues[chan][patMatRow]][patRow], &state[chan], 4 + dmf->totalWavetables)) 
+                if (writeProTrackerPatternRow(fout, &dmf->patternValues[chan][dmf->patternMatrixValues[chan][patMatRow]][patRow], &state[chan])) 
                 {
                     // Error occurred while writing the pattern row 
                     free(noteRangeStart); 
@@ -342,7 +375,7 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
 }
 
 
-int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *state, uint8_t totalSqwWave) 
+int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *state) 
 {
     // Writes 4 bytes of pattern row information to the .mod file 
     uint16_t effect;
@@ -427,7 +460,7 @@ int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *stat
         }
         else if (state->channel != DMF_GAMEBOY_NOISE) // A ProTracker sample needs to change  
         {
-            sampleNumber = state->onHighNoteRange ? sampMap[indexLow + totalSqwWave] : sampMap[indexLow]; // Get new PT sample number
+            sampleNumber = state->onHighNoteRange ? sampMap[indexLow + 4 + dmf->totalWavetables] : sampMap[indexLow]; // Get new PT sample number
             state->sampleChanged = false; // Just changed the sample, so resetting this for next time. 
             if (effect == PT_NOEFFECT_CODE) 
             {
@@ -470,7 +503,7 @@ int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
                     so it does not count.  
                 */
                 printf("ERROR: An effect and a volume change (or note OFF) cannot both appear in the same row of the same channel.\n");
-                printf("Try fixing this issue in Deflemask or use the '--effects=MIN' option.\n"); 
+                printf("       Try fixing this issue in Deflemask or use the '--effects=MIN' option.\n"); 
                 return 1;
             }
             else // Only the volume changed 
@@ -493,7 +526,7 @@ int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
                     so it does not count.  
                 */
                 printf("ERROR: An effect and a note OFF (or volume change) cannot both appear in the same row of the same channel.\n");
-                printf("Try fixing this issue in Deflemask or use the '--effects=MIN' option.\n");
+                printf("       Try fixing this issue in Deflemask or use the '--effects=MIN' option.\n");
                 return 1;
             }
             else // No effects except the note OFF 
@@ -521,7 +554,7 @@ int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
         }
         if (pat->effectCode[0] == DMF_POSJUMP) // Position Jump. Has priority over volume changes and note cuts. 
         {
-            *effect = ((uint16_t)PT_POSJUMP << 4) | pat->effectValue[0]; // Effects must be in first row  
+            *effect = ((uint16_t)PT_POSJUMP << 4) | (pat->effectValue[0] + (int)usingSetupPattern); // Effects must be in first row  
             state->volume = volumeCopy; // Cancel volume change if it occurred above.  
             total_effects++; 
         }
@@ -581,7 +614,7 @@ uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
             ptEff = PT_VOLSLIDE; break;
         case DMF_POSJUMP:
             ptEff = PT_POSJUMP; 
-            ptEffVal = effectValue;  
+            ptEffVal = effectValue + (int)usingSetupPattern;  
             break;
         case DMF_RETRIG:
             ptEff = PT_RETRIGGERSAMPLE; break;  // ? 
@@ -847,7 +880,7 @@ int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
                 if (i >= 4 && !opt.allowDownsampling) // If on a wavetable instrument and can't downsample it 
                 {
                     printf("ERROR: Cannot use wavetable instrument #%i without loss of information.\n", i - 4);
-                    printf("Try using the '--downsample' option.\n");  
+                    printf("       Try using the '--downsample' option.\n");  
                     return -1; 
                 }
                 sampleLength[indexLow] = 16;
@@ -861,7 +894,7 @@ int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
                 if (i >= 4 && !opt.allowDownsampling) // If on a wavetable instrument and can't downsample it
                 {
                     printf("ERROR: Cannot use wavetable instrument #%i without loss of information.\n", i - 4);
-                    printf("Try using the '--downsample' option.\n"); 
+                    printf("       Try using the '--downsample' option.\n"); 
                     return -1; 
                 }
                 sampleLength[indexLow] = 8; 
@@ -874,7 +907,7 @@ int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
                 if (i >= 4 && !opt.allowDownsampling) // If on a wavetable instrument and can't downsample it
                 {
                     printf("ERROR: Cannot use wavetable instrument #%i without loss of information.\n", i - 4);
-                    printf("Try using the '--downsample' option.\n"); 
+                    printf("       Try using the '--downsample' option.\n"); 
                     return -1; 
                 }
                 finetune = 0; // One semitone up from B = C- ??? was 7
@@ -900,7 +933,7 @@ int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
             if (i >= 4 && !opt.allowDownsampling) 
             {
                 printf("ERROR: Cannot use wavetable instrument #%i without loss of information.\n", i - 4);
-                printf("Try using the '--downsample' option.\n"); 
+                printf("       Try using the '--downsample' option.\n"); 
                 return -1; 
             }
 
@@ -1108,6 +1141,29 @@ void exportSampleDataHelper(FILE *fout, uint8_t ptSampleNum, uint8_t index)
         }
     }
 }
+
+uint8_t getPTTempo(double bpm)
+{
+    // Get ProTracker tempo from Deflemask bpm. 
+    if (bpm * 2.0 > 255.0) // If tempo is too high (over 127.5 bpm)
+    {
+        printf("WARNING: Tempo is too high for ProTracker. Using 127.5 bpm instead.\n");
+        printf("         ProTracker only supports tempos between 16 and 127.5 bpm.\n"); 
+        return 255;
+    }
+    else if (bpm * 2.0 < 32.0) // If tempo is too low (under 16 bpm)
+    {
+        printf("WARNING: Tempo is too low for ProTracker. Using 16 bpm instead.\n");
+        printf("         ProTracker only supports tempos between 16 and 127.5 bpm.\n"); 
+        return 32; 
+    }
+    else // Tempo is okay for ProTracker 
+    {
+        // ProTracker tempo is twice the Deflemask bpm.
+        return bpm * 2; 
+    }
+}
+
 
 /*
     Game Boy's range is:  C-1 -> C-8 (though in testing this, the range seems to be C-2 -> C-8 in Deflemask GUI)

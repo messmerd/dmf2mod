@@ -41,7 +41,7 @@ int main(int argc, char* argv[])
         }
         else
         {
-            printf("Error: Format must be: .\\dmf2mod.exe output_file.mod deflemask_game_boy_file.dmf [options]\n");
+            printf("ERROR: Format must be: .\\dmf2mod.exe output_file.mod deflemask_game_boy_file.dmf [options]\n");
             exit(1);
         }
     }
@@ -67,7 +67,7 @@ int main(int argc, char* argv[])
                     }
                     else 
                     {
-                        printf("Error: For the option '--effects=', the acceptable values are: MIN and MAX.\n"); 
+                        printf("ERROR: For the option '--effects=', the acceptable values are: MIN and MAX.\n"); 
                         free(fin);
                         free(fout);
                         exit(1);
@@ -79,7 +79,7 @@ int main(int argc, char* argv[])
                 }
                 else 
                 {
-                    printf("Error: Unrecognized option '%s'\n", argv[i]); 
+                    printf("ERROR: Unrecognized option '%s'\n", argv[i]); 
                     free(fin);
                     free(fout);
                     exit(1);

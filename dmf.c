@@ -268,9 +268,7 @@ void loadModuleInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
     dmf->moduleInfo.totalRowsPerPattern |= RI << 24;
     dmf->moduleInfo.totalRowsInPatternMatrix = RI; 
 
-    printf("bpm=%f.\n", getBPM(&dmf->moduleInfo)); 
     // NOTE: In previous .dmp versions, arpeggio tick speed is stored here!!! 
-
 }
 
 void loadPatternMatrixValues(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf) 

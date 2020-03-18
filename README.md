@@ -46,7 +46,7 @@ Options:
 ```
  
 ## To Do
-Currently, dmf2mod converts notes, volume changes, and the following Deflemask effects: 
+Currently, dmf2mod converts notes, volume changes, initial tempo, and the following Deflemask effects: 
 - **Bxx**  - Position Jump
 - **10xx** - Set WAVE 
 - **12xx** - Set Duty Cycle 
@@ -55,9 +55,10 @@ SQ1, SQ2, and WAVE channels are supported.
  
 In later updates, I plan to add: 
 - Pattern Break (Dxx) 
-- Initial Tempo / Tempo changes 
+- Tempo changes 
 - Noise channel 
 - More effects 
+- Support for patterns of different sizes than 64 
 - ... 
  
 ______

@@ -34,23 +34,21 @@ typedef struct MODChannelState
 
 #define PT_NOTE_VOLUMEMAX 64
 
-int8_t initSamples(FILE *fout, Note **lowestNote, Note **highestNote); 
-int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote);  
-void exportSampleInfo(FILE *fout, int8_t ptSampleNumLow, int8_t ptSampleNumHigh, uint8_t indexLow, uint8_t indexHigh, int8_t finetune);
+static int8_t initSamples(FILE *fout, Note **lowestNote, Note **highestNote); 
+static int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote);  
+static void exportSampleInfo(FILE *fout, int8_t ptSampleNumLow, int8_t ptSampleNumHigh, uint8_t indexLow, uint8_t indexHigh, int8_t finetune);
 
-int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *state); 
-uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue);
-int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect); 
+static int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *state); 
+static uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue);
+static int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect); 
 
-int8_t noteCompare(Note *n1, Note *n2); 
+static void exportSampleData(FILE *fout);
+static void exportSampleDataHelper(FILE *fout, uint8_t ptSampleNum, uint8_t index); 
 
-void exportSampleData(FILE *fout);
-void exportSampleDataHelper(FILE *fout, uint8_t ptSampleNum, uint8_t index); 
+static uint8_t getPTTempo(double bpm); 
 
-uint8_t getPTTempo(double bpm); 
-
-CMD_Options opt; 
-DMFContents *dmf; 
+static CMD_Options opt; 
+static DMFContents *dmf; 
 
 /*
     sampMap gives the ProTracker (PT) sample numbers for a given SQW / WAVE sample of either low note range or high note range. 
@@ -61,7 +59,7 @@ DMFContents *dmf;
     For index 8 + totalWavetables thru 7 + totalWavetables * 2: WAVE samples (high note range)  
     The value of sampMap is -1 if a PT sample is not needed for the given SQW / WAVE sample. 
 */
-int8_t *sampMap; 
+static int8_t *sampMap; 
 
 /*
     Specifies the point at which the note range starts for a given SQW / WAVE sample (high or low note range).
@@ -69,7 +67,7 @@ int8_t *sampMap;
     Uses the same index format of sampMap minus the high note range indices.  
     If a certain SQW / WAVE sample is unused, then pitch = 0 and octave = 0. 
 */
-Note *noteRangeStart; 
+static Note *noteRangeStart; 
 
 /*
     Specifies the ProTracker sample length for a given SQW / WAVE sample.
@@ -77,11 +75,11 @@ Note *noteRangeStart;
     If a certain SQW / WAVE sample is unused, then pitch = 0 and octave = 0. 
     The value of sampleLength is -1 if a PT sample is not needed for the given SQW / WAVE sample.
 */
-int8_t *sampleLength; 
+static int8_t *sampleLength; 
 
-uint16_t proTrackerPeriodTable[5][12]; 
+static uint16_t proTrackerPeriodTable[5][12]; 
 
-bool usingSetupPattern; // Whether to use a pattern at the start of the module to set up the initial tempo and other stuff. 
+static bool usingSetupPattern; // Whether to use a pattern at the start of the module to set up the initial tempo and other stuff. 
 
 int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options) 
 {
@@ -375,7 +373,7 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
 }
 
 
-int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *state) 
+static int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *state) 
 {
     // Writes 4 bytes of pattern row information to the .mod file 
     uint16_t effect;
@@ -487,7 +485,7 @@ int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *stat
    return 0; // Success 
 }
 
-int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
+static int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
 {
     if (opt.effects == 2) // If using maximum amount of effects 
     {
@@ -578,7 +576,7 @@ int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
     return 0; // Success 
 }
 
-uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
+static uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
 {
     // An effect is represented with 12 bits, which is 3 groups of 4 bits: [e][x][y]. 
     // The effect code is [e] or [e][x], and the effect value is [x][y] or [y]. 
@@ -663,26 +661,7 @@ uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
     return ((uint16_t)ptEff << 4) | ptEffVal; 
 }
 
-int8_t noteCompare(Note *n1, Note *n2) 
-{
-    // Compares notes n1 and n2.
-    // Assumes note isn't Note OFF or Empty note. 
-    // Notes must use the .dmf style where the note C# is the 1st note of an octave rather than C-. 
-    if (n1->octave + n1->pitch / 13.f > n2->octave + n2->pitch / 13.f) 
-    {
-        return 1; // n1 > n2 (n1 has a higher pitch than n2) 
-    }
-    else if (n1->octave + n1->pitch / 13.f < n2->octave + n2->pitch / 13.f) 
-    {
-        return -1; // n1 < n2 (n1 has a lower pitch than n2) 
-    }
-    else 
-    {
-        return 0; // Same note 
-    }
-}
-
-int8_t initSamples(FILE *fout, Note **lowestNote, Note **highestNote) 
+static int8_t initSamples(FILE *fout, Note **lowestNote, Note **highestNote) 
 {
     // This function loops through all DMF pattern contents to find the highest and lowest notes 
     //  for each square wave duty cycle and each wavetable. It also finds which SQW duty cycles are 
@@ -827,7 +806,7 @@ int8_t initSamples(FILE *fout, Note **lowestNote, Note **highestNote)
     return finalizeSampMap(fout, *lowestNote, *highestNote);  
 }
 
-int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote) 
+static int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote) 
 {
     // This function assigns ProTracker (PT) sample numbers and exports sample info 
 
@@ -979,7 +958,7 @@ int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
     return ptSampleNum - 1; // Success. Return number of PT samples that will be needed. (minus sample #0 which is special)  
 }
 
-void exportSampleInfo(FILE *fout, int8_t ptSampleNumLow, int8_t ptSampleNumHigh, uint8_t indexLow, uint8_t indexHigh, int8_t finetune)
+static void exportSampleInfo(FILE *fout, int8_t ptSampleNumLow, int8_t ptSampleNumHigh, uint8_t indexLow, uint8_t indexHigh, int8_t finetune)
 {   
     uint8_t index;
 
@@ -1061,7 +1040,7 @@ void exportSampleInfo(FILE *fout, int8_t ptSampleNumLow, int8_t ptSampleNumHigh,
     
 }
 
-void exportSampleData(FILE *fout)
+static void exportSampleData(FILE *fout)
 { 
     uint8_t ptSampleNum = 1; 
     for (uint8_t i = 0; i < 4 + dmf->totalWavetables; i++) 
@@ -1079,7 +1058,7 @@ void exportSampleData(FILE *fout)
     }
 }
 
-void exportSampleDataHelper(FILE *fout, uint8_t ptSampleNum, uint8_t index) 
+static void exportSampleDataHelper(FILE *fout, uint8_t ptSampleNum, uint8_t index) 
 {
     // This function must be called for SQW / WAVE samples in the same 
     //      order as their PT sample numbers. The exportSampleData function guarantees it. 
@@ -1142,7 +1121,7 @@ void exportSampleDataHelper(FILE *fout, uint8_t ptSampleNum, uint8_t index)
     }
 }
 
-uint8_t getPTTempo(double bpm)
+static uint8_t getPTTempo(double bpm)
 {
     // Get ProTracker tempo from Deflemask bpm. 
     if (bpm * 2.0 > 255.0) // If tempo is too high (over 127.5 bpm)
@@ -1176,7 +1155,7 @@ uint8_t getPTTempo(double bpm)
       And in order to reach Deflemask's 2nd highest GB note (B-7), I would need to downsample the wavetables to 1/4 of the values it normally has.  
 */
 
-uint16_t proTrackerPeriodTable[5][12] = {
+static uint16_t proTrackerPeriodTable[5][12] = {
     {1712,1616,1525,1440,1357,1281,1209,1141,1077,1017, 961, 907},  /* C-0 to B-0 */
     {856,808,762,720,678,640,604,570,538,508,480,453},              /* C-1 to B-1 */
     {428,404,381,360,339,320,302,285,269,254,240,226},              /* C-2 to B-2 */

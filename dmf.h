@@ -25,13 +25,10 @@ Requires zlib1.dll from the zlib compression library at https://zlib.net.
 // Deflemask allows four effects columns per channel regardless of the system 
 #define MAX_EFFECTS_COLUMN_COUNT 4 
 
-#ifndef CMD_Options 
-    typedef struct CMD_Options {
-        uint8_t effects; // 0 == none; 1 == minimum; 2 == maximum 
-        bool allowDownsampling; 
-    } CMD_Options;
-    #define CMD_Options CMD_Options
-#endif
+typedef struct CMD_Options {
+    uint8_t effects; // 0 == none; 1 == minimum; 2 == maximum 
+    bool allowDownsampling; 
+} CMD_Options;
 
 typedef enum DMF_NOTE {
     DMF_NOTE_EMPTY=101, 
@@ -178,20 +175,11 @@ typedef enum DMF_GAMEBOY_CHANNEL {
 // Imports the .dmf file "fname" and stores it in the struct "dmf" using the options "opt" 
 int importDMF(const char *fname, DMFContents *dmf, CMD_Options opt); 
 
-System getSystem(uint8_t systemByte);
-void loadVisualInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
-void loadModuleInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
-void loadPatternMatrixValues(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
-void loadInstrumentsData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf);
-Instrument loadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType); 
-void loadWavetablesData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
-void loadPatternsData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
-PatternRow loadPatternRow(uint8_t **fBuff, uint32_t *pos, int effectsColumnsCount); 
-void loadPCMSamplesData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
-PCMSample loadPCMSample(uint8_t **fBuff, uint32_t *pos); 
-
 // Returns the initial bpm of the module when given ModuleInfo 
 double getBPM(const ModuleInfo *info);  
+
+// Compares notes n1 and n2. Returns 1 if n1 > n2, -1 if n1 < n2, and 0 if n1 == n2. 
+int8_t noteCompare(const Note *n1, const Note *n2); 
 
 // Frees the dynamically allocated memory used by a DMFContents struct 
 void freeDMF(DMFContents *dmf); 

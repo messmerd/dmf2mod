@@ -23,14 +23,6 @@ rows, only one effect column is allowed per channel, etc.
 
 #include "dmf.h"
 
-#ifndef CMD_Options 
-    typedef struct CMD_Options {
-        uint8_t effects; // 0 == none; 1 == minimum; 2 == maximum 
-        bool allowDownsampling; 
-    } CMD_Options;
-    #define CMD_Options CMD_Options
-#endif
-
 // ProTracker effects
 // An effect is represented with 12 bits, which is 3 groups of 4 bits: [e][x][y]. 
 // The effect code is [e] or [e][x], and the effect value is [x][y] or [y]. 

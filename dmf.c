@@ -22,13 +22,25 @@ Requires zlib1.dll from the zlib compression library at https://zlib.net.
 
 #define CHUNK 16384
 
+static System getSystem(uint8_t systemByte);
+static void loadVisualInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
+static void loadModuleInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
+static void loadPatternMatrixValues(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
+static void loadInstrumentsData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf);
+static Instrument loadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType); 
+static void loadWavetablesData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
+static void loadPatternsData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
+static PatternRow loadPatternRow(uint8_t **fBuff, uint32_t *pos, int effectsColumnsCount); 
+static void loadPCMSamplesData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf); 
+static PCMSample loadPCMSample(uint8_t **fBuff, uint32_t *pos); 
+
 /* Decompress from file source to buffer dest until stream ends or EOF.
    inf() returns Z_OK on success, Z_MEM_ERROR if memory could not be
    allocated for processing, Z_DATA_ERROR if the deflate data is
    invalid or incomplete, Z_VERSION_ERROR if the version of zlib.h and
    the version of the library linked do not match, or Z_ERRNO if there
    is an error reading the file. */
-int inf(FILE *source, uint8_t **dest) 
+static int inf(FILE *source, uint8_t **dest) 
 {
     int ret;
     unsigned have;
@@ -94,7 +106,7 @@ int inf(FILE *source, uint8_t **dest)
 }
 
 // Report a zlib or I/O error 
-void zerr(int ret)
+static void zerr(int ret)
 {
     fputs("zpipe: ", stderr);
     switch (ret) {
@@ -613,6 +625,25 @@ double getBPM(const ModuleInfo *info)
     
     // Experimentally determined equation for bpm:  
     return (15.0 * globalTick) / ((info->timeBase + 1) * (info->tickTime1 + info->tickTime2)); 
+}
+
+int8_t noteCompare(const Note *n1, const Note *n2) 
+{
+    // Compares notes n1 and n2.
+    // Assumes note isn't Note OFF or Empty note. 
+    // Notes must use the .dmf style where the note C# is the 1st note of an octave rather than C-. 
+    if (n1->octave + n1->pitch / 13.f > n2->octave + n2->pitch / 13.f) 
+    {
+        return 1; // n1 > n2 (n1 has a higher pitch than n2) 
+    }
+    else if (n1->octave + n1->pitch / 13.f < n2->octave + n2->pitch / 13.f) 
+    {
+        return -1; // n1 < n2 (n1 has a lower pitch than n2) 
+    }
+    else 
+    {
+        return 0; // Same note 
+    }
 }
 
 void freeDMF(DMFContents *dmf) 

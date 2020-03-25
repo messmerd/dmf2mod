@@ -3,8 +3,7 @@
 # Build script for Linux / Mac 
 
 cd ./zlib
-sudo ./configure
-sudo make
+./configure
+make
 cd ../
-sudo make 
-sudo mv "./dmf2mod.exe" "./dmf2mod"
+make 

@@ -29,7 +29,7 @@ int main(int argc, char* argv[])
 
     if (argc == 1) 
     {
-        printHelp(); 
+        printHelp(argv); 
         exit(0);
     }
     else if (argc == 2) 
@@ -119,10 +119,10 @@ int main(int argc, char* argv[])
     return 0; 
 }
 
-void printHelp()
+void printHelp(char* argv[])
 {
     printf("dmf2mod v%s \nCreated by Dalton Messmer <messmer.dalton@gmail.com>\n", DMF2MOD_VERSION);
-    printf("Usage: .\\dmf2mod.exe output_file.mod deflemask_game_boy_file.dmf [options]\n");
+    printf("Usage: %s output_file.mod deflemask_game_boy_file.dmf [options]\n", argv[0]);
     printf("Options:\n");
     printf("%-25s%s\n","--downsample", "Allow wavetables to lose information through downsampling.");
     printf("%-25s%s\n", "--effects=<MIN, MAX>", "The number of ProTracker effects to use. (Default: MAX)"); 

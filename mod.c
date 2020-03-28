@@ -48,6 +48,7 @@ static void exportSampleData(FILE *fout);
 static void exportSampleDataHelper(FILE *fout, uint8_t ptSampleNum, uint8_t index); 
 
 static uint8_t getPTTempo(double bpm); 
+static char *itoa_p(int _Val, char *_DstBuf);
 
 static CMD_Options opt; 
 static DMFContents *dmf; 
@@ -880,7 +881,7 @@ static MODError finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
                 // If between C-4 and B-6 (Deflemask tracker note format) and none of the above options work 
                 if (i >= 4 && !opt.allowDownsampling) // If on a wavetable instrument and can't downsample it 
                 {
-                    return (MODError){MOD_ERROR_WAVE_DOWNSAMPLE, itoa(i - 4, malloc(2 * sizeof(char)), 10)}; 
+                    return (MODError){MOD_ERROR_WAVE_DOWNSAMPLE, itoa_p(i - 4, calloc(2, sizeof(char)))}; 
                 }
                 sampleLength[indexLow] = 16;
                 noteRangeStart[indexLow].octave = 3;
@@ -892,7 +893,7 @@ static MODError finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
                 // If between C-5 and B-7 (Deflemask tracker note format)  
                 if (i >= 4 && !opt.allowDownsampling) // If on a wavetable instrument and can't downsample it
                 {
-                    return (MODError){MOD_ERROR_WAVE_DOWNSAMPLE, itoa(i - 4, malloc(2 * sizeof(char)), 10)}; 
+                    return (MODError){MOD_ERROR_WAVE_DOWNSAMPLE, itoa_p(i - 4, calloc(2, sizeof(char)))}; 
                 }
                 sampleLength[indexLow] = 8; 
                 noteRangeStart[indexLow].octave = 4;
@@ -903,7 +904,7 @@ static MODError finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
                 // If between C#5 and C-8 (highest note) (Deflemask tracker note format):
                 if (i >= 4 && !opt.allowDownsampling) // If on a wavetable instrument and can't downsample it
                 {
-                    return (MODError){MOD_ERROR_WAVE_DOWNSAMPLE, itoa(i - 4, malloc(2 * sizeof(char)), 10)}; 
+                    return (MODError){MOD_ERROR_WAVE_DOWNSAMPLE, itoa_p(i - 4, calloc(2, sizeof(char)))}; 
                 }
                 finetune = 0; // One semitone up from B = C- ??? was 7
                 sampleLength[indexLow] = 8; 
@@ -927,7 +928,7 @@ static MODError finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
             // If on a wavetable sample and cannot downsample it: 
             if (i >= 4 && !opt.allowDownsampling) 
             {
-                return (MODError){MOD_ERROR_WAVE_DOWNSAMPLE, itoa(i - 4, malloc(2 * sizeof(char)), 10)}; 
+                return (MODError){MOD_ERROR_WAVE_DOWNSAMPLE, itoa_p(i - 4, calloc(2, sizeof(char)))}; 
             }
 
             sampleLength[indexLow] = 64; // Low note range (C-2 to B-4)
@@ -1158,6 +1159,12 @@ static uint8_t getPTTempo(double bpm)
     }
 }
 
+// Portable version of itoa but without base argument (assumed to be 10)
+char *itoa_p(int _Val, char *_DstBuf) 
+{
+    sprintf(_DstBuf, "%i", _Val); 
+    return _DstBuf; 
+}
 
 /*
     Game Boy's range is:  C-1 -> C-8 (though in testing this, the range seems to be C-2 -> C-8 in Deflemask GUI)

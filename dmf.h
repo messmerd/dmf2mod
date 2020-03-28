@@ -25,11 +25,6 @@ Requires zlib1.dll from the zlib compression library at https://zlib.net.
 // Deflemask allows four effects columns per channel regardless of the system 
 #define MAX_EFFECTS_COLUMN_COUNT 4 
 
-typedef struct CMD_Options {
-    uint8_t effects; // 0 == none; 1 == minimum; 2 == maximum 
-    bool allowDownsampling; 
-} CMD_Options;
-
 typedef enum DMF_NOTE {
     DMF_NOTE_EMPTY=101, 
     DMF_NOTE_CS=1, 
@@ -172,8 +167,8 @@ typedef enum DMF_GAMEBOY_CHANNEL {
     DMF_GAMEBOY_SQW1=0, DMF_GAMEBOY_SQW2=1, DMF_GAMEBOY_WAVE=2, DMF_GAMEBOY_NOISE=3
 } DMF_GAMEBOY_CHANNEL; 
 
-// Imports the .dmf file "fname" and stores it in the struct "dmf" using the options "opt" 
-int importDMF(const char *fname, DMFContents *dmf, CMD_Options opt); 
+// Imports the .dmf file "fname" and stores it in the struct "dmf" 
+int importDMF(const char *fname, DMFContents *dmf); 
 
 // Returns the initial bpm of the module when given ModuleInfo 
 double getBPM(const ModuleInfo *info);  
@@ -184,6 +179,6 @@ int8_t noteCompare(const Note *n1, const Note *n2);
 // Frees the dynamically allocated memory used by a DMFContents struct 
 void freeDMF(DMFContents *dmf); 
 
-const char *getFilenameExt(const char *fname); 
+char *getFilenameExt(const char *fname); 
 
 #endif 

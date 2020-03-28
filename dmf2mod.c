@@ -20,7 +20,7 @@ Usage: .\dmf2mod.exe output_file.mod deflemask_game_boy_file.dmf [options]
 
 void printHelp(); 
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
     char *fin, *fout; 
     CMD_Options opt;
@@ -36,7 +36,7 @@ int main(int argc, char* argv[])
     {
         if (strcmp(argv[1], "--help") == 0) 
         {
-            printHelp();
+            printHelp(argv);
             exit(0);
         }
         else
@@ -92,7 +92,7 @@ int main(int argc, char* argv[])
     DMFContents *dmf = malloc(1 * sizeof(DMFContents));  
 
     // Import the inflated .dmf file
-    if (importDMF(fin, dmf, opt)) 
+    if (importDMF(fin, dmf)) 
     {
         // Error occurred during import  
         freeDMF(dmf);
@@ -102,7 +102,7 @@ int main(int argc, char* argv[])
     }
     
     // Export to a .mod file 
-    if (exportMOD(fout, dmf, opt))
+    if (exportMOD(fout, dmf, opt).errorCode != MOD_ERROR_NONE)
     {
         // Error occurred during export 
         freeDMF(dmf);
@@ -119,10 +119,17 @@ int main(int argc, char* argv[])
     return 0; 
 }
 
-void printHelp(char* argv[])
+void printHelp(char *argv[])
 {
     printf("dmf2mod v%s \nCreated by Dalton Messmer <messmer.dalton@gmail.com>\n", DMF2MOD_VERSION);
-    printf("Usage: %s output_file.mod deflemask_game_boy_file.dmf [options]\n", argv[0]);
+    
+    char *filename_ext = getFilenameExt(argv[0]); 
+    if (strcmp(filename_ext, ".exe") != 0) // If filename extension is not .exe
+    {
+        filename_ext = strrchr(argv[0], '\0'); // Pointer to empty string 
+    }
+
+    printf("Usage: dmf2mod%s output_file.mod deflemask_game_boy_file.dmf [options]\n", filename_ext);
     printf("Options:\n");
     printf("%-25s%s\n","--downsample", "Allow wavetables to lose information through downsampling.");
     printf("%-25s%s\n", "--effects=<MIN, MAX>", "The number of ProTracker effects to use. (Default: MAX)"); 

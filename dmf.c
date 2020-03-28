@@ -144,11 +144,11 @@ const System Systems[10] = {
 	{.id = 0x08, .name = "YM2151", .channels = 13}
 };
 
-int importDMF(const char *fname, DMFContents *dmf, CMD_Options opt)
+int importDMF(const char *fname, DMFContents *dmf)
 {
     printf("Starting to import the .dmf file...\n");
 
-    if (strcmp(getFilenameExt(fname), "dmf") != 0)
+    if (strcmp(getFilenameExt(fname), ".dmf") != 0)
     {
         printf("Input file has the wrong file extension.\nPlease use a .dmf file.\n");
         return 1;
@@ -232,7 +232,7 @@ int importDMF(const char *fname, DMFContents *dmf, CMD_Options opt)
     return 0; // Success 
 }
 
-System getSystem(uint8_t systemByte)
+static System getSystem(uint8_t systemByte)
 {
     for (int i = 1; i < 10; i++)
     {
@@ -242,7 +242,7 @@ System getSystem(uint8_t systemByte)
     return Systems[SYS_ERROR]; // Error: System byte invalid  
 }
 
-void loadVisualInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf) 
+static void loadVisualInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf) 
 {
     dmf->visualInfo.songNameLength = RI;    
     dmf->visualInfo.songName = malloc((dmf->visualInfo.songNameLength + 1) * sizeof(char)); 
@@ -264,7 +264,7 @@ void loadVisualInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
     dmf->visualInfo.highlightBPatterns = RI; 
 }
 
-void loadModuleInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
+static void loadModuleInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
 {
     dmf->moduleInfo.timeBase = RI;   
     dmf->moduleInfo.tickTime1 = RI; 
@@ -283,7 +283,7 @@ void loadModuleInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
     // NOTE: In previous .dmp versions, arpeggio tick speed is stored here!!! 
 }
 
-void loadPatternMatrixValues(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf) 
+static void loadPatternMatrixValues(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf) 
 {
     // Format: patterMatrixValues[channel][pattern matrix row] 
     dmf->patternMatrixValues = (uint8_t **)malloc(dmf->sys.channels * sizeof(uint8_t *)); 
@@ -304,7 +304,7 @@ void loadPatternMatrixValues(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
     }
 }
 
-void loadInstrumentsData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
+static void loadInstrumentsData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
 {
     dmf->totalInstruments = RI;
     dmf->instruments = (Instrument *)malloc(dmf->totalInstruments * sizeof(Instrument)); 
@@ -315,7 +315,7 @@ void loadInstrumentsData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
     }
 }
 
-Instrument loadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType)
+static Instrument loadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType)
 {
     Instrument inst; 
 
@@ -458,7 +458,7 @@ Instrument loadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType)
     return inst; 
 }
 
-void loadWavetablesData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf) 
+static void loadWavetablesData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf) 
 {
     dmf->totalWavetables = RI; 
     
@@ -483,7 +483,7 @@ void loadWavetablesData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
     }
 }
 
-void loadPatternsData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf) 
+static void loadPatternsData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf) 
 {
     // patternValues[channel][pattern number][pattern row number]
     dmf->patternValues = (PatternRow ***)malloc(dmf->sys.channels * sizeof(PatternRow **)); 
@@ -520,7 +520,7 @@ void loadPatternsData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
     }
 }
 
-PatternRow loadPatternRow(uint8_t **fBuff, uint32_t *pos, int effectsColumnsCount)
+static PatternRow loadPatternRow(uint8_t **fBuff, uint32_t *pos, int effectsColumnsCount)
 {
     PatternRow pat;  
     pat.note = (Note){0, 0};
@@ -552,7 +552,7 @@ PatternRow loadPatternRow(uint8_t **fBuff, uint32_t *pos, int effectsColumnsCoun
     return pat;
 }
 
-void loadPCMSamplesData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
+static void loadPCMSamplesData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
 {
     dmf->totalPCMSamples = RI; 
     dmf->pcmSamples = (PCMSample *)malloc(dmf->totalPCMSamples * sizeof(PCMSample));
@@ -564,7 +564,7 @@ void loadPCMSamplesData(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
 
 } 
 
-PCMSample loadPCMSample(uint8_t **fBuff, uint32_t *pos)
+static PCMSample loadPCMSample(uint8_t **fBuff, uint32_t *pos)
 {
     PCMSample sample; 
 
@@ -689,13 +689,13 @@ void freeDMF(DMFContents *dmf)
     free(dmf->pcmSamples);
 }
 
-const char *getFilenameExt(const char *fname) 
+char *getFilenameExt(const char *fname) 
 {
-    const char* dot = strrchr(fname, '.');
+    char *dot = strrchr(fname, '.');
     if (!dot || dot == fname) 
     {
         return "";
     }
-    return dot + 1;
+    return dot;
 }
 

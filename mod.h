@@ -23,6 +23,11 @@ rows, only one effect column is allowed per channel, etc.
 
 #include "dmf.h"
 
+typedef struct CMD_Options {
+    uint8_t effects; // 0 == none; 1 == minimum; 2 == maximum 
+    bool allowDownsampling; 
+} CMD_Options;
+
 // ProTracker effects
 // An effect is represented with 12 bits, which is 3 groups of 4 bits: [e][x][y]. 
 // The effect code is [e] or [e][x], and the effect value is [x][y] or [y]. 
@@ -37,8 +42,20 @@ typedef enum PT_EFFECT {
     PT_SETSPEED=0xF0
 } PT_EFFECT; 
 
+// Error codes 
+typedef enum MOD_ERROR {
+    MOD_ERROR_NONE=0, MOD_ERROR_NOT_GAMEBOY, MOD_ERROR_TOO_MANY_PAT_MAT_ROWS, MOD_ERROR_NOT_64_ROW_PATTERN, 
+    MOD_ERROR_WAVE_DOWNSAMPLE, MOD_ERROR_EFFECT_VOLUME, MOD_ERROR_MULTIPLE_EFFECT 
+} MOD_ERROR; 
+
+// Error information used by multiple functions 
+typedef struct MODError {
+    MOD_ERROR errorCode;
+    char *errorInfo; 
+} MODError; 
+
 // Exports a DMFContents struct "dmfContents" to a .mod file "fname" using the options "options" 
-int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options);  
+MODError exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options);  
 
 #endif 
 

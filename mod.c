@@ -34,13 +34,15 @@ typedef struct MODChannelState
 
 #define PT_NOTE_VOLUMEMAX 64
 
-static int8_t initSamples(FILE *fout, Note **lowestNote, Note **highestNote); 
-static int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote);  
+MODError _exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options); 
+
+static MODError initSamples(FILE *fout, Note **lowestNote, Note **highestNote); 
+static MODError finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote);  
 static void exportSampleInfo(FILE *fout, int8_t ptSampleNumLow, int8_t ptSampleNumHigh, uint8_t indexLow, uint8_t indexHigh, int8_t finetune);
 
-static int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *state); 
+static MODError writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *state); 
 static uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue);
-static int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect); 
+static MODError checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect); 
 
 static void exportSampleData(FILE *fout);
 static void exportSampleDataHelper(FILE *fout, uint8_t ptSampleNum, uint8_t index); 
@@ -77,11 +79,49 @@ static Note *noteRangeStart;
 */
 static int8_t *sampleLength; 
 
+static int8_t totalPTSamples;
+
 static uint16_t proTrackerPeriodTable[5][12]; 
 
 static bool usingSetupPattern; // Whether to use a pattern at the start of the module to set up the initial tempo and other stuff. 
 
-int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options) 
+MODError exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options) 
+{
+    // TODO: This function will attempt to export to mod using several different combinations of 
+    //      options to find the best option that works for the dmf file 
+    MODError errorMsg = _exportMOD(fname, dmfContents, options); 
+    switch (errorMsg.errorCode) 
+    {
+        case MOD_ERROR_NONE:
+            printf("Done exporting to .mod!\n");
+            break;
+        case MOD_ERROR_NOT_GAMEBOY: 
+            printf("ERROR: Only the Game Boy system is currently supported. \n");
+            break;
+        case MOD_ERROR_TOO_MANY_PAT_MAT_ROWS: 
+            printf("ERROR: Too many rows of patterns in the pattern matrix. 64 is the maximum. (63 if using Setup Pattern.)\n");
+            break; 
+        case MOD_ERROR_NOT_64_ROW_PATTERN: 
+            printf("ERROR: Patterns must have 64 rows. \n");
+            printf("       A workaround for this issue is planned for a future update to dmf2mod.\n");
+            break;
+        case MOD_ERROR_WAVE_DOWNSAMPLE: 
+            printf("ERROR: Cannot use wavetable instrument #%s without loss of information.\n", errorMsg.errorInfo);
+            printf("       Try using the '--downsample' option.\n");
+            break; 
+        case MOD_ERROR_EFFECT_VOLUME: 
+            printf("ERROR: An effect and a volume change (or Note OFF) cannot both appear in the same row of the same channel.\n");
+            printf("       Try fixing this issue in Deflemask or use the '--effects=MIN' option.\n"); 
+            break; 
+        case MOD_ERROR_MULTIPLE_EFFECT: 
+            printf("ERROR: No more than one Note OFF, Volume Change, or Position Jump can appear in the same row of the same channel.\n");
+            break; 
+    }
+    free(errorMsg.errorInfo); 
+    return errorMsg; 
+}
+
+MODError _exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options) 
 {
     FILE *fout;
     dmf = dmfContents; // Allow any function in this file to access DMF contents w/o passing it as an argument.
@@ -92,11 +132,11 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
     ///////////////// EXPORT SONG NAME  
 
     #pragma region EXPORT SONG NAME 
-    if (strcmp(getFilenameExt(fname), "mod") != 0) 
+    if (strcmp(getFilenameExt(fname), ".mod") != 0) 
     {
-        char *fname2 = malloc(sizeof(fname) + 4*sizeof(char)); 
+        char *fname2 = malloc((sizeof(fname) + 4) * sizeof(char)); 
         strcpy(fname2, fname); 
-        strcpy(fname2, ".mod"); 
+        strcat(fname2, ".mod"); 
         printf("Exporting to %s.\n", fname2);
         fout = fopen(fname2, "wb"); // Add ".mod" extension if it wasn't specified in the command-line argument 
         free(fname2); 
@@ -111,21 +151,17 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
     
     if (dmf->sys.id != Systems[SYS_GAMEBOY].id) // If it's not a Game Boy 
     {
-        printf("ERROR: Only the Game Boy system is currently supported. \n");
-        return 1;
+        return (MODError){MOD_ERROR_NOT_GAMEBOY, NULL};
     }
 
-    if (dmf->moduleInfo.totalRowsInPatternMatrix + (int)usingSetupPattern > 128) // totalRowsInPatternMatrix is 1 more than it actually is 
+    if (dmf->moduleInfo.totalRowsInPatternMatrix + (int)usingSetupPattern > 64) // totalRowsInPatternMatrix is 1 more than it actually is 
     {
-        printf("ERROR: There must be 128 or fewer rows in the pattern matrix.\n"); 
-        return 1;
+        return (MODError){MOD_ERROR_TOO_MANY_PAT_MAT_ROWS, NULL};
     }
 
     if (dmf->moduleInfo.totalRowsPerPattern != 64) 
-    {
-        printf("ERROR: Patterns must have 64 rows. \n");
-        printf("       A workaround for this issue is planned for a future update to dmf2mod.\n"); 
-        return 1;
+    { 
+        return (MODError){MOD_ERROR_NOT_64_ROW_PATTERN, NULL};
     }
 
     // Print module name, truncating or padding with zeros as needed
@@ -149,8 +185,8 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
     printf("Exporting sample info...\n"); 
 
     Note *lowestNote, *highestNote; 
-    int8_t totalPTSamples = initSamples(fout, &lowestNote, &highestNote);
-    if (totalPTSamples == -1) 
+    MODError errorMsg = initSamples(fout, &lowestNote, &highestNote);
+    if (errorMsg.errorCode != MOD_ERROR_NONE) 
     {
         // An error occurred in initSamples
         free(lowestNote); 
@@ -158,7 +194,7 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
         free(noteRangeStart); 
         free(sampMap); 
         free(sampleLength); 
-        return 1; 
+        return errorMsg; 
     }
     free(lowestNote); 
     free(highestNote); 
@@ -191,15 +227,6 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
 
     fputc(dmf->moduleInfo.totalRowsInPatternMatrix + (int)usingSetupPattern, fout);   // Song length in patterns (not total number of patterns) 
     fputc(127, fout);                        // 0x7F - Useless byte that has to be here 
-
-    if (dmf->moduleInfo.totalRowsInPatternMatrix + (int)usingSetupPattern > 64) 
-    {
-        printf("ERROR: Too many rows of patterns in the pattern matrix. 64 is the maximum.\n");
-        free(noteRangeStart); 
-        free(sampMap); 
-        free(sampleLength);
-        return 1;
-    }
 
     // Pattern matrix (Each ProTracker pattern number is the same as its pattern matrix row number)
     for (uint8_t i = 0; i < dmf->moduleInfo.totalRowsInPatternMatrix + (int)usingSetupPattern; i++) 
@@ -339,13 +366,14 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
                     }
                 }
                 
-                if (writeProTrackerPatternRow(fout, &dmf->patternValues[chan][dmf->patternMatrixValues[chan][patMatRow]][patRow], &state[chan])) 
+                errorMsg = writeProTrackerPatternRow(fout, &dmf->patternValues[chan][dmf->patternMatrixValues[chan][patMatRow]][patRow], &state[chan]);
+                if (errorMsg.errorCode != MOD_ERROR_NONE) 
                 {
                     // Error occurred while writing the pattern row 
                     free(noteRangeStart); 
                     free(sampMap); 
                     free(sampleLength);
-                    return 1; 
+                    return errorMsg; 
                 }
             }
         }
@@ -367,19 +395,18 @@ int exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
     free(sampMap); 
     free(sampleLength);
 
-    printf("Done exporting to .mod!\n");
-
-    return 0; // Success 
+    return (MODError){MOD_ERROR_NONE, NULL}; // Success 
 }
 
 
-static int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *state) 
+static MODError writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelState *state) 
 {
     // Writes 4 bytes of pattern row information to the .mod file 
     uint16_t effect;
-    if (checkEffects(pat, state, &effect))
+    MODError errorMsg = checkEffects(pat, state, &effect); 
+    if (errorMsg.errorCode != MOD_ERROR_NONE)
     {
-        return 1; // An error occurred 
+        return errorMsg; // An error occurred 
     }
 
     if (pat->note.pitch == DMF_NOTE_EMPTY)  // No note is playing. Only handle effects.
@@ -482,10 +509,10 @@ static int writeProTrackerPatternRow(FILE *fout, PatternRow *pat, MODChannelStat
         state->notePlaying = true; 
     }
 
-   return 0; // Success 
+   return (MODError){MOD_ERROR_NONE, NULL}; // Success 
 }
 
-static int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
+static MODError checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
 {
     if (opt.effects == 2) // If using maximum amount of effects 
     {
@@ -500,9 +527,7 @@ static int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effec
                     Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
                     so it does not count.  
                 */
-                printf("ERROR: An effect and a volume change (or note OFF) cannot both appear in the same row of the same channel.\n");
-                printf("       Try fixing this issue in Deflemask or use the '--effects=MIN' option.\n"); 
-                return 1;
+                return (MODError){MOD_ERROR_EFFECT_VOLUME, NULL};
             }
             else // Only the volume changed 
             {
@@ -523,9 +548,7 @@ static int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effec
                     Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
                     so it does not count.  
                 */
-                printf("ERROR: An effect and a note OFF (or volume change) cannot both appear in the same row of the same channel.\n");
-                printf("       Try fixing this issue in Deflemask or use the '--effects=MIN' option.\n");
-                return 1;
+                return (MODError){MOD_ERROR_EFFECT_VOLUME, NULL};
             }
             else // No effects except the note OFF 
             {
@@ -565,15 +588,14 @@ static int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effec
                 Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
                 so it does not count.  
             */
-            printf("ERROR: No more than one Note OFF, Volume Change, or Position Jump can appear in the same row of the same channel.\n");
-            return 1;
+            return (MODError){MOD_ERROR_MULTIPLE_EFFECT, NULL};
         }
         else if (total_effects == 0)
         {
             *effect = PT_NOEFFECT_CODE; // No effect  
         } 
     }
-    return 0; // Success 
+    return (MODError){MOD_ERROR_NONE, NULL}; // Success 
 }
 
 static uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
@@ -661,7 +683,7 @@ static uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
     return ((uint16_t)ptEff << 4) | ptEffVal; 
 }
 
-static int8_t initSamples(FILE *fout, Note **lowestNote, Note **highestNote) 
+static MODError initSamples(FILE *fout, Note **lowestNote, Note **highestNote) 
 {
     // This function loops through all DMF pattern contents to find the highest and lowest notes 
     //  for each square wave duty cycle and each wavetable. It also finds which SQW duty cycles are 
@@ -806,7 +828,7 @@ static int8_t initSamples(FILE *fout, Note **lowestNote, Note **highestNote)
     return finalizeSampMap(fout, *lowestNote, *highestNote);  
 }
 
-static int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote) 
+static MODError finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote) 
 {
     // This function assigns ProTracker (PT) sample numbers and exports sample info 
 
@@ -858,9 +880,7 @@ static int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
                 // If between C-4 and B-6 (Deflemask tracker note format) and none of the above options work 
                 if (i >= 4 && !opt.allowDownsampling) // If on a wavetable instrument and can't downsample it 
                 {
-                    printf("ERROR: Cannot use wavetable instrument #%i without loss of information.\n", i - 4);
-                    printf("       Try using the '--downsample' option.\n");  
-                    return -1; 
+                    return (MODError){MOD_ERROR_WAVE_DOWNSAMPLE, itoa(i - 4, malloc(2 * sizeof(char)), 10)}; 
                 }
                 sampleLength[indexLow] = 16;
                 noteRangeStart[indexLow].octave = 3;
@@ -872,9 +892,7 @@ static int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
                 // If between C-5 and B-7 (Deflemask tracker note format)  
                 if (i >= 4 && !opt.allowDownsampling) // If on a wavetable instrument and can't downsample it
                 {
-                    printf("ERROR: Cannot use wavetable instrument #%i without loss of information.\n", i - 4);
-                    printf("       Try using the '--downsample' option.\n"); 
-                    return -1; 
+                    return (MODError){MOD_ERROR_WAVE_DOWNSAMPLE, itoa(i - 4, malloc(2 * sizeof(char)), 10)}; 
                 }
                 sampleLength[indexLow] = 8; 
                 noteRangeStart[indexLow].octave = 4;
@@ -885,9 +903,7 @@ static int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
                 // If between C#5 and C-8 (highest note) (Deflemask tracker note format):
                 if (i >= 4 && !opt.allowDownsampling) // If on a wavetable instrument and can't downsample it
                 {
-                    printf("ERROR: Cannot use wavetable instrument #%i without loss of information.\n", i - 4);
-                    printf("       Try using the '--downsample' option.\n"); 
-                    return -1; 
+                    return (MODError){MOD_ERROR_WAVE_DOWNSAMPLE, itoa(i - 4, malloc(2 * sizeof(char)), 10)}; 
                 }
                 finetune = 0; // One semitone up from B = C- ??? was 7
                 sampleLength[indexLow] = 8; 
@@ -911,9 +927,7 @@ static int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
             // If on a wavetable sample and cannot downsample it: 
             if (i >= 4 && !opt.allowDownsampling) 
             {
-                printf("ERROR: Cannot use wavetable instrument #%i without loss of information.\n", i - 4);
-                printf("       Try using the '--downsample' option.\n"); 
-                return -1; 
+                return (MODError){MOD_ERROR_WAVE_DOWNSAMPLE, itoa(i - 4, malloc(2 * sizeof(char)), 10)}; 
             }
 
             sampleLength[indexLow] = 64; // Low note range (C-2 to B-4)
@@ -955,7 +969,8 @@ static int8_t finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
         }
     }
 
-    return ptSampleNum - 1; // Success. Return number of PT samples that will be needed. (minus sample #0 which is special)  
+    totalPTSamples = ptSampleNum - 1; // Set the number of PT samples that will be needed. (minus sample #0 which is special) 
+    return (MODError){MOD_ERROR_NONE, NULL}; // Success   
 }
 
 static void exportSampleInfo(FILE *fout, int8_t ptSampleNumLow, int8_t ptSampleNumHigh, uint8_t indexLow, uint8_t indexHigh, int8_t finetune)

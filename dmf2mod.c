@@ -102,10 +102,11 @@ int main(int argc, char *argv[])
     }
     
     // Export to a .mod file 
-    if (exportMOD(fout, dmf, opt).errorCode != MOD_ERROR_NONE)
+    if (exportMOD(fout, dmf, opt).error.errorCode != MOD_ERROR_NONE)
     {
         // Error occurred during export 
         freeDMF(dmf);
+        cleanUp(); 
         free(fin); 
         free(fout); 
         exit(1);
@@ -113,9 +114,9 @@ int main(int argc, char *argv[])
 
     // Deallocate memory 
     freeDMF(dmf);
+    cleanUp(); 
     free(fin); 
     free(fout);
-
     return 0; 
 }
 

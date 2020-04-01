@@ -20,6 +20,7 @@ rows, only one effect column is allowed per channel, etc.
 #include <ctype.h>
 #include <stdbool.h>
 #include <math.h>
+#include <unistd.h>
 
 #include "dmf.h"
 
@@ -54,8 +55,29 @@ typedef struct MODError {
     char *errorInfo; 
 } MODError; 
 
+// Warning codes 
+typedef enum MOD_WARNING { 
+    MOD_WARNING_NONE=0, MOD_WARNING_PITCH_HIGH=1, MOD_WARNING_TEMPO_LOW=2, 
+    MOD_WARNING_TEMPO_HIGH=4, MOD_WARNING_EFFECT_IGNORED=8
+} MOD_WARNING; 
+
+// Warning information used by multiple functions 
+typedef struct MODWarning {
+    uint16_t warningCode, multipleWarnings; 
+} MODWarning; 
+
+typedef struct MODConversionStatus {
+    MODError error; 
+    MODWarning warnings; 
+} MODConversionStatus; 
+
 // Exports a DMFContents struct "dmfContents" to a .mod file "fname" using the options "options" 
-MODError exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options);  
+MODConversionStatus exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options);  
+
+void cleanUp(); 
+
+void printError();
+void printWarnings();
 
 #endif 
 

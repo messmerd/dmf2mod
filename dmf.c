@@ -5,7 +5,7 @@ Written by Dalton Messmer <messmer.dalton@gmail.com>.
 Provides functions for loading a .dmf file according to the 
 spec sheet at http://www.deflemask.com/DMF_SPECS.txt. 
 
-Requires zlib1.dll from the zlib compression library at https://zlib.net. 
+Requires the zlib compression library from https://zlib.net. 
 */
 
 #include "dmf.h"

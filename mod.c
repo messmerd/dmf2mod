@@ -30,9 +30,11 @@ typedef struct MODChannelState
     int16_t volume;
     bool notePlaying;
     bool onHighNoteRange;
+    bool needToSetVolume; 
 } MODChannelState;  
 
 #define PT_NOTE_VOLUMEMAX 64
+#define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 
 static void _exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options); 
 
@@ -82,7 +84,7 @@ static Note *noteRangeStart;
     If a certain SQW / WAVE sample is unused, then pitch = 0 and octave = 0. 
     The value of sampleLength is -1 if a PT sample is not needed for the given SQW / WAVE sample.
 */
-static int8_t *sampleLength; 
+static int16_t *sampleLength; 
 
 static int8_t totalPTSamples;
 
@@ -318,6 +320,7 @@ void _exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
         state[i].volume = PT_NOTE_VOLUMEMAX; // The max volume for a channel in PT 
         state[i].notePlaying = false; // Whether a note is currently playing on a channel 
         state[i].onHighNoteRange = false; // Whether a note is using the PT sample for the high note range. 
+        state[i].needToSetVolume = false; // Whether the volume needs to be set (can happen after sample changes). 
 
         stateJumpCopy[i] = state[i]; // Shallow copy, but it's ok since there are no pointers to anything. 
     }
@@ -357,6 +360,7 @@ void _exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
                     jumpDestination = -1; 
                 }
                 
+                #pragma region UPDATE_STATE 
                 // If a Position Jump command was found and it's not in a section skipped by another Position Jump:  
                 if (effectCode == DMF_POSJUMP && !stateSuspended) 
                 {
@@ -387,6 +391,7 @@ void _exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options)
                         state[chan].sampleChanged = true;
                     }
                 }
+                #pragma endregion
                 
                 if (writeProTrackerPatternRow(fout, &pat, &state[chan])) 
                 {
@@ -539,7 +544,7 @@ static int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effec
     if (opt.effects == 2) // If using maximum amount of effects 
     {
         *effect = getProTrackerEffect(pat->effectCode[0], pat->effectValue[0]); // Effects must be in first row 
-        if (pat->volume != state->volume && pat->volume != DMF_NOTE_NOVOLUME) // If the note volume changes 
+        if (pat->volume != state->volume && pat->volume != DMF_NOTE_NOVOLUME && (pat->note.pitch >= 1 && pat->note.pitch <= 12)) // If the note volume changes, and the volume is connected to a note  
         {
             if (*effect != PT_NOEFFECT_CODE) // If an effect is already being used    
             {
@@ -584,7 +589,7 @@ static int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effec
     {
         uint8_t total_effects = 0;
         int16_t volumeCopy = state->volume; // Save copy in case the volume change is canceled later 
-        if (pat->volume != state->volume && pat->volume != DMF_NOTE_NOVOLUME) // If the volume changed, we still want to handle that 
+        if (pat->volume != state->volume && pat->volume != DMF_NOTE_NOVOLUME && (pat->note.pitch >= 1 && pat->note.pitch <= 12)) // If the volume changed, we still want to handle that. Volume must be connected to a note.  
         {
             uint8_t newVolume = round(pat->volume / 15.0 * 65.0); // Convert DMF volume to PT volume 
             *effect = ((uint16_t)PT_SETVOLUME << 4) | newVolume; // ??? 
@@ -636,13 +641,21 @@ static uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
         case DMF_NOEFFECT:
             ptEff = PT_NOEFFECT; break; // ? 
         case DMF_ARP: 
-            ptEff = PT_ARP; break;
+            ptEff = PT_ARP; 
+            ptEffVal = effectValue; 
+            break;
         case DMF_PORTUP: 
-            ptEff = PT_PORTUP; break;
+            ptEff = PT_PORTUP; 
+            ptEffVal = effectValue; 
+            break;
         case DMF_PORTDOWN: 
-            ptEff = PT_PORTDOWN; break;
+            ptEff = PT_PORTDOWN; 
+            ptEffVal = effectValue; 
+            break;
         case DMF_PORT2NOTE:
-            ptEff = PT_PORT2NOTE; break;
+            ptEff = PT_PORT2NOTE; 
+            ptEffVal = effectValue; //CLAMP(effectValue + 6, 0x00, 0xFF); // ??? 
+            break;
         case DMF_VIBRATO:
             ptEff = PT_VIBRATO; break;
         case DMF_PORT2NOTEVOLSLIDE:
@@ -680,8 +693,9 @@ static uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
         case DMF_SETSAMPLESBANK:
             break; // ? 
         case DMF_NOTECUT:
-            ptEff = PT_CUTSAMPLE; break; // ?
-            ptEffVal = 0; // Cut note immediately  
+            ptEff = PT_CUTSAMPLE; 
+            ptEffVal = effectValue; // ??
+            break;   
         case DMF_NOTEDELAY:
             ptEff = PT_DELAYSAMPLE; break; // ? 
         case DMF_SYNCSIGNAL:
@@ -717,7 +731,7 @@ static int initSamples(FILE *fout, Note **lowestNote, Note **highestNote)
 
     // See declaration of sampMap for more information. 
     sampMap = (int8_t *)calloc(8 + dmf->totalWavetables * 2, sizeof(int8_t));
-    sampleLength = (int8_t *)calloc(8 + dmf->totalWavetables * 2, sizeof(int8_t));
+    sampleLength = (int16_t *)calloc(8 + dmf->totalWavetables * 2, sizeof(int16_t));
 
     // The current square wave duty cycle, note volume, and other information that the 
     //      tracker stores for each channel while playing a tracker file.
@@ -731,6 +745,7 @@ static int initSamples(FILE *fout, Note **lowestNote, Note **highestNote)
         state[i].volume = PT_NOTE_VOLUMEMAX; // The max volume for a channel in PT 
         state[i].notePlaying = false; // Whether a note is currently playing on a channel 
         state[i].onHighNoteRange = false; // Whether a note is using the PT sample for the high note range. 
+        state[i].needToSetVolume = false; // Whether the volume needs to be set (can happen after sample changes).
 
         stateJumpCopy[i] = state[i]; // Shallow copy, but it's ok since there are no pointers to anything. 
     }
@@ -908,6 +923,7 @@ static int finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
                     setErrorMsg(MOD_ERROR_WAVE_DOWNSAMPLE, itoa_p(i - 4, calloc(2, sizeof(char))));
                     return 1; 
                 }
+                
                 sampleLength[indexLow] = 16;
                 noteRangeStart[indexLow].octave = 3;
                 noteRangeStart[indexLow].pitch = DMF_NOTE_C;
@@ -921,6 +937,7 @@ static int finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
                     setErrorMsg(MOD_ERROR_WAVE_DOWNSAMPLE, itoa_p(i - 4, calloc(2, sizeof(char))));
                     return 1; 
                 }
+                
                 sampleLength[indexLow] = 8; 
                 noteRangeStart[indexLow].octave = 4;
                 noteRangeStart[indexLow].pitch = DMF_NOTE_C;
@@ -933,6 +950,7 @@ static int finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
                     setErrorMsg(MOD_ERROR_WAVE_DOWNSAMPLE, itoa_p(i - 4, calloc(2, sizeof(char))));
                     return 1; 
                 }
+                
                 finetune = 0; // One semitone up from B = C- ??? was 7
                 sampleLength[indexLow] = 8; 
                 noteRangeStart[indexLow].octave = 4;
@@ -941,6 +959,13 @@ static int finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
 
             if (sampleLength[i] != 0) // If one of the above options worked 
             {
+                if (i >= 4) // If on a wavetable instrument 
+                {
+                    // Double wavetable sample length.
+                    // This is lower all wavetable instruments by one octave, which should make it 
+                    // match the octave for wavetable instruments in Deflemask 
+                    sampleLength[indexLow] *= 2; 
+                } 
                 sampMap[indexLow] = ptSampleNum; // Assign PT sample number to this square wave / WAVE sample  
                 sampMap[indexHigh] = -1; // No PT sample needed for this square wave / WAVE sample (high note range) 
                 exportSampleInfo(fout, ptSampleNum, -1, indexLow, indexHigh, finetune); 
@@ -952,15 +977,25 @@ static int finalizeSampMap(FILE *fout, Note *lowestNote, Note *highestNote)
         // If none of the options above worked. Both high note range and low note range are needed.
         if (sampleLength[i] == 0)   
         {
+            sampleLength[indexLow] = 64; // Low note range (C-2 to B-4)
+            sampleLength[indexHigh] = 8; // High note range (C-5 to B-7) 
+
             // If on a wavetable sample and cannot downsample it: 
             if (i >= 4 && !opt.allowDownsampling) 
             {
-                setErrorMsg(MOD_ERROR_WAVE_DOWNSAMPLE, itoa_p(i - 4, calloc(2, sizeof(char))));
-                return 1; 
+                if (!opt.allowDownsampling) 
+                {
+                    setErrorMsg(MOD_ERROR_WAVE_DOWNSAMPLE, itoa_p(i - 4, calloc(2, sizeof(char))));
+                    return 1; 
+                }
+
+                // Double wavetable sample length.
+                // This is lower all wavetable instruments by one octave, which should make it 
+                // match the octave for wavetable instruments in Deflemask 
+                sampleLength[indexLow] *= 2;
+                sampleLength[indexHigh] *= 2;
             }
 
-            sampleLength[indexLow] = 64; // Low note range (C-2 to B-4)
-            sampleLength[indexHigh] = 8; // High note range (C-5 to B-7) 
             noteRangeStart[indexLow].octave = 1;
             noteRangeStart[indexLow].pitch = DMF_NOTE_C;
             noteRangeStart[indexHigh].octave = 4;
@@ -1132,11 +1167,15 @@ static void exportSampleDataHelper(FILE *fout, uint8_t ptSampleNum, uint8_t inde
         for (int i = 0; i < sampleLength[index]; i++) 
         {
             // Note: For the Deflemask Game Boy system, all wavetable lengths are 32. 
-            if (sampleLength[index] == 64) // Double length 
+            if (sampleLength[index] == 128) // Quadruple length 
             {
                 // Convert from DMF sample values (0 to 15) to PT sample values (-128 to 127). 
-                fputc((int8_t)((dmf->wavetableValues[waveNum][i / 2] / 15.f * 255.f) - 128.f), fout); 
-                //fputc((int8_t)((dmf->wavetableValues[waveNum][i / 2] / 15.f * 255.f) - 128.f), fout); 
+                fputc((int8_t)((dmf->wavetableValues[waveNum][i / 4] / 15.f * 255.f) - 128.f), fout); 
+            }
+            else if (sampleLength[index] == 64) // Double length 
+            {
+                // Convert from DMF sample values (0 to 15) to PT sample values (-128 to 127). 
+                fputc((int8_t)((dmf->wavetableValues[waveNum][i / 2] / 15.f * 255.f) - 128.f), fout);  
             }
             else if (sampleLength[index] == 32) // Normal length 
             {

@@ -148,6 +148,19 @@ const System Systems[10] = {
 
 int importDMF(const char *fname, DMFContents *dmf)
 {
+    // Initialize pointers to NULL so that they don't break free() if the import fails: 
+    dmf->visualInfo.songName = NULL; 
+    dmf->visualInfo.songAuthor = NULL; 
+    dmf->patternValues = NULL; 
+    dmf->channelEffectsColumnsCount = NULL; 
+    dmf->patternMatrixValues = NULL; 
+    dmf->patternMatrixMaxValues = NULL; 
+    dmf->instruments = NULL; 
+    dmf->wavetableSizes = NULL; 
+    dmf->wavetableValues = NULL; 
+    dmf->channelEffectsColumnsCount = NULL; 
+    dmf->pcmSamples = NULL; 
+
     printf("Starting to import the DMF file...\n");
 
     if (strcmp(getFilenameExt(fname), ".dmf") != 0)
@@ -651,45 +664,70 @@ int8_t noteCompare(const Note *n1, const Note *n2)
 
 void freeDMF(DMFContents *dmf) 
 {
+    // Free memory allocated for members of DMFContents struct  
     free(dmf->visualInfo.songName); 
-    free(dmf->visualInfo.songAuthor);  
-    for (int channel = 0; channel < dmf->sys.channels; channel++)
+    free(dmf->visualInfo.songAuthor); 
+
+    if (dmf->patternMatrixMaxValues != NULL) 
     {
-        for (int i = 0; i < dmf->patternMatrixMaxValues[channel] + 1; i++)
+        for (int channel = 0; channel < dmf->sys.channels; channel++)
         {
-            free(dmf->patternValues[channel][i]); 
+            for (int i = 0; i < dmf->patternMatrixMaxValues[channel] + 1; i++)
+            {
+                free(dmf->patternValues[channel][i]); 
+            }
+            free(dmf->patternValues[channel]); 
         }
-        free(dmf->patternValues[channel]); 
+        free(dmf->patternValues); 
     }
-    free(dmf->patternValues); 
-    for (int i = 0; i < dmf->sys.channels; i++)
+
+    if (dmf->patternMatrixValues != NULL) 
     {
-        free(dmf->patternMatrixValues[i]); 
+        for (int i = 0; i < dmf->sys.channels; i++)
+        {
+            free(dmf->patternMatrixValues[i]); 
+        }
+        free(dmf->patternMatrixValues); 
     }
-    free(dmf->patternMatrixValues); 
+    
     free(dmf->patternMatrixMaxValues); 
-    for (int i = 0; i < dmf->totalInstruments; i++) 
+
+    if (dmf->instruments != NULL) 
     {
-        free(dmf->instruments[i].name); 
-        free(dmf->instruments[i].stdArpEnvValue); 
-        free(dmf->instruments[i].stdDutyNoiseEnvValue); 
-        free(dmf->instruments[i].stdVolEnvValue); 
-        free(dmf->instruments[i].stdWavetableEnvValue);     
+        for (int i = 0; i < dmf->totalInstruments; i++) 
+        {
+            free(dmf->instruments[i].name); 
+            free(dmf->instruments[i].stdArpEnvValue); 
+            free(dmf->instruments[i].stdDutyNoiseEnvValue); 
+            free(dmf->instruments[i].stdVolEnvValue); 
+            free(dmf->instruments[i].stdWavetableEnvValue);     
+        }
+        free(dmf->instruments); 
     }
-    free(dmf->instruments); 
+    
     free(dmf->wavetableSizes); 
-    for (int i = 0; i < dmf->totalWavetables; i++)
+    if (dmf->wavetableValues != NULL) 
     {
-        free(dmf->wavetableValues[i]);
+        for (int i = 0; i < dmf->totalWavetables; i++)
+        {
+            free(dmf->wavetableValues[i]);
+        }
+        free(dmf->wavetableValues); 
     }
-    free(dmf->wavetableValues); 
+    
     free(dmf->channelEffectsColumnsCount); 
-    for (int sample = 0; sample < dmf->totalPCMSamples; sample++) 
+
+    if (dmf->pcmSamples != NULL) 
     {
-        free(dmf->pcmSamples[sample].name); 
-        free(dmf->pcmSamples[sample].data); 
+        for (int sample = 0; sample < dmf->totalPCMSamples; sample++) 
+        {
+            free(dmf->pcmSamples[sample].name); 
+            free(dmf->pcmSamples[sample].data); 
+        }
+        free(dmf->pcmSamples);
     }
-    free(dmf->pcmSamples);
+
+    free(dmf); 
 }
 
 char *getFilenameExt(const char *fname) 

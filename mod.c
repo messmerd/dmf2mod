@@ -1157,7 +1157,7 @@ static void exportSampleDataHelper(FILE *fout, uint8_t ptSampleNum, uint8_t inde
             }
             else
             {
-                fputc(-128, fout); // low 
+                fputc(-10, fout); // low 
             }
         }
     } 

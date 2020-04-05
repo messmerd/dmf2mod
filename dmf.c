@@ -10,6 +10,8 @@ Requires the zlib compression library from https://zlib.net.
 
 #include "dmf.h"
 
+#define DMF_FILE_VERSION 24 // 0x18 - Only DefleMask v0.12.0 files are supported 
+
 #define RI (*fBuff)[(*pos)++] // Read buffer at position pos, then Increment pos  
 
 #if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(__CYGWIN__)
@@ -146,11 +148,11 @@ const System Systems[10] = {
 
 int importDMF(const char *fname, DMFContents *dmf)
 {
-    printf("Starting to import the .dmf file...\n");
+    printf("Starting to import the DMF file...\n");
 
     if (strcmp(getFilenameExt(fname), ".dmf") != 0)
     {
-        printf("Input file has the wrong file extension.\nPlease use a .dmf file.\n");
+        printf("ERROR: Input file has the wrong file extension.\nPlease use a .dmf file.\n");
         return 1;
     }
 
@@ -158,7 +160,7 @@ int importDMF(const char *fname, DMFContents *dmf)
 
     if (fptr == NULL) 
     {
-        printf("File not found.\n");
+        printf("ERROR: File not found.\n");
         return 1; 
     }
 
@@ -166,13 +168,9 @@ int importDMF(const char *fname, DMFContents *dmf)
     int ret = inf(fptr, &fBuff); 
     fclose(fptr);
 
-    if (ret == Z_OK)
+    if (ret != Z_OK)
     {
-        printf("Successful inflation.\n");
-    }
-    else
-    {
-        printf("Unsuccessful inflation.\n");
+        printf("ERROR: Unsuccessful DMF inflation.\n");
         zerr(ret);
         return 1;
     }   
@@ -186,12 +184,17 @@ int importDMF(const char *fname, DMFContents *dmf)
     
     if (strncmp(header, ".DelekDefleMask.", 16) != 0)
     {
-        printf("Format header is bad.\n");
-        exit(1); 
+        printf("ERROR: DMF format header is bad.\n");
+        return 1;  
     }
 
     dmf->dmfFileVersion = fBuff[pos++]; 
-    printf(".dmf File Version: %u or 0x%x\n", dmf->dmfFileVersion, dmf->dmfFileVersion); 
+    if (dmf->dmfFileVersion != DMF_FILE_VERSION) 
+    {
+        printf("ERROR: Deflemask file version must be %u (0x%x). The given DMF file is version %u (0x%x).\n", DMF_FILE_VERSION, DMF_FILE_VERSION, dmf->dmfFileVersion, dmf->dmfFileVersion); 
+        printf("       You can convert older DMF files to the correct version by opening them in DefleMask v0.12.0 and then saving them.\n");
+        return 1; 
+    }
 
     ///////////////// SYSTEM SET  
     dmf->sys = getSystem(fBuff[pos++]); 
@@ -227,7 +230,7 @@ int importDMF(const char *fname, DMFContents *dmf)
 
     free(fBuff);
 
-    printf("Done loading .dmf file!\n\n");
+    printf("Done loading DMF file!\n\n");
 
     return 0; // Success 
 }
@@ -280,7 +283,7 @@ static void loadModuleInfo(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf)
     dmf->moduleInfo.totalRowsPerPattern |= RI << 24;
     dmf->moduleInfo.totalRowsInPatternMatrix = RI; 
 
-    // NOTE: In previous .dmp versions, arpeggio tick speed is stored here!!! 
+    // NOTE: In previous .dmf versions, arpeggio tick speed is stored here!!! 
 }
 
 static void loadPatternMatrixValues(uint8_t **fBuff, uint32_t *pos, DMFContents *dmf) 

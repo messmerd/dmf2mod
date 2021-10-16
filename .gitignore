@@ -1,3 +1,7 @@
 *.exe
 *.o
 dmf2mod
+*.mod
+*.dmf2mod
+*.mp3
+*.wav

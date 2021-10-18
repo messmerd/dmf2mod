@@ -71,8 +71,8 @@ typedef struct MODConversionStatus {
     MODWarning warnings; 
 } MODConversionStatus; 
 
-// Exports a DMFContents struct "dmfContents" to a .mod file "fname" using the options "options" 
-MODConversionStatus exportMOD(char *fname, DMFContents *dmfContents, CMD_Options options);  
+// Exports a DMF object "dmf" to a MOD file "fname" using the options "options"
+MODConversionStatus exportMOD(char *fname, DMF *dmfObj, CMD_Options options);
 
 void cleanUp(); 
 

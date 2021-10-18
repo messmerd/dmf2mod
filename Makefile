@@ -1,5 +1,5 @@
 OBJS	= dmf2mod.o mod.o dmf.o
-SOURCE	= dmf2mod.c mod.c dmf.c
+SOURCE	= dmf2mod.cpp mod.cpp dmf.cpp
 HEADER	= mod.h dmf.h zconf.h zlib.h
 
 ifeq ($(OS),Windows_NT)
@@ -8,23 +8,23 @@ else
 OUT	= dmf2mod
 endif
 
-CC	 = gcc
+CC	 = g++
 FLAGS	 = -Izlib -g -c -Wall -Wno-unknown-pragmas
 LFLAGS	 = -lm zlib/libz.a
 
 all: $(OBJS)
 	$(CC) -g $(OBJS) -o $(OUT) $(LFLAGS)
 
-dmf2mod.o: dmf2mod.c
-	$(CC) $(FLAGS) dmf2mod.c 
+dmf2mod.o: dmf2mod.cpp
+	$(CC) $(FLAGS) dmf2mod.cpp
 
-mod.o: mod.c
-	$(CC) $(FLAGS) mod.c 
+mod.o: mod.cpp
+	$(CC) $(FLAGS) mod.cpp
 
-dmf.o: dmf.c
-	$(CC) $(FLAGS) dmf.c 
+dmf.o: dmf.cpp
+	$(CC) $(FLAGS) dmf.cpp
 
 
 clean:
-	$(RM) $(OUT) $(OBJS) 
+	$(RM) $(OUT) $(OBJS)
 

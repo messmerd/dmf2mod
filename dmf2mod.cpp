@@ -1,24 +1,23 @@
 /*
 dmf2mod.c
-Written by Dalton Messmer <messmer.dalton@gmail.com>. 
+Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-Converts Deflemask's Game Boy .dmf files to ProTracker's .mod files.
+Converts Deflemask's Game Boy DMF files to ProTracker's MOD files.
 
-Usage: .\dmf2mod.exe output_file.mod deflemask_game_boy_file.dmf [options]
+Usage: dmf2mod output_file.mod deflemask_game_boy_file.dmf [options]
 */
 
-#include <stdio.h> 
+#include <stdio.h>
 #include <stdlib.h>
-#include <math.h> 
+#include <math.h>
 #include <string.h>
-#include <stdbool.h>
 
-#include "dmf.h" 
-#include "mod.h" 
+#include "dmf.h"
+#include "mod.h"
 
-#define DMF2MOD_VERSION "0.1" 
+#define DMF2MOD_VERSION "0.1"
 
-void printHelp(); 
+void printHelp(char *argv[]);
 
 int main(int argc, char *argv[])
 {
@@ -57,7 +56,7 @@ int main(int argc, char *argv[])
             {
                 if (strncmp(argv[i], "--effects=", 10) == 0) 
                 {
-                    if (strcmp(&(argv[i][10]), "MAX") == 0 || strcmp(&(argv[i][10]), "max") == 0) 
+                    if (strcmp(&(argv[i][10]), "MAX") == 0 || strcmp(&(argv[i][10]), "max") == 0)
                     {
                         opt.effects = 2; // Maximum effects 
                     }
@@ -65,9 +64,9 @@ int main(int argc, char *argv[])
                     {
                         opt.effects = 1; // Minimum effects 
                     }
-                    else 
+                    else
                     {
-                        printf("ERROR: For the option '--effects=', the acceptable values are: MIN and MAX.\n"); 
+                        printf("ERROR: For the option '--effects=', the acceptable values are: MIN and MAX.\n");
                         free(fin);
                         free(fout);
                         exit(1);
@@ -79,7 +78,7 @@ int main(int argc, char *argv[])
                 }
                 else 
                 {
-                    printf("ERROR: Unrecognized option '%s'\n", argv[i]); 
+                    printf("ERROR: Unrecognized option '%s'\n", argv[i]);
                     free(fin);
                     free(fout);
                     exit(1);
@@ -88,51 +87,53 @@ int main(int argc, char *argv[])
         }
     } 
     
-    // Allocate space for storing the contents of one .dmf file 
-    DMFContents *dmf = malloc(1 * sizeof(DMFContents));  
+    // Import the DMF file
+    DMF *dmf = new DMF(fin);
 
-    // Import the inflated .dmf file
-    if (importDMF(fin, dmf)) 
+    if (dmf->Status() == IMPORT_ERROR_FAIL)
     {
-        // Error occurred during import  
-        freeDMF(dmf);
-        free(fin); 
+        // Error occurred during import
+        delete dmf;
+        dmf = nullptr;
+        free(fin);
         free(fout);
         exit(1);
     }
     
-    // Export to a .mod file 
+    // Export to a .mod file
     if (exportMOD(fout, dmf, opt).error.errorCode != MOD_ERROR_NONE)
     {
-        // Error occurred during export 
-        freeDMF(dmf);
-        cleanUp(); 
-        free(fin); 
-        free(fout); 
+        // Error occurred during export
+        delete dmf;
+        dmf = nullptr;
+        cleanUp();
+        free(fin);
+        free(fout);
         exit(1);
-    } 
+    }
 
     // Deallocate memory 
-    freeDMF(dmf);
-    cleanUp(); 
-    free(fin); 
+    delete dmf;
+    dmf = nullptr;
+    cleanUp();
+    free(fin);
     free(fout);
-    return 0; 
+    return 0;
 }
 
 void printHelp(char *argv[])
 {
     printf("dmf2mod v%s \nCreated by Dalton Messmer <messmer.dalton@gmail.com>\n", DMF2MOD_VERSION);
     
-    char *filename_ext = getFilenameExt(argv[0]); 
+    const char *filename_ext = GetFilenameExt(argv[0]);
     if (strcmp(filename_ext, ".exe") != 0) // If filename extension is not .exe
     {
-        filename_ext = strrchr(argv[0], '\0'); // Pointer to empty string 
+        filename_ext = strrchr(argv[0], '\0'); // Pointer to empty string
     }
 
     printf("Usage: dmf2mod%s output_file.mod deflemask_game_boy_file.dmf [options]\n", filename_ext);
     printf("Options:\n");
     printf("%-25s%s\n","--downsample", "Allow wavetables to lose information through downsampling.");
-    printf("%-25s%s\n", "--effects=<MIN, MAX>", "The number of ProTracker effects to use. (Default: MAX)"); 
-    printf("%-25s%s\n", "--help", "Display this help message.");   
+    printf("%-25s%s\n", "--effects=<MIN, MAX>", "The number of ProTracker effects to use. (Default: MAX)");
+    printf("%-25s%s\n", "--help", "Display this help message.");
 }

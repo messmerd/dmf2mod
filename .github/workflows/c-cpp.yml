@@ -13,6 +13,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+      with:
+       submodules: 'recursive'
     - name: build script
       run: .\build.bat
     - name: run
@@ -24,6 +26,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+      with:
+       submodules: 'recursive'
     - name: permissions
       run: sudo chmod +x ./build
     - name: build script
@@ -37,6 +41,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+      with:
+       submodules: 'recursive'
     - name: permissions
       run: sudo chmod +x ./build
     - name: build script

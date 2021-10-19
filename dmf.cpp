@@ -142,9 +142,9 @@ const System DMF::m_Systems[] = {
 	[SYS_YM2151] = {.id = 0x08, .name = "YM2151", .channels = 13}
 };
 
-DMF::DMF(const char* filename)
+DMF::DMF()
 {
-    // Initialize pointers to NULL to prevent segfault when freeing memory if the import fails:
+    // Initialize pointers to nullptr to prevent segfault when freeing memory if the import fails:
     m_VisualInfo.songName = nullptr;
     m_VisualInfo.songAuthor = nullptr;
     m_PatternValues = nullptr;
@@ -158,102 +158,14 @@ DMF::DMF(const char* filename)
     m_PCMSamples = nullptr;
 
     m_ImportError = IMPORT_ERROR_FAIL;
-
-    std::cout << "Starting to import the DMF file..." << std::endl;
-
-    if (strcmp(GetFilenameExt(filename), ".dmf") != 0)
-    {
-        std::cout << "ERROR: Input file has the wrong file extension." << std::endl << "Please use a .dmf file." << std::endl;
-        m_ImportError = IMPORT_ERROR_FAIL;
-        return;
-    }
-
-    std::cout << "DMF Filename:" << filename << ".\n";
-    FILE *fptr = fopen(filename, "rb");
-
-    if (fptr) 
-    {
-        std::cout << "ERROR: File not found." << std::endl;
-        m_ImportError = IMPORT_ERROR_FAIL;
-        return;
-    }
-
-    uint8_t *fBuff;
-    int ret = inf(fptr, &fBuff);
-    fclose(fptr);
-
-    if (ret != Z_OK)
-    {
-        std::cout << "ERROR: Unsuccessful DMF inflation." << std::endl;
-        zerr(ret);
-        m_ImportError = IMPORT_ERROR_FAIL;
-        return;
-    }   
-    
-    uint32_t pos = 0; // The current buffer position 
-
-    ///////////////// FORMAT FLAGS  
-    char header[17]; 
-    strncpy(header, (char *)fBuff, 16); 
-    header[16] = '\0';
-    pos += 16; 
-    
-    if (strncmp(header, ".DelekDefleMask.", 16) != 0)
-    {
-        std::cout << "ERROR: DMF format header is bad.\n" << std::endl;
-        m_ImportError = IMPORT_ERROR_FAIL;
-        return;
-    }
-
-    m_DMFFileVersion = fBuff[pos++]; 
-    if (m_DMFFileVersion != DMF_FILE_VERSION)
-    {
-        printf("ERROR: Deflemask file version must be %u (0x%x). The given DMF file is version %u (0x%x).\n", DMF_FILE_VERSION, DMF_FILE_VERSION, m_DMFFileVersion, m_DMFFileVersion); 
-        printf("       You can convert older DMF files to the correct version by opening them in DefleMask v0.12.0 and then saving them.\n");
-        m_ImportError = IMPORT_ERROR_FAIL;
-        return;
-    }
-
-    ///////////////// SYSTEM SET
-    m_System = GetSystem(fBuff[pos++]);
-    printf("System: %s (channels: %u)\n", m_System.name, m_System.channels);
-
-    ///////////////// VISUAL INFORMATION 
-    LoadVisualInfo(&fBuff, &pos);
-    printf("Loaded visual information.\n");
-
-    ///////////////// MODULE INFORMATION 
-    LoadModuleInfo(&fBuff, &pos);
-    printf("Loaded module.\n");
-
-    ///////////////// PATTERN MATRIX VALUES 
-    LoadPatternMatrixValues(&fBuff, &pos); 
-    printf("Loaded pattern matrix values.\n");
-
-    ///////////////// INSTRUMENTS DATA 
-    LoadInstrumentsData(&fBuff, &pos);
-    printf("Loaded instruments.\n");
-
-    ///////////////// WAVETABLES DATA
-    LoadWavetablesData(&fBuff, &pos); 
-    printf("Loaded %u wavetable(s).\n", m_TotalWavetables);
-
-    ///////////////// PATTERNS DATA
-    LoadPatternsData(&fBuff, &pos);
-    printf("Loaded patterns.\n");
-
-    ///////////////// PCM SAMPLES DATA
-    LoadPCMSamplesData(&fBuff, &pos);
-    printf("Loaded PCM Samples.\n");
-
-    free(fBuff);
-
-    printf("Done loading DMF file!\n\n");
-
-    m_ImportError = IMPORT_ERROR_SUCCESS;
 }
 
 DMF::~DMF()
+{
+    CleanUp();
+}
+
+void DMF::CleanUp()
 {
     // Free memory allocated for members
     delete[] m_VisualInfo.songName;
@@ -331,12 +243,120 @@ DMF::~DMF()
             delete[] m_PCMSamples[sample].data;
         }
         delete[] m_PCMSamples;
+        m_PCMSamples = nullptr;
     }
+}
+
+bool DMF::Load(const char* filename)
+{
+    CleanUp();
+    m_ImportError = IMPORT_ERROR_FAIL;
+
+    std::cout << "Starting to import the DMF file..." << std::endl;
+
+    if (ModuleUtils::GetType(filename) != ModuleType::DMF)
+    {
+        std::cout << "ERROR: Input file has the wrong file extension." << std::endl << "Please use a DMF file." << std::endl;
+        m_ImportError = IMPORT_ERROR_FAIL;
+        return true;
+    }
+
+    std::cout << "DMF Filename:" << filename << ".\n";
+    FILE *fptr = fopen(filename, "rb");
+
+    if (fptr) 
+    {
+        std::cout << "ERROR: File not found." << std::endl;
+        m_ImportError = IMPORT_ERROR_FAIL;
+        return true;
+    }
+
+    uint8_t *fBuff;
+    int ret = inf(fptr, &fBuff);
+    fclose(fptr);
+
+    if (ret != Z_OK)
+    {
+        std::cout << "ERROR: Unsuccessful DMF inflation." << std::endl;
+        zerr(ret);
+        m_ImportError = IMPORT_ERROR_FAIL;
+        return true;
+    }   
+    
+    uint32_t pos = 0; // The current buffer position 
+
+    ///////////////// FORMAT FLAGS  
+    char header[17]; 
+    strncpy(header, (char *)fBuff, 16); 
+    header[16] = '\0';
+    pos += 16; 
+    
+    if (strncmp(header, ".DelekDefleMask.", 16) != 0)
+    {
+        std::cout << "ERROR: DMF format header is bad.\n" << std::endl;
+        m_ImportError = IMPORT_ERROR_FAIL;
+        return true;
+    }
+
+    m_DMFFileVersion = fBuff[pos++]; 
+    if (m_DMFFileVersion != DMF_FILE_VERSION)
+    {
+        printf("ERROR: Deflemask file version must be %u (0x%x). The given DMF file is version %u (0x%x).\n", DMF_FILE_VERSION, DMF_FILE_VERSION, m_DMFFileVersion, m_DMFFileVersion); 
+        printf("       You can convert older DMF files to the correct version by opening them in DefleMask v0.12.0 and then saving them.\n");
+        m_ImportError = IMPORT_ERROR_FAIL;
+        return true;
+    }
+
+    ///////////////// SYSTEM SET
+    m_System = GetSystem(fBuff[pos++]);
+    printf("System: %s (channels: %u)\n", m_System.name, m_System.channels);
+
+    ///////////////// VISUAL INFORMATION 
+    LoadVisualInfo(&fBuff, &pos);
+    printf("Loaded visual information.\n");
+
+    ///////////////// MODULE INFORMATION 
+    LoadModuleInfo(&fBuff, &pos);
+    printf("Loaded module.\n");
+
+    ///////////////// PATTERN MATRIX VALUES 
+    LoadPatternMatrixValues(&fBuff, &pos); 
+    printf("Loaded pattern matrix values.\n");
+
+    ///////////////// INSTRUMENTS DATA 
+    LoadInstrumentsData(&fBuff, &pos);
+    printf("Loaded instruments.\n");
+
+    ///////////////// WAVETABLES DATA
+    LoadWavetablesData(&fBuff, &pos); 
+    printf("Loaded %u wavetable(s).\n", m_TotalWavetables);
+
+    ///////////////// PATTERNS DATA
+    LoadPatternsData(&fBuff, &pos);
+    printf("Loaded patterns.\n");
+
+    ///////////////// PCM SAMPLES DATA
+    LoadPCMSamplesData(&fBuff, &pos);
+    printf("Loaded PCM Samples.\n");
+
+    free(fBuff);
+
+    printf("Done loading DMF file!\n\n");
+
+    m_ImportError = IMPORT_ERROR_SUCCESS;
+    return false;
+}
+
+bool DMF::Save(const char* filename)
+{
+    // Not implemented
+    return false;
 }
 
 System DMF::GetSystem(uint8_t systemByte)
 {
-    for (int i = 1; i < 10; i++)
+    const size_t size = sizeof(m_Systems) / sizeof(m_Systems[0]);
+    for (int i = 1; i < size; i++)
     {
         if (m_Systems[i].id == systemByte)
             return m_Systems[i];
@@ -760,15 +780,5 @@ int8_t NoteCompare(const Note *n1, const Note *n2)
 int8_t NoteCompare(const Note* n1, const Note n2)
 {
     return NoteCompare(n1, &n2);
-}
-
-const char* GetFilenameExt(const char *fname)
-{
-    const char *dot = strrchr(fname, '.');
-    if (!dot || dot == fname)
-    {
-        return nullptr;
-    }
-    return dot;
 }
 

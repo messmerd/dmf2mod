@@ -87,10 +87,20 @@ int main(int argc, char *argv[])
         }
     } 
     
-    // Import the DMF file
-    DMF *dmf = new DMF(fin);
+    const ModuleType inType = ModuleUtils::GetType(fin);
+    if (inType != ModuleType::DMF)
+    {
+        printf("ERROR: Input is not a DMF file.\n");
+        free(fin);
+        free(fout);
+        exit(1);
+    }
 
-    if (dmf->Status() == IMPORT_ERROR_FAIL)
+    const ModuleType outType = ModuleUtils::GetType(fout);
+
+    // Import the DMF file
+    DMF* dmf = Module::Create<DMF>();
+    if (dmf->Load(fin))
     {
         // Error occurred during import
         delete dmf;
@@ -100,7 +110,7 @@ int main(int argc, char *argv[])
         exit(1);
     }
     
-    // Export to a .mod file
+    // Export to a MOD file
     if (exportMOD(fout, dmf, opt).error.errorCode != MOD_ERROR_NONE)
     {
         // Error occurred during export
@@ -125,13 +135,13 @@ void printHelp(char *argv[])
 {
     printf("dmf2mod v%s \nCreated by Dalton Messmer <messmer.dalton@gmail.com>\n", DMF2MOD_VERSION);
     
-    const char *filename_ext = GetFilenameExt(argv[0]);
-    if (strcmp(filename_ext, ".exe") != 0) // If filename extension is not .exe
+    const char *ext = GetFilenameExt(argv[0]);
+    if (strcmp(ext, ".exe") != 0) // If filename extension is not .exe
     {
-        filename_ext = strrchr(argv[0], '\0'); // Pointer to empty string
+        ext = strrchr(argv[0], '\0'); // Pointer to empty string
     }
 
-    printf("Usage: dmf2mod%s output_file.mod deflemask_game_boy_file.dmf [options]\n", filename_ext);
+    printf("Usage: dmf2mod%s output_file.mod deflemask_game_boy_file.dmf [options]\n", ext);
     printf("Options:\n");
     printf("%-25s%s\n","--downsample", "Allow wavetables to lose information through downsampling.");
     printf("%-25s%s\n", "--effects=<MIN, MAX>", "The number of ProTracker effects to use. (Default: MAX)");

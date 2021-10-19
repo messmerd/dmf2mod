@@ -1,6 +1,6 @@
-OBJS	= dmf2mod.o mod.o dmf.o
-SOURCE	= dmf2mod.cpp mod.cpp dmf.cpp
-HEADER	= mod.h dmf.h zconf.h zlib.h
+OBJS	= dmf2mod.o module.o mod.o dmf.o
+SOURCE	= dmf2mod.cpp module.cpp mod.cpp dmf.cpp
+HEADER	= module.h modules.h mod.h dmf.h zconf.h zlib.h
 
 ifeq ($(OS),Windows_NT)
 OUT	= dmf2mod.exe
@@ -17,6 +17,9 @@ all: $(OBJS)
 
 dmf2mod.o: dmf2mod.cpp
 	$(CC) $(FLAGS) dmf2mod.cpp
+
+module.o module.cpp
+	$(CC) $(FLAGS) module.cpp
 
 mod.o: mod.cpp
 	$(CC) $(FLAGS) mod.cpp

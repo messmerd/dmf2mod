@@ -10,8 +10,7 @@ Several limitations apply in order to export. For example, the
 rows, only one effect column is allowed per channel, etc.  
 */
 
-#ifndef __MOD_H__
-#define __MOD_H__ 
+#pragma once
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -78,7 +77,4 @@ void cleanUp();
 
 void printError();
 void printWarnings();
-
-#endif 
-
 

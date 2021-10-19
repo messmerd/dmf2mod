@@ -10,6 +10,8 @@ Requires the zlib compression library from https://zlib.net.
 
 #pragma once
 
+#include "module.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -52,7 +54,11 @@ typedef enum DMF_EFFECT {
 
 // Deflemask effects exclusive to the Game Boy system:
 typedef enum DMF_GAMEBOY_EFFECT {
-    DMF_SETWAVE=0x10, DMF_SETNOISEPOLYCOUNTERMODE=0x11, DMF_SETDUTYCYCLE=0x12, DMF_SETSWEEPTIMESHIFT=0x13, DMF_SETSWEEPDIR=0x14
+    DMF_SETWAVE=0x10, 
+    DMF_SETNOISEPOLYCOUNTERMODE=0x11, 
+    DMF_SETDUTYCYCLE=0x12, 
+    DMF_SETSWEEPTIMESHIFT=0x13, 
+    DMF_SETSWEEPDIR=0x14
 } DMF_GAMEBOY_EFFECT;
 
 // To do: Add enums for effects exclusive to the rest of Deflemask's systems. 
@@ -144,14 +150,23 @@ typedef enum DMF_IMPORT_ERROR
 } DMF_IMPORT_ERROR;
 
 
-
-class DMF
+class DMF : public Module
 {
 public:
-    DMF(const char* filename);
-    ~DMF();
-
     static System SYSTEMS(SYSTEM_TYPE systemType) { return m_Systems[systemType]; }
+
+    DMF();
+    ~DMF();
+    void CleanUp();
+
+    bool Load(const char* filename) override;
+    bool Save(const char* filename) override;
+
+    ModuleType GetType() override { return ModuleType::DMF; }
+
+    std::string GetName() { return m_VisualInfo.songName; }
+
+    ////////////
 
     DMF_IMPORT_ERROR Status() { return m_ImportError; };
 
@@ -185,9 +200,6 @@ private:
     PCMSample LoadPCMSample(uint8_t **fBuff, uint32_t *pos);
 
 private:
-
-    static const System m_Systems[];
-
     uint8_t         m_DMFFileVersion;
     System          m_System;
     VisualInfo      m_VisualInfo;
@@ -204,7 +216,10 @@ private:
     uint8_t         m_TotalPCMSamples;
     PCMSample*      m_PCMSamples;
 
+    static const System m_Systems[];
+
     DMF_IMPORT_ERROR m_ImportError;
+
 };
 
 // Deflemask Game Boy channels 
@@ -212,12 +227,8 @@ typedef enum DMF_GAMEBOY_CHANNEL {
     DMF_GAMEBOY_SQW1=0, DMF_GAMEBOY_SQW2=1, DMF_GAMEBOY_WAVE=2, DMF_GAMEBOY_NOISE=3
 } DMF_GAMEBOY_CHANNEL; 
 
-// Imports the .dmf file "fname" and stores it in the dmf object
-int importDMF(const char *fname, DMF *dmf); 
-
 // Compares notes n1 and n2. Returns 1 if n1 > n2, -1 if n1 < n2, and 0 if n1 == n2. 
 int8_t NoteCompare(const Note *n1, const Note *n2);
 
 int8_t NoteCompare(const Note* n1, const Note n2);
 
-const char* GetFilenameExt(const char *fname); 

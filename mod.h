@@ -70,6 +70,32 @@ typedef struct MODConversionStatus {
     MODWarning warnings; 
 } MODConversionStatus; 
 
+
+class MOD : public Module, public ModuleStatic<MOD>
+{
+public:
+    MOD() {};
+    ~MOD() {};
+    void CleanUp() {};
+
+    bool Load(const char* filename) override
+    {
+        return false;
+    }
+
+    bool Save(const char* filename) override
+    {
+        return false;
+    }
+
+    ModuleType GetType() override { return _Type; }
+
+    std::string GetName() { return ""; }
+
+private:
+    const ModuleType _Type = ModuleType::MOD;
+};
+
 // Exports a DMF object "dmf" to a MOD file "fname" using the options "options"
 MODConversionStatus exportMOD(char *fname, DMF *dmfObj, CMD_Options options);
 

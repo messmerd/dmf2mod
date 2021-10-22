@@ -12,8 +12,7 @@ Usage: dmf2mod output_file.mod deflemask_game_boy_file.dmf [options]
 #include <math.h>
 #include <string.h>
 
-#include "dmf.h"
-#include "mod.h"
+#include "modules.h"
 
 #define DMF2MOD_VERSION "0.1"
 

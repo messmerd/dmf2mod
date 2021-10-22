@@ -10,7 +10,7 @@ Requires the zlib compression library from https://zlib.net.
 
 #pragma once
 
-#include "module.h"
+#include "modules.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -150,7 +150,7 @@ typedef enum DMF_IMPORT_ERROR
 } DMF_IMPORT_ERROR;
 
 
-class DMF : public Module
+class DMF : public Module, public ModuleStatic<DMF>
 {
 public:
     static System SYSTEMS(SYSTEM_TYPE systemType) { return m_Systems[systemType]; }
@@ -162,7 +162,7 @@ public:
     bool Load(const char* filename) override;
     bool Save(const char* filename) override;
 
-    ModuleType GetType() override { return ModuleType::DMF; }
+    ModuleType GetType() override { return _Type; }
 
     std::string GetName() { return m_VisualInfo.songName; }
 
@@ -220,6 +220,7 @@ private:
 
     DMF_IMPORT_ERROR m_ImportError;
 
+    const ModuleType _Type = ModuleType::DMF;
 };
 
 // Deflemask Game Boy channels 

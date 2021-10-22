@@ -356,7 +356,7 @@ bool DMF::Save(const char* filename)
 System DMF::GetSystem(uint8_t systemByte)
 {
     const size_t size = sizeof(m_Systems) / sizeof(m_Systems[0]);
-    for (int i = 1; i < size; i++)
+    for (unsigned i = 1; i < size; i++)
     {
         if (m_Systems[i].id == systemByte)
             return m_Systems[i];

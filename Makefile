@@ -21,8 +21,8 @@ dmf2mod.o: dmf2mod.cpp
 converter.o: converter.cpp
 	$(CC) $(FLAGS) converter.cpp
 
-module.o: module.cpp
-	$(CC) $(FLAGS) module.cpp
+modules.o: modules.cpp
+	$(CC) $(FLAGS) modules.cpp
 
 mod.o: mod.cpp
 	$(CC) $(FLAGS) mod.cpp

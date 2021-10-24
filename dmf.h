@@ -219,8 +219,6 @@ private:
     static const System m_Systems[];
 
     DMF_IMPORT_ERROR m_ImportError;
-
-    const ModuleType _Type = ModuleType::DMF;
 };
 
 // Deflemask Game Boy channels 

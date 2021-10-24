@@ -91,9 +91,6 @@ public:
     ModuleType GetType() override { return _Type; }
 
     std::string GetName() { return ""; }
-
-private:
-    const ModuleType _Type = ModuleType::MOD;
 };
 
 // Exports a DMF object "dmf" to a MOD file "fname" using the options "options"

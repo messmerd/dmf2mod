@@ -70,7 +70,6 @@ typedef struct MODConversionStatus {
     MODWarning warnings; 
 } MODConversionStatus; 
 
-
 class MOD : public Module, public ModuleStatic<MOD>
 {
 public:
@@ -90,13 +89,15 @@ public:
 
     ModuleType GetType() override { return _Type; }
 
-    std::string GetName() { return ""; }
+    std::string GetFileExtension() override { return _FileExtension; }
+
+    std::string GetName() override { return ""; }
 };
 
 // Exports a DMF object "dmf" to a MOD file "fname" using the options "options"
 MODConversionStatus exportMOD(char *fname, DMF *dmfObj, CMD_Options options);
 
-void cleanUp(); 
+void cleanUp();
 
 void printError();
 void printWarnings();

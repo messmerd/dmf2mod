@@ -20,6 +20,8 @@ void printHelp(char *argv[]);
 
 int main(int argc, char *argv[])
 {
+    ModuleUtils::RegisterModules();
+
     char *fin, *fout; 
     CMD_Options opt;
     opt.effects = 2; // By default, use maximum number of effects (2).  

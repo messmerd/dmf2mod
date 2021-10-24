@@ -149,7 +149,6 @@ typedef enum DMF_IMPORT_ERROR
     IMPORT_ERROR_FAIL=1
 } DMF_IMPORT_ERROR;
 
-
 class DMF : public Module, public ModuleStatic<DMF>
 {
 public:
@@ -163,6 +162,8 @@ public:
     bool Save(const char* filename) override;
 
     ModuleType GetType() override { return _Type; }
+
+    std::string GetFileExtension() override { return _FileExtension; }
 
     std::string GetName() { return m_VisualInfo.songName; }
 

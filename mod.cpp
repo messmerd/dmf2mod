@@ -17,6 +17,8 @@ rows, only one effect column is allowed per channel, etc.
 
 #include "mod.h"
 
+REGISTER_MODULE(MOD, ModuleType::MOD, "mod")
+
 // The current square wave duty cycle, note volume, and other information that the 
 //      tracker stores for each channel while playing a tracker file.
 typedef struct MODChannelState

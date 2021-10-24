@@ -7,25 +7,60 @@
 // Forward declarations
 enum class ModuleType;
 class Module;
+class ModuleUtils;
+struct ConversionOptions;
 
-extern std::map<ModuleType, std::function<Module*(void)>> G_ModuleTypeCreateFunctionMap;
-
-// Class containing miscellaneous Module-related static methods
-class ModuleUtils
-{
-public:
-    static ModuleType GetType(const char* filename);
-
-};
+// Helper macro for setting a module class's info
+#define REGISTER_MODULE(moduleClass, enumType, fileExt) \
+template<> ModuleType ModuleStatic<moduleClass>::_Type = enumType; \
+template<> std::string ModuleStatic<moduleClass>::_FileExtension = fileExt;
 
 // CRTP so each class derived from Module can have its own static type variable and static creation
 template<typename T>
 class ModuleStatic
 {
-public:
+protected:
+    friend class ModuleUtils;
+
+    static ModuleType _Type;
     static Module* CreateStatic() { return new T; }
-    const static ModuleType _Type;
+    static std::string _FileExtension; // Without dot
 };
+
+
+// Class containing miscellaneous Module-related static methods
+class ModuleUtils
+{
+public:
+    static void RegisterModules();
+    static ModuleType GetType(const char* filename);
+    static ConversionOptions ParseArgs(char *argv[]);
+
+private:
+    friend class Module;
+
+    /*
+     * Registers a module in the registration maps
+     */
+    template <class T, 
+        class = typename std::enable_if<
+            std::is_base_of<Module, T>{} && 
+            std::is_base_of<ModuleStatic<T>, T>{}
+            >::type>
+    static void Register()
+    {
+        //static_assert(std::is_base_of<ModuleStatic, T>::value);
+        ModuleUtils::RegistrationMap[ModuleStatic<T>::_Type] = &ModuleStatic<T>::CreateStatic;
+        ModuleUtils::FileExtensionMap[T::_FileExtension] = T::_Type;
+    }
+
+    // Map which registers a module type enum value with the static create function associated with that module
+    static std::map<ModuleType, std::function<Module*(void)>> RegistrationMap;
+
+    // File extension to ModuleType map
+    static std::map<std::string, ModuleType> FileExtensionMap;
+};
+
 
 // Base class for all module types (DMF, MOD, XM, etc.)
 class Module
@@ -39,8 +74,8 @@ public:
      */
     static Module* Create(ModuleType type)
     {
-        const auto iter = G_ModuleTypeCreateFunctionMap.find(type);
-        if (iter != G_ModuleTypeCreateFunctionMap.end())
+        const auto iter = ModuleUtils::RegistrationMap.find(type);
+        if (iter != ModuleUtils::RegistrationMap.end())
         {
             // Call ModuleStatic<T>::CreateStatic()
             return iter->second();
@@ -99,11 +134,21 @@ public:
     virtual ModuleType GetType() = 0;
 
     /*
+     * Get the file extension of the module (does not include dot)
+     */
+    virtual std::string GetFileExtension() = 0;
+
+    /*
      * Get the name of the module
      */
     virtual std::string GetName() = 0;
 };
 
+
+struct ConversionOptions
+{
+    ModuleType OutputType;
+};
 
 /*
 class Converter

@@ -10,6 +10,8 @@ Requires the zlib compression library from https://zlib.net.
 
 #include "dmf.h"
 
+REGISTER_MODULE(DMF, ModuleType::DMF, "dmf")
+
 // For inflating .dmf files so that they can be read 
 #include "zlib.h"
 #include "zconf.h"

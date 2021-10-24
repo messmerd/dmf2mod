@@ -1,5 +1,5 @@
 
-//#include "converter.h"
+#include "converter.h"
 #include "modules.h"
 
 #include <map>
@@ -7,9 +7,11 @@
 #include <any>
 #include <type_traits>
 #include <cstring>
-//#include <typeindex>
 
-extern std::map<std::string, ModuleType> G_ExtensionModuleMap;
+// Initialize module registration maps
+std::map<ModuleType, std::function<Module*(void)>> ModuleUtils::RegistrationMap = {};
+std::map<std::string, ModuleType> ModuleUtils::FileExtensionMap = {};
+
 
 ModuleType ModuleUtils::GetType(const char* filename)
 {
@@ -17,8 +19,8 @@ ModuleType ModuleUtils::GetType(const char* filename)
     if (!ext)
         return ModuleType::NONE;
     
-    const auto iter = G_ExtensionModuleMap.find(ext);
-    if (iter != G_ExtensionModuleMap.end())
+    const auto iter = ModuleUtils::FileExtensionMap.find(ext);
+    if (iter != ModuleUtils::FileExtensionMap.end())
         return iter->second;
 
     return ModuleType::NONE;
@@ -31,6 +33,6 @@ const char* GetFilenameExt(const char *filename)
     {
         return nullptr;
     }
-    return dot;
+    return dot + 1;
 }
 

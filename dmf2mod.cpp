@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
     CMD_Options opt;
     opt.effects = 2; // By default, use maximum number of effects (2).  
     opt.allowDownsampling = false; // By default, wavetables cannot lose information through downsampling   
-
+    
     if (argc == 1) 
     {
         printHelp(argv); 

@@ -8,8 +8,9 @@
 // Registers all modules by associating their ModuleType enum values with their corresponding module classes
 void ModuleUtils::RegisterModules()
 {
-    ModuleUtils::RegistrationMap.clear();
-    ModuleUtils::FileExtensionMap.clear();
+    RegistrationMap.clear();
+    FileExtensionMap.clear();
+    ConversionOptionsRegistrationMap.clear();
 
     Register<DMF>();
     Register<MOD>();

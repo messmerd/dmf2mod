@@ -222,6 +222,17 @@ private:
     DMF_IMPORT_ERROR m_ImportError;
 };
 
+class DMFConversionOptions : public ConversionOptions, public ConversionOptionsStatic<DMFConversionOptions>
+{
+public:
+    DMFConversionOptions()
+    {
+        OutputFile = "";
+    }
+
+    ModuleType GetType() override { return _Type; }
+};
+
 // Deflemask Game Boy channels 
 typedef enum DMF_GAMEBOY_CHANNEL {
     DMF_GAMEBOY_SQW1=0, DMF_GAMEBOY_SQW2=1, DMF_GAMEBOY_WAVE=2, DMF_GAMEBOY_NOISE=3

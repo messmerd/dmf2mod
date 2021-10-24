@@ -8,23 +8,59 @@
 enum class ModuleType;
 class Module;
 class ModuleUtils;
-struct ConversionOptions;
+class ConversionOptions;
 
 // Helper macro for setting a module class's info
-#define REGISTER_MODULE(moduleClass, enumType, fileExt) \
-template<> ModuleType ModuleStatic<moduleClass>::_Type = enumType; \
-template<> std::string ModuleStatic<moduleClass>::_FileExtension = fileExt;
+#define REGISTER_MODULE(moduleClass, optionsClass, enumType, fileExt) \
+template<> const ModuleType ModuleStatic<moduleClass>::_Type = enumType; \
+template<> const std::string ModuleStatic<moduleClass>::_FileExtension = fileExt; \
+template<> const std::function<ConversionOptions*(void)> ModuleStatic<moduleClass>::_CreateConversionOptionsStatic = &ConversionOptionsStatic<optionsClass>::CreateStatic; \
+template<> const ModuleType ConversionOptionsStatic<optionsClass>::_Type = enumType;
+
 
 // CRTP so each class derived from Module can have its own static type variable and static creation
 template<typename T>
 class ModuleStatic
 {
+public:
+    friend class ModuleUtils;
+    friend class Module;
+    friend class ConversionOptions;
+
+    /*
+     * Returns the ModuleType enum value
+     */
+    static ModuleType Type() { return _Type; }
+
+    /*
+     * Returns the file name extension (not including the dot)
+     */
+    static std::string FileExtension() { return _FileExtension; }
+
+protected:
+    ModuleStatic() {};
+    
+    const static ModuleType _Type;
+    static Module* CreateStatic() { return new T; }
+    const static std::function<ConversionOptions*(void)> _CreateConversionOptionsStatic;
+    const static std::string _FileExtension; // Without dot
+};
+
+
+// CRTP so each class derived from ConversionOptions can have its own static creation
+template <typename T>
+class ConversionOptionsStatic
+{
+public:
+    static ConversionOptions* CreateStatic() { return new T; }
+
 protected:
     friend class ModuleUtils;
-
-    static ModuleType _Type;
-    static Module* CreateStatic() { return new T; }
-    static std::string _FileExtension; // Without dot
+    friend class Module;
+    ConversionOptionsStatic() {};
+    
+    const static ModuleType _Type;
+    static ModuleType GetOutputType() { return _Type; }
 };
 
 
@@ -34,13 +70,15 @@ class ModuleUtils
 public:
     static void RegisterModules();
     static ModuleType GetType(const char* filename);
-    static ConversionOptions ParseArgs(char *argv[]);
+    static ConversionOptions* ParseArgs(char *argv[]);
 
 private:
     friend class Module;
+    friend class ConversionOptions;
 
     /*
      * Registers a module in the registration maps
+     * TODO: Need to also check whether the ConversionOptionsStatic<T> specialization exists
      */
     template <class T, 
         class = typename std::enable_if<
@@ -49,9 +87,10 @@ private:
             >::type>
     static void Register()
     {
-        //static_assert(std::is_base_of<ModuleStatic, T>::value);
-        ModuleUtils::RegistrationMap[ModuleStatic<T>::_Type] = &ModuleStatic<T>::CreateStatic;
-        ModuleUtils::FileExtensionMap[T::_FileExtension] = T::_Type;
+        RegistrationMap[T::_Type] = &T::CreateStatic;
+        FileExtensionMap[T::_FileExtension] = T::_Type;
+
+        ConversionOptionsRegistrationMap[T::_Type] = T::_CreateConversionOptionsStatic;
     }
 
     // Map which registers a module type enum value with the static create function associated with that module
@@ -59,6 +98,9 @@ private:
 
     // File extension to ModuleType map
     static std::map<std::string, ModuleType> FileExtensionMap;
+
+    // Map which registers a module type enum value with the static conversion option create function associated with that module
+    static std::map<ModuleType, std::function<ConversionOptions*(void)>> ConversionOptionsRegistrationMap;
 };
 
 
@@ -98,20 +140,6 @@ public:
     }
 
     /*
-     * Returns the ModuleType enum value associated with the specified module type
-     */
-    template <class T, 
-        class = typename std::enable_if<
-            std::is_base_of<Module, T>{} && 
-            std::is_base_of<ModuleStatic<T>, T>{}
-            >::type>
-    static ModuleType Type()
-    {
-        // Type<T>() is enabled only if T is a derived class of both Module and ModuleStatic<T>
-        return ModuleStatic<T>::_Type;
-    }
-
-    /*
      * Load the specified module file
      * Returns true upon failure
      */
@@ -126,7 +154,17 @@ public:
     /*
      * Cast a Module pointer to a pointer of a derived type
      */
-    template<typename T> T* Cast() { return reinterpret_cast<T*>(this); }
+    template <class T, 
+        class = typename std::enable_if<
+            std::is_base_of<Module, T>{} && 
+            std::is_base_of<ModuleStatic<T>, T>{}
+            >::type>
+    T* Cast() 
+    {
+        T* ptr = reinterpret_cast<T*>(this);
+        //static_assert(ptr);
+        return ptr;
+    }
     
     /*
      * Get a ModuleType enum value representing the type of the module
@@ -145,10 +183,49 @@ public:
 };
 
 
-struct ConversionOptions
+class ConversionOptions
 {
-    ModuleType OutputType;
+public:
+    /*
+     * Dynamically create a new ConversionOptions object for the desired module type
+     */
+    template <class moduleClass, 
+        class = typename std::enable_if<
+            std::is_base_of<Module, moduleClass>{} && 
+            std::is_base_of<ModuleStatic<moduleClass>, moduleClass>{}
+            >::type>
+    static ConversionOptions* Create()
+    {
+        // Create<T>() is only enabled if T is a derived class of both Module and ModuleStatic<T>
+        return ModuleStatic<moduleClass>::_CreateConversionOptionsStatic();
+    }
+
+    /*
+     * Dynamically create a new module using the ModuleType enum to specify the desired module type
+     * If nullptr is returned, the module type is probably not registered
+     */
+    static ConversionOptions* Create(ModuleType type)
+    {
+        const auto iter = ModuleUtils::ConversionOptionsRegistrationMap.find(type);
+        if (iter != ModuleUtils::ConversionOptionsRegistrationMap.end())
+        {
+            // Call ConversionOptionsStatic<T>::CreateStatic()
+            return iter->second();
+        }
+        return nullptr;
+    }
+
+    /*
+     * Get a ModuleType enum value representing the type of the conversion option's module
+     */
+    virtual ModuleType GetType() = 0;
+
+    std::string OutputFile = "";
+
+protected:
+    bool ParseArgs(std::vector<std::string>& args);
 };
+
 
 /*
 class Converter

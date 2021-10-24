@@ -94,6 +94,18 @@ public:
     std::string GetName() override { return ""; }
 };
 
+class MODConversionOptions : public ConversionOptions, public ConversionOptionsStatic<MODConversionOptions>
+{
+public:
+    MODConversionOptions()
+    {
+        OutputFile = "";
+    }
+
+    ModuleType GetType() override { return _Type; }
+};
+
+
 // Exports a DMF object "dmf" to a MOD file "fname" using the options "options"
 MODConversionStatus exportMOD(char *fname, DMF *dmfObj, CMD_Options options);
 

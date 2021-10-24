@@ -1,4 +1,4 @@
-
+#define DEFINE_ALL_TEMPLATES
 #include "converter.h"
 #include "modules.h"
 
@@ -11,7 +11,7 @@
 // Initialize module registration maps
 std::map<ModuleType, std::function<Module*(void)>> ModuleUtils::RegistrationMap = {};
 std::map<std::string, ModuleType> ModuleUtils::FileExtensionMap = {};
-
+std::map<ModuleType, std::function<ConversionOptions*(void)>> ModuleUtils::ConversionOptionsRegistrationMap = {};
 
 ModuleType ModuleUtils::GetType(const char* filename)
 {

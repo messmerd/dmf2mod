@@ -14,10 +14,15 @@ int main(int argc, char *argv[])
     ModuleUtils::RegisterModules();
 
     InputOutput io;
-    ConversionOptions* options = ModuleUtils::ParseArgs(argc, argv, io);
+    ConversionOptions* options;
 
-    if (!options)
+    bool failure = ModuleUtils::ParseArgs(argc, argv, io, options);
+    if (failure)
         return 1;
+
+    // A help message was printed or some other action that doesn't require conversion
+    if (!options)
+        return 0;
 
     // Import the input file
     Module* input = Module::Create(io.InputType);

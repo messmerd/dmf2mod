@@ -14,12 +14,13 @@ std::map<ModuleType, std::function<Module*(void)>> ModuleUtils::RegistrationMap 
 std::map<std::string, ModuleType> ModuleUtils::FileExtensionMap = {};
 std::map<ModuleType, std::function<ConversionOptions*(void)>> ModuleUtils::ConversionOptionsRegistrationMap = {};
 
-ConversionOptions* ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo)
+bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo, ConversionOptions*& options)
 {
     inputOutputInfo.InputFile = "";
     inputOutputInfo.InputType = ModuleType::NONE;
     inputOutputInfo.OutputFile = "";
     inputOutputInfo.OutputType = ModuleType::NONE;
+    options = nullptr;
 
     std::vector<std::string> args(argc, "");
     for (int i = 0; i < argc; i++)
@@ -29,28 +30,25 @@ ConversionOptions* ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& i
 
     if (argc == 1)
     {
-        PrintHelp(args[1], ModuleType::NONE);
-        return nullptr;
+        return PrintHelp(args[0], ModuleType::NONE);
     }
     else if (argc == 2)
     {
         if (args[1] == "--help")
         {
-            PrintHelp(args[1], ModuleType::NONE);
-            return nullptr;
+            return PrintHelp(args[0], ModuleType::NONE);
         }
         else
         {
             std::cout << "ERROR: Could not parse arguments." << std::endl;
-            return nullptr;
+            return true;
         }
     }
     else if (argc >= 3) // 3 is the minimum needed to perform a conversion
     {
         if (args[1] == "--help")
         {
-            PrintHelp(args[0], GetTypeFromFileExtension(args[2]));
-            return nullptr;
+            return PrintHelp(args[0], GetTypeFromFileExtension(args[2]));
         }
 
         std::string outputFile, inputFile;
@@ -65,13 +63,13 @@ ConversionOptions* ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& i
             else
             {
                 std::cout << "ERROR: Input file type '" << GetFileExtension(args[2]) << "' is unsupported." << std::endl;
-                return nullptr;
+                return true;
             }
         }
         else
         {
             std::cout << "ERROR: The input file '" << args[2] << "' could not be found." << std::endl;
-            return nullptr;
+            return true;
         }
         
         // Get output file
@@ -83,7 +81,7 @@ ConversionOptions* ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& i
                 if (dotPos == 0 || dotPos + 1 >= inputFile.size())
                 {
                     std::cout << "ERROR: The input file is invalid." << std::endl;
-                    return nullptr;
+                    return true;
                 }
 
                 // Construct output filename from the input filename
@@ -92,7 +90,7 @@ ConversionOptions* ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& i
             else
             {
                 std::cout << "ERROR: '" << args[1] << "' is not a valid module type." << std::endl;
-                return nullptr;
+                return true;
             }
         }
         else
@@ -101,7 +99,7 @@ ConversionOptions* ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& i
             if (GetTypeFromFileExtension(args[1]) == ModuleType::NONE)
             {
                 std::cout << "ERROR: '" << GetFileExtension(args[1]) << "' is not a valid module type." << std::endl;
-                return nullptr;
+                return true;
             }
         }
         
@@ -124,7 +122,7 @@ ConversionOptions* ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& i
             if (!forceFlagFound)
             {
                 std::cout << "ERROR: The output file '" << outputFile << "' already exists. Run with the '-f' flag to allow the file to be overwritten." << std::endl;
-                return nullptr;
+                return true;
             }
         }
 
@@ -136,7 +134,7 @@ ConversionOptions* ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& i
         if (inputOutputInfo.InputType == inputOutputInfo.OutputType)
         {
             std::cout << "The output file is the same type as the input file. No conversion necessary." << std::endl;
-            return nullptr;
+            return true;
         }
 
         // TODO: Check if a conversion between the two types is possible
@@ -148,25 +146,27 @@ ConversionOptions* ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& i
         args.erase(args.begin(), args.begin() + 3);
         argc -= 3;
 
-        ConversionOptions* options = ConversionOptions::Create(inputOutputInfo.OutputType);
-        if (!options)
+        ConversionOptions* optionsTemp = ConversionOptions::Create(inputOutputInfo.OutputType);
+        if (!optionsTemp)
         {
             std::cout << "ERROR: Failed to create ConversionOptions-derived object for the module type '" << GetFileExtension(outputFile) 
                 << "'. The module may not be properly registered with dmf2mod." << std::endl;
-            return nullptr;
+            return true;
         }
 
-        if (!args.empty() && options->ParseArgs(args))
+        if (!args.empty() && optionsTemp->ParseArgs(args))
         {
             // An error occurred while parsing the module-specific arguments
-            delete options;
-            return nullptr;
+            delete optionsTemp;
+            optionsTemp = nullptr;
+            return true;
         }
         
-        return options;
+        options = optionsTemp;
+        return false;
     }
 
-    return nullptr;
+    return true;
 }
 
 ModuleType ModuleUtils::GetTypeFromFilename(const std::string& filename)
@@ -204,7 +204,7 @@ std::string ModuleUtils::GetExtensionFromType(ModuleType moduleType)
     return "";
 }
 
-void ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType)
+bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType)
 {
     // If module-specific help was requested
     if (moduleType != ModuleType::NONE)
@@ -222,12 +222,12 @@ void ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType
                 std::cout << "ERROR: Failed to create ConversionOptions-derived object for the module type '" << extension 
                     << "'. The module may not be properly registered with dmf2mod." << std::endl;
             }
-            return;
+            return true;
         }
 
         options->PrintHelp();
         delete options;
-        return;
+        return false;
     }
 
     // Print generic help
@@ -235,19 +235,23 @@ void ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType
     std::cout << "dmf2mod v" << DMF2MOD_VERSION << std::endl;
     std::cout << "Created by Dalton Messmer <messmer.dalton@gmail.com>" << std::endl;
 
-    std::string ext = "." + GetFileExtension(executable);
+    /*
+    std::string ext = std::string(".") + GetFileExtension(executable);
     if (ext != ".exe")
         ext = "";
+    */
 
     std::cout.setf(std::ios_base::left);
-    std::cout << std::setw(25) << "Usage:" << "dmf2mod" << ext << " output.[ext] input.dmf [options]" << std::endl;
-    std::cout << std::setw(25) << "" << "dmf2mod" << ext << " [ext] input.dmf [options]" << std::endl;
+    std::cout << std::setw(25) << "Usage:" << "dmf2mod" << " output.[ext] input.dmf [options]" << std::endl;
+    std::cout << std::setw(25) << "" << "dmf2mod" << " [ext] input.dmf [options]" << std::endl;
 
     std::cout << "Options:" << std::endl;
 
     std::cout.setf(std::ios_base::left);
     std::cout << std::setw(25) << "-f, --force" << "Overwrite output file" << std::endl;
     std::cout << std::setw(25) << "--help [module type]" << "Display this help message. Provide module type (i.e. mod) for module-specific options." << std::endl;
+
+    return false;
 }
 
 bool FileExists(const std::string& filename)
@@ -259,6 +263,7 @@ bool FileExists(const std::string& filename)
 std::string GetFileExtension(const std::string& filename)
 {
     const size_t dotPos = filename.rfind('.');
+    std::cout << "dotPos="<< dotPos << "\n";
     if (dotPos == 0 || dotPos + 1 >= filename.size())
         return "";
 

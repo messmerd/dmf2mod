@@ -73,7 +73,7 @@ class ModuleUtils
 {
 public:
     static void RegisterModules();
-    static ConversionOptions* ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo);
+    static bool ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo, ConversionOptions*& options);
 
     static ModuleType GetTypeFromFilename(const std::string& filename);
     static ModuleType GetTypeFromFileExtension(const std::string& extension);
@@ -83,7 +83,7 @@ private:
     friend class Module;
     friend class ConversionOptions;
 
-    static void PrintHelp(const std::string& executable, ModuleType moduleType);
+    static bool PrintHelp(const std::string& executable, ModuleType moduleType);
 
     /*
      * Registers a module in the registration maps

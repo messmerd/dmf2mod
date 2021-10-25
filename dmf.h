@@ -230,7 +230,11 @@ public:
         OutputFile = "";
     }
 
+    ~DMFConversionOptions() {}
+
     ModuleType GetType() override { return _Type; }
+    bool ParseArgs(std::vector<std::string>& args) override { return false; } // DMF files don't have any conversion flags right now
+    void PrintHelp() override;
 };
 
 // Deflemask Game Boy channels 

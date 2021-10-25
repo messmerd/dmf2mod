@@ -100,14 +100,33 @@ public:
     MODConversionOptions()
     {
         OutputFile = "";
+        Downsample = false;
+        Effects = EffectsEnum::Max;
     }
 
+    ~MODConversionOptions() {}
+
     ModuleType GetType() override { return _Type; }
+    
+    enum class EffectsEnum
+    {
+        Min, Max
+    };
+
+    EffectsEnum GetEffects() { return Effects; }
+    bool GetDownsample() { return Downsample; }
+
+private:
+    bool ParseArgs(std::vector<std::string>& args) override;
+    void PrintHelp() override;
+
+    bool Downsample;
+    EffectsEnum Effects;
 };
 
 
-// Exports a DMF object "dmf" to a MOD file "fname" using the options "options"
-MODConversionStatus exportMOD(char *fname, DMF *dmfObj, CMD_Options options);
+// Exports a DMF object "dmfObj" to a MOD file "fname" using the options "options"
+MODConversionStatus exportMOD(const char* fname, DMF* dmfObj, ConversionOptions* options);
 
 void cleanUp();
 

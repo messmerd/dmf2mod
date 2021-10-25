@@ -3,12 +3,16 @@
 #include <string>
 #include <map>
 #include <functional>
+#include <vector>
+
+#define DMF2MOD_VERSION "0.1"
 
 // Forward declarations
 enum class ModuleType;
 class Module;
 class ModuleUtils;
 class ConversionOptions;
+struct InputOutput;
 
 // Helper macro for setting a module class's info
 #define REGISTER_MODULE(moduleClass, optionsClass, enumType, fileExt) \
@@ -69,12 +73,17 @@ class ModuleUtils
 {
 public:
     static void RegisterModules();
-    static ModuleType GetType(const char* filename);
-    static ConversionOptions* ParseArgs(char *argv[]);
+    static ConversionOptions* ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo);
 
+    static ModuleType GetTypeFromFilename(const std::string& filename);
+    static ModuleType GetTypeFromFileExtension(const std::string& extension);
+    static std::string GetExtensionFromType(ModuleType moduleType);
+    
 private:
     friend class Module;
     friend class ConversionOptions;
+
+    static void PrintHelp(const std::string& executable, ModuleType moduleType);
 
     /*
      * Registers a module in the registration maps
@@ -186,6 +195,9 @@ public:
 class ConversionOptions
 {
 public:
+
+    virtual ~ConversionOptions() {};
+
     /*
      * Dynamically create a new ConversionOptions object for the desired module type
      */
@@ -223,9 +235,20 @@ public:
     std::string OutputFile = "";
 
 protected:
-    bool ParseArgs(std::vector<std::string>& args);
+    friend class ModuleUtils;
+
+    virtual bool ParseArgs(std::vector<std::string>& args) = 0;
+    virtual void PrintHelp() = 0;
 };
 
+
+struct InputOutput
+{
+    std::string InputFile;
+    ModuleType InputType;
+    std::string OutputFile;
+    ModuleType OutputType;
+};
 
 /*
 class Converter
@@ -240,4 +263,5 @@ private:
 };
 */
 
-const char* GetFilenameExt(const char *filename);
+bool FileExists(const std::string& filename);
+std::string GetFileExtension(const std::string& filename);

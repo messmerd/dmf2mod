@@ -249,6 +249,11 @@ void DMF::CleanUp()
     }
 }
 
+void DMFConversionOptions::PrintHelp()
+{ 
+    std::cout << "DMF files have no conversion options." << std::endl;
+}
+
 bool DMF::Load(const char* filename)
 {
     CleanUp();
@@ -256,7 +261,7 @@ bool DMF::Load(const char* filename)
 
     std::cout << "Starting to import the DMF file..." << std::endl;
 
-    if (ModuleUtils::GetType(filename) != ModuleType::DMF)
+    if (ModuleUtils::GetTypeFromFilename(filename) != ModuleType::DMF)
     {
         std::cout << "ERROR: Input file has the wrong file extension." << std::endl << "Please use a DMF file." << std::endl;
         m_ImportError = IMPORT_ERROR_FAIL;

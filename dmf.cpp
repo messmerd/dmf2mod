@@ -269,75 +269,52 @@ bool DMF::Load(const char* filename)
         return true;
     }
 
-    std::cout << "DMF Filename: " << filename << ".\n";
+    std::cout << "DMF Filename: " << filename << std::endl;
 
-    /*
-    std::ifstream fin;
-    fin.open("corridor.dmf", std::ios_base::binary);
+    zstr::ifstream fin(filename, std::ios_base::binary);
     if (fin.fail())
     {
-        std::cout << "ERROR: DMF::Load new: Failed to open file." << std::endl;
-        m_ImportError = IMPORT_ERROR_FAIL;
-        return true;
-    }
-
-    fin.
-
-    fin.close();
-    */
-
-    FILE *fptr = fopen("corridor.dmf", "r");
-
-    if (fptr)
-    {
-        char* err = strerror(errno);
-        std::cout << "ERROR: DMF::Load: File not found. Error: " << err << "." << std::endl;
+        std::cout << "ERROR: Failed to open DMF file." << std::endl;
         m_ImportError = IMPORT_ERROR_FAIL;
         return true;
     }
 
     uint8_t *fBuff;
-    int ret = inf(fptr, &fBuff);
-    fclose(fptr);
-
-    if (ret != Z_OK)
-    {
-        std::cout << "ERROR: Unsuccessful DMF inflation." << std::endl;
-        zerr(ret);
-        m_ImportError = IMPORT_ERROR_FAIL;
-        return true;
-    }   
-    
     uint32_t pos = 0; // The current buffer position 
 
     ///////////////// FORMAT FLAGS  
-    char header[17]; 
-    strncpy(header, (char *)fBuff, 16);
-    header[16] = '\0';
-    pos += 16;
     
-    if (strncmp(header, ".DelekDefleMask.", 16) != 0)
+    char header[17];
+    fin.read(header, 16);
+    header[16] = '\0';
+    
+    if (std::string(header) != ".DelekDefleMask.")
     {
         std::cout << "ERROR: DMF format header is bad.\n" << std::endl;
         m_ImportError = IMPORT_ERROR_FAIL;
         return true;
     }
 
-    m_DMFFileVersion = fBuff[pos++];
+    std::cout << "Here\n";
+
+    m_DMFFileVersion = fin.get();
     if (m_DMFFileVersion != DMF_FILE_VERSION)
     {
-        printf("ERROR: Deflemask file version must be %u (0x%x). The given DMF file is version %u (0x%x).\n", DMF_FILE_VERSION, DMF_FILE_VERSION, m_DMFFileVersion, m_DMFFileVersion); 
-        printf("       You can convert older DMF files to the correct version by opening them in DefleMask v0.12.0 and then saving them.\n");
+        std::cout << "ERROR: Deflemask file version must be " << (int)DMF_FILE_VERSION << " (0x" << std::ios_base::hex << (int)DMF_FILE_VERSION << ")."
+            << "The given DMF file is version " << (int)DMF_FILE_VERSION << " (0x" << std::ios_base::hex << (int)DMF_FILE_VERSION << ")." << std::endl;
+            std::cout << "       You can convert older DMF files to the correct version by opening them in DefleMask v0.12.0 and then saving them." << std::endl;
         m_ImportError = IMPORT_ERROR_FAIL;
         return true;
     }
 
+    std::cout << "Here2\n";
+
     ///////////////// SYSTEM SET
-    m_System = GetSystem(fBuff[pos++]);
-    printf("System: %s (channels: %u)\n", m_System.name, m_System.channels);
+    m_System = GetSystem(fin.get());
+    std::cout << "System: " << m_System.name << " (channels: " << std::to_string(m_System.channels) << ")" << std::endl;
 
     ///////////////// VISUAL INFORMATION 
-    LoadVisualInfo(&fBuff, &pos);
+    LoadVisualInfo(fin);
     printf("Loaded visual information.\n");
 
     ///////////////// MODULE INFORMATION 
@@ -389,26 +366,24 @@ System DMF::GetSystem(uint8_t systemByte)
     return m_Systems[SYS_ERROR]; // Error: System byte invalid
 }
 
-void DMF::LoadVisualInfo(uint8_t **fBuff, uint32_t *pos)
+void DMF::LoadVisualInfo(zstr::ifstream& fin)
 {
-    m_VisualInfo.songNameLength = RI;
+    m_VisualInfo.songNameLength = fin.get();
     m_VisualInfo.songName = new char[m_VisualInfo.songNameLength + 1];
-    strncpy(m_VisualInfo.songName, (char *)(&(*fBuff)[*pos]), m_VisualInfo.songNameLength + 1);
+    fin.read(m_VisualInfo.songName, m_VisualInfo.songNameLength);
     m_VisualInfo.songName[m_VisualInfo.songNameLength] = '\0';
-    *pos += m_VisualInfo.songNameLength;
 
-    printf("Title: %s\n", m_VisualInfo.songName);
+    std::cout << "Title: " << m_VisualInfo.songName << std::endl;
 
-    m_VisualInfo.songAuthorLength = RI;
+    m_VisualInfo.songAuthorLength = fin.get();
     m_VisualInfo.songAuthor = new char[m_VisualInfo.songAuthorLength + 1];
-    strncpy(m_VisualInfo.songAuthor, (char *)(&(*fBuff)[*pos]), m_VisualInfo.songAuthorLength + 1);
+    fin.read(m_VisualInfo.songAuthor, m_VisualInfo.songAuthorLength);
     m_VisualInfo.songAuthor[m_VisualInfo.songAuthorLength] = '\0';
-    *pos += m_VisualInfo.songAuthorLength;
 
-    printf("Author: %s\n", m_VisualInfo.songAuthor);
+    std::cout << "Author: " << m_VisualInfo.songAuthor << std::endl;
 
-    m_VisualInfo.highlightAPatterns = RI;
-    m_VisualInfo.highlightBPatterns = RI;
+    m_VisualInfo.highlightAPatterns = fin.get();
+    m_VisualInfo.highlightBPatterns = fin.get();
 }
 
 void DMF::LoadModuleInfo(uint8_t **fBuff, uint32_t *pos)

@@ -9,7 +9,7 @@ OUT	= dmf2mod
 endif
 
 CC	 = g++
-FLAGS	 = -std=c++17 -Izlib -g -c -Wall -Wno-unknown-pragmas
+FLAGS	 = -std=c++17 -Izlib -Izstr -g -c -Wall -Wno-unknown-pragmas
 LFLAGS	 = -lm zlib/libz.a
 
 all: $(OBJS)

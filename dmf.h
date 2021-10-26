@@ -18,6 +18,8 @@ Requires the zlib compression library from https://zlib.net.
 #include <cstdint>
 #include <cassert>
 
+#include "zstr/zstr.hpp"
+
 // Deflemask allows four effects columns per channel regardless of the system 
 #define MAX_EFFECTS_COLUMN_COUNT 4 
 
@@ -189,7 +191,7 @@ public:
 
 private:
     System GetSystem(uint8_t systemByte);
-    void LoadVisualInfo(uint8_t **fBuff, uint32_t *pos);
+    void LoadVisualInfo(zstr::ifstream& fin);
     void LoadModuleInfo(uint8_t **fBuff, uint32_t *pos);
     void LoadPatternMatrixValues(uint8_t **fBuff, uint32_t *pos);
     void LoadInstrumentsData(uint8_t **fBuff, uint32_t *pos);

@@ -12,11 +12,11 @@ Requires the zlib compression library from https://zlib.net.
 
 #include "modules.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-#include <assert.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cstdint>
+#include <cassert>
 
 // Deflemask allows four effects columns per channel regardless of the system 
 #define MAX_EFFECTS_COLUMN_COUNT 4 

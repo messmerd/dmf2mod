@@ -14,6 +14,14 @@ std::map<ModuleType, std::function<Module*(void)>> ModuleUtils::RegistrationMap 
 std::map<std::string, ModuleType> ModuleUtils::FileExtensionMap = {};
 std::map<ModuleType, std::function<ConversionOptions*(void)>> ModuleUtils::ConversionOptionsRegistrationMap = {};
 
+struct CommonFlags
+{
+    bool force = false;
+    // More to be added later
+};
+
+static bool ParseFlags(std::vector<std::string>& args, CommonFlags& flags);
+
 bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo, ConversionOptions*& options)
 {
     inputOutputInfo.InputFile = "";
@@ -50,6 +58,10 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
         {
             return PrintHelp(args[0], GetTypeFromFileExtension(args[2]));
         }
+
+        CommonFlags flags;
+        if (ParseFlags(args, flags))
+            return true;
 
         std::string outputFile, inputFile;
         
@@ -96,34 +108,17 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
         else
         {
             outputFile = args[1];
-            if (GetTypeFromFileExtension(args[1]) == ModuleType::NONE)
+            if (GetTypeFromFilename(args[1]) == ModuleType::NONE)
             {
                 std::cout << "ERROR: '" << GetFileExtension(args[1]) << "' is not a valid module type." << std::endl;
                 return true;
             }
         }
         
-        if (FileExists(outputFile))
+        if (FileExists(outputFile) && !flags.force)
         {
-            bool forceFlagFound = false;
-            for (int i = 3; i < argc; i++)
-            {
-                if (args[i] == "-f" || args[i] == "--force")
-                {
-                    forceFlagFound = true;
-
-                    // Remove the force flag since it has just been processed
-                    args.erase(args.begin() + i);
-                    argc--;
-                    break;
-                }
-            }
-
-            if (!forceFlagFound)
-            {
-                std::cout << "ERROR: The output file '" << outputFile << "' already exists. Run with the '-f' flag to allow the file to be overwritten." << std::endl;
-                return true;
-            }
+            std::cout << "ERROR: The output file '" << outputFile << "' already exists. Run with the '-f' flag to allow the file to be overwritten." << std::endl;
+            return true;
         }
 
         inputOutputInfo.InputFile = inputFile;
@@ -167,6 +162,52 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
     }
 
     return true;
+}
+
+bool ParseFlags(std::vector<std::string>& args, CommonFlags& flags)
+{
+    flags = {};
+
+    for (unsigned i = 3; i < args.size(); i++)
+    {
+        std::string& str = args[i];
+
+        // Handle single character flags
+        if (!str.empty() && str[0] == '-')
+        {
+            // Can have multiple flags together. For example "-fsd"
+            for (unsigned j = 1; j < str.size(); j++)
+            {
+                char c = str[j];
+                switch (c)
+                {
+                case 'f':
+                    flags.force = true;
+                    str.erase(j--);
+                    break;
+                default:
+                    // If a flag is not recognized, it may be a flag used by a module, so don't throw an error
+                    //std::cout << "ERROR: The flag '-" << c << "' is unsupported." << std::endl;
+                    break;
+                }
+            }
+
+            if (str.size() == 1) // Only the '-' left
+            {
+                args.erase(args.begin() + i);
+                i--; // Adjust for item that was removed
+                continue;
+            }
+        }
+        else if (str == "--force")
+        {
+            flags.force = true;
+            args.erase(args.begin() + i);
+            i--;
+        }
+    }
+
+    return false;
 }
 
 ModuleType ModuleUtils::GetTypeFromFilename(const std::string& filename)
@@ -263,7 +304,6 @@ bool FileExists(const std::string& filename)
 std::string GetFileExtension(const std::string& filename)
 {
     const size_t dotPos = filename.rfind('.');
-    std::cout << "dotPos="<< dotPos << "\n";
     if (dotPos == 0 || dotPos + 1 >= filename.size())
         return "";
 

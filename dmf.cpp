@@ -18,6 +18,7 @@ REGISTER_MODULE(DMF, DMFConversionOptions, ModuleType::DMF, "dmf")
 
 #include <iostream>
 #include <string>
+#include <fstream>
 
 #define DMF_FILE_VERSION 24 // 0x18 - Only DefleMask v0.12.0 files are supported
 
@@ -268,12 +269,29 @@ bool DMF::Load(const char* filename)
         return true;
     }
 
-    std::cout << "DMF Filename:" << filename << ".\n";
-    FILE *fptr = fopen(filename, "rb");
+    std::cout << "DMF Filename: " << filename << ".\n";
 
-    if (fptr) 
+    /*
+    std::ifstream fin;
+    fin.open("corridor.dmf", std::ios_base::binary);
+    if (fin.fail())
     {
-        std::cout << "ERROR: File not found." << std::endl;
+        std::cout << "ERROR: DMF::Load new: Failed to open file." << std::endl;
+        m_ImportError = IMPORT_ERROR_FAIL;
+        return true;
+    }
+
+    fin.
+
+    fin.close();
+    */
+
+    FILE *fptr = fopen("corridor.dmf", "r");
+
+    if (fptr)
+    {
+        char* err = strerror(errno);
+        std::cout << "ERROR: DMF::Load: File not found. Error: " << err << "." << std::endl;
         m_ImportError = IMPORT_ERROR_FAIL;
         return true;
     }
@@ -294,9 +312,9 @@ bool DMF::Load(const char* filename)
 
     ///////////////// FORMAT FLAGS  
     char header[17]; 
-    strncpy(header, (char *)fBuff, 16); 
+    strncpy(header, (char *)fBuff, 16);
     header[16] = '\0';
-    pos += 16; 
+    pos += 16;
     
     if (strncmp(header, ".DelekDefleMask.", 16) != 0)
     {
@@ -305,7 +323,7 @@ bool DMF::Load(const char* filename)
         return true;
     }
 
-    m_DMFFileVersion = fBuff[pos++]; 
+    m_DMFFileVersion = fBuff[pos++];
     if (m_DMFFileVersion != DMF_FILE_VERSION)
     {
         printf("ERROR: Deflemask file version must be %u (0x%x). The given DMF file is version %u (0x%x).\n", DMF_FILE_VERSION, DMF_FILE_VERSION, m_DMFFileVersion, m_DMFFileVersion); 

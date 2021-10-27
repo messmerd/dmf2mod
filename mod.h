@@ -12,14 +12,7 @@ rows, only one effect column is allowed per channel, etc.
 
 #pragma once
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-#include <ctype.h>
-#include <stdbool.h>
-#include <math.h>
-#include <unistd.h>
+#include <string>
 
 #include "dmf.h"
 
@@ -44,31 +37,31 @@ typedef enum PT_EFFECT {
 
 // Error codes 
 typedef enum MOD_ERROR {
-    MOD_ERROR_NONE=0, MOD_ERROR_NOT_GAMEBOY, MOD_ERROR_TOO_MANY_PAT_MAT_ROWS, MOD_ERROR_NOT_64_ROW_PATTERN, 
-    MOD_ERROR_WAVE_DOWNSAMPLE, MOD_ERROR_EFFECT_VOLUME, MOD_ERROR_MULTIPLE_EFFECT 
-} MOD_ERROR; 
+    MOD_ERROR_NONE=0, MOD_ERROR_FILE_OPEN, MOD_ERROR_NOT_GAMEBOY, MOD_ERROR_TOO_MANY_PAT_MAT_ROWS, 
+    MOD_ERROR_NOT_64_ROW_PATTERN, MOD_ERROR_WAVE_DOWNSAMPLE, MOD_ERROR_EFFECT_VOLUME, MOD_ERROR_MULTIPLE_EFFECT 
+} MOD_ERROR;
 
 // Error information used by multiple functions 
 typedef struct MODError {
     MOD_ERROR errorCode;
-    char *errorInfo; 
-} MODError; 
+    std::string errorInfo;
+} MODError;
 
 // Warning codes 
 typedef enum MOD_WARNING { 
     MOD_WARNING_NONE=0, MOD_WARNING_PITCH_HIGH=1, MOD_WARNING_TEMPO_LOW=2, 
     MOD_WARNING_TEMPO_HIGH=4, MOD_WARNING_EFFECT_IGNORED=8
-} MOD_WARNING; 
+} MOD_WARNING;
 
-// Warning information used by multiple functions 
+// Warning information used by multiple functions
 typedef struct MODWarning {
-    uint16_t warningCode, multipleWarnings; 
-} MODWarning; 
+    uint16_t warningCode, multipleWarnings;
+} MODWarning;
 
 typedef struct MODConversionStatus {
-    MODError error; 
-    MODWarning warnings; 
-} MODConversionStatus; 
+    MODError error;
+    MODWarning warnings;
+} MODConversionStatus;
 
 class MOD : public Module, public ModuleStatic<MOD>
 {

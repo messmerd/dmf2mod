@@ -22,114 +22,6 @@ REGISTER_MODULE(DMF, DMFConversionOptions, ModuleType::DMF, "dmf")
 
 #define DMF_FILE_VERSION 24 // 0x18 - Only DefleMask v0.12.0 files are supported
 
-#define RI (*fBuff)[(*pos)++] // Read buffer at position pos, then Increment pos
-
-#if defined(MSDOS) || defined(OS2) || defined(WIN32) || defined(__CYGWIN__)
-#  include <fcntl.h>
-#  include <io.h>
-#  define SET_BINARY_MODE(file) setmode(fileno(file), O_BINARY)
-#else
-#  define SET_BINARY_MODE(file)
-#endif
-
-#define CHUNK 16384
-
-/* Decompress from file source to buffer dest until stream ends or EOF.
-   inf() returns Z_OK on success, Z_MEM_ERROR if memory could not be
-   allocated for processing, Z_DATA_ERROR if the deflate data is
-   invalid or incomplete, Z_VERSION_ERROR if the version of zlib.h and
-   the version of the library linked do not match, or Z_ERRNO if there
-   is an error reading the file. */
-static int inf(FILE *source, uint8_t **dest)
-{
-    int ret;
-    unsigned have;
-    z_stream strm;
-    uint8_t in[CHUNK];
-    uint8_t out[CHUNK];
-    *dest = (uint8_t *)malloc(CHUNK * sizeof(uint8_t));
-    uint32_t current_pos = 0;
-    uint32_t current_size = CHUNK;
-
-    /* allocate inflate state */
-    strm.zalloc = Z_NULL;
-    strm.zfree = Z_NULL;
-    strm.opaque = Z_NULL;
-    strm.avail_in = 0;
-    strm.next_in = Z_NULL;
-    ret = inflateInit(&strm);
-    if (ret != Z_OK)
-        return ret;
-
-    /* decompress until deflate stream ends or end of file */
-    do {
-        strm.avail_in = fread(in, 1, CHUNK, source);
-        if (ferror(source)) {
-            (void)inflateEnd(&strm);
-            return Z_ERRNO;
-        }
-        if (strm.avail_in == 0)
-            break;
-        strm.next_in = in;
-
-        /* run inflate() on input until output buffer not full */
-        do {
-            strm.avail_out = CHUNK;
-            strm.next_out = out;
-            ret = inflate(&strm, Z_NO_FLUSH);
-            assert(ret != Z_STREAM_ERROR);  /* state not clobbered */
-            switch (ret) {
-            case Z_NEED_DICT:
-                ret = Z_DATA_ERROR;     /* and fall through */
-            case Z_DATA_ERROR:
-            case Z_MEM_ERROR:
-                (void)inflateEnd(&strm);
-                return ret;
-            }
-            have = CHUNK - strm.avail_out;
-            
-            // Reallocate if more room is needed.
-            // TODO: Read file size and allocate correct amount from the start?
-            if (current_pos + have > current_size)
-            {
-                *dest = (uint8_t *)realloc(*dest, 2*current_size * sizeof(uint8_t));
-                current_size *= 2; 
-            }
-            memcpy(&((*dest)[current_pos]), out, have);
-            current_pos += have;
-        } while (strm.avail_out == 0);
-        /* done when inflate() says it's done */
-    } while (ret != Z_STREAM_END);
-    /* clean up and return */
-    (void)inflateEnd(&strm);
-    return ret == Z_STREAM_END ? Z_OK : Z_DATA_ERROR;
-}
-
-// Report a zlib or I/O error
-static void zerr(int ret)
-{
-    fputs("zpipe: ", stderr);
-    switch (ret) {
-    case Z_ERRNO:
-        if (ferror(stdin))
-            fputs("Error reading stdin\n", stderr);
-        if (ferror(stdout))
-            fputs("Error writing stdout\n", stderr);
-        break;
-    case Z_STREAM_ERROR:
-        fputs("Invalid compression level\n", stderr);
-        break;
-    case Z_DATA_ERROR:
-        fputs("Invalid or incomplete deflate data\n", stderr);
-        break;
-    case Z_MEM_ERROR:
-        fputs("Out of memory\n", stderr);
-        break;
-    case Z_VERSION_ERROR:
-        fputs("zlib version mismatch!\n", stderr);
-    }
-}
-
 // Information about all the systems Deflemask supports
 // Using designated initialization for the array
 const System DMF::m_Systems[] = {
@@ -279,10 +171,7 @@ bool DMF::Load(const char* filename)
         return true;
     }
 
-    uint8_t *fBuff;
-    uint32_t pos = 0; // The current buffer position 
-
-    ///////////////// FORMAT FLAGS  
+    ///////////////// FORMAT FLAGS
     
     char header[17];
     fin.read(header, 16);
@@ -295,8 +184,6 @@ bool DMF::Load(const char* filename)
         return true;
     }
 
-    std::cout << "Here\n";
-
     m_DMFFileVersion = fin.get();
     if (m_DMFFileVersion != DMF_FILE_VERSION)
     {
@@ -307,43 +194,39 @@ bool DMF::Load(const char* filename)
         return true;
     }
 
-    std::cout << "Here2\n";
-
     ///////////////// SYSTEM SET
     m_System = GetSystem(fin.get());
     std::cout << "System: " << m_System.name << " (channels: " << std::to_string(m_System.channels) << ")" << std::endl;
 
-    ///////////////// VISUAL INFORMATION 
+    ///////////////// VISUAL INFORMATION
     LoadVisualInfo(fin);
-    printf("Loaded visual information.\n");
+    std::cout << "Loaded visual information." << std::endl;
 
-    ///////////////// MODULE INFORMATION 
-    LoadModuleInfo(&fBuff, &pos);
-    printf("Loaded module.\n");
+    ///////////////// MODULE INFORMATION
+    LoadModuleInfo(fin);
+    std::cout << "Loaded module." << std::endl;
 
-    ///////////////// PATTERN MATRIX VALUES 
-    LoadPatternMatrixValues(&fBuff, &pos); 
-    printf("Loaded pattern matrix values.\n");
+    ///////////////// PATTERN MATRIX VALUES
+    LoadPatternMatrixValues(fin);
+    std::cout << "Loaded pattern matrix values." << std::endl;
 
-    ///////////////// INSTRUMENTS DATA 
-    LoadInstrumentsData(&fBuff, &pos);
-    printf("Loaded instruments.\n");
+    ///////////////// INSTRUMENTS DATA
+    LoadInstrumentsData(fin);
+    std::cout << "Loaded instruments." << std::endl;
 
     ///////////////// WAVETABLES DATA
-    LoadWavetablesData(&fBuff, &pos); 
-    printf("Loaded %u wavetable(s).\n", m_TotalWavetables);
+    LoadWavetablesData(fin);
+    std::cout << "Loaded " << std::to_string(m_TotalWavetables) << " wavetable(s)." << std::endl;
 
     ///////////////// PATTERNS DATA
-    LoadPatternsData(&fBuff, &pos);
-    printf("Loaded patterns.\n");
+    LoadPatternsData(fin);
+    std::cout << "Loaded patterns." << std::endl;
 
     ///////////////// PCM SAMPLES DATA
-    LoadPCMSamplesData(&fBuff, &pos);
-    printf("Loaded PCM Samples.\n");
+    LoadPCMSamplesData(fin);
+    std::cout << "Loaded PCM Samples." << std::endl;
 
-    free(fBuff);
-
-    printf("Done loading DMF file!\n\n");
+    std::cout << "Done loading DMF file!" << std::endl << std::endl;
 
     m_ImportError = IMPORT_ERROR_SUCCESS;
     return false;
@@ -386,26 +269,26 @@ void DMF::LoadVisualInfo(zstr::ifstream& fin)
     m_VisualInfo.highlightBPatterns = fin.get();
 }
 
-void DMF::LoadModuleInfo(uint8_t **fBuff, uint32_t *pos)
+void DMF::LoadModuleInfo(zstr::ifstream& fin)
 {
-    m_ModuleInfo.timeBase = RI;
-    m_ModuleInfo.tickTime1 = RI;
-    m_ModuleInfo.tickTime2 = RI;
-    m_ModuleInfo.framesMode = RI;
-    m_ModuleInfo.usingCustomHZ = RI;
-    m_ModuleInfo.customHZValue1 = RI;
-    m_ModuleInfo.customHZValue2 = RI;
-    m_ModuleInfo.customHZValue3 = RI;
-    m_ModuleInfo.totalRowsPerPattern = RI;
-    m_ModuleInfo.totalRowsPerPattern |= RI << 8;
-    m_ModuleInfo.totalRowsPerPattern |= RI << 16;
-    m_ModuleInfo.totalRowsPerPattern |= RI << 24;
-    m_ModuleInfo.totalRowsInPatternMatrix = RI;
+    m_ModuleInfo.timeBase = fin.get();
+    m_ModuleInfo.tickTime1 = fin.get();
+    m_ModuleInfo.tickTime2 = fin.get();
+    m_ModuleInfo.framesMode = fin.get();
+    m_ModuleInfo.usingCustomHZ = fin.get();
+    m_ModuleInfo.customHZValue1 = fin.get();
+    m_ModuleInfo.customHZValue2 = fin.get();
+    m_ModuleInfo.customHZValue3 = fin.get();
+    m_ModuleInfo.totalRowsPerPattern = fin.get();
+    m_ModuleInfo.totalRowsPerPattern |= fin.get() << 8;
+    m_ModuleInfo.totalRowsPerPattern |= fin.get() << 16;
+    m_ModuleInfo.totalRowsPerPattern |= fin.get() << 24;
+    m_ModuleInfo.totalRowsInPatternMatrix = fin.get();
 
-    // TODO: In previous DMF versions, arpeggio tick speed is stored here!!! 
+    // TODO: In previous DMF versions, arpeggio tick speed is stored here!!!
 }
 
-void DMF::LoadPatternMatrixValues(uint8_t **fBuff, uint32_t *pos)
+void DMF::LoadPatternMatrixValues(zstr::ifstream& fin)
 {
     // Format: patterMatrixValues[channel][pattern matrix row]
     m_PatternMatrixValues = new uint8_t*[m_System.channels];
@@ -418,7 +301,7 @@ void DMF::LoadPatternMatrixValues(uint8_t **fBuff, uint32_t *pos)
         
         for (int j = 0; j < m_ModuleInfo.totalRowsInPatternMatrix; j++)
         {
-            m_PatternMatrixValues[i][j] = RI;
+            m_PatternMatrixValues[i][j] = fin.get();
             if (m_PatternMatrixValues[i][j] > m_PatternMatrixMaxValues[i])
             {
                 m_PatternMatrixMaxValues[i] = m_PatternMatrixValues[i][j];
@@ -427,30 +310,29 @@ void DMF::LoadPatternMatrixValues(uint8_t **fBuff, uint32_t *pos)
     }
 }
 
-void DMF::LoadInstrumentsData(uint8_t **fBuff, uint32_t *pos)
+void DMF::LoadInstrumentsData(zstr::ifstream& fin)
 {
-    m_TotalInstruments = RI;
+    m_TotalInstruments = fin.get();
     m_Instruments = new Instrument[m_TotalInstruments];
 
     for (int i = 0; i < m_TotalInstruments; i++)
     {
-        m_Instruments[i] = LoadInstrument(fBuff, pos, m_System); 
+        m_Instruments[i] = LoadInstrument(fin, m_System);
     }
 }
 
-Instrument DMF::LoadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType)
+Instrument DMF::LoadInstrument(zstr::ifstream& fin, System systemType)
 {
     Instrument inst;
 
-    uint8_t name_size = RI;
+    uint8_t name_size = fin.get();
     inst.name = new char[name_size + 1];
-    strncpy(inst.name, (char *)(&(*fBuff)[*pos]), name_size + 1);
+    fin.read(inst.name, name_size);
     inst.name[name_size] = '\0';
-    *pos += name_size;
 
-    inst.mode = RI; // 1 = FM; 0 = Standard
-    
-    // Initialize to NULL in case malloc isn't used on them later:
+    inst.mode = fin.get(); // 1 = FM; 0 = Standard
+
+    // Initialize to nullptr to prevent issues if they are freed later without ever dynamically allocating memory
     inst.stdVolEnvValue = nullptr;
     inst.stdArpEnvValue = nullptr;
     inst.stdDutyNoiseEnvValue = nullptr;
@@ -458,26 +340,26 @@ Instrument DMF::LoadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType
 
     if (inst.mode == 1) // FM instrument
     {
-        inst.fmALG = RI;
-        inst.fmFB = RI;
-        inst.fmLFO = RI;
-        inst.fmLFO2 = RI;
+        inst.fmALG = fin.get();
+        inst.fmFB = fin.get();
+        inst.fmLFO = fin.get();
+        inst.fmLFO2 = fin.get();
 
         constexpr int TOTAL_OPERATORS = 4;
         for (int i = 0; i < TOTAL_OPERATORS; i++)
         {
-            inst.fmAM = RI;
-            inst.fmAR = RI;
-            inst.fmDR = RI;
-            inst.fmMULT = RI;
-            inst.fmRR = RI;
-            inst.fmSL = RI;
-            inst.fmTL = RI;
-            inst.fmDT2 = RI;
-            inst.fmRS = RI;
-            inst.fmDT = RI;
-            inst.fmD2R = RI;
-            inst.fmSSGMODE = RI;
+            inst.fmAM = fin.get();
+            inst.fmAR = fin.get();
+            inst.fmDR = fin.get();
+            inst.fmMULT = fin.get();
+            inst.fmRR = fin.get();
+            inst.fmSL = fin.get();
+            inst.fmTL = fin.get();
+            inst.fmDT2 = fin.get();
+            inst.fmRS = fin.get();
+            inst.fmDT = fin.get();
+            inst.fmD2R = fin.get();
+            inst.fmSSGMODE = fin.get();
         }
     }
     else if (inst.mode == 0) // Standard instrument
@@ -485,136 +367,136 @@ Instrument DMF::LoadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType
         if (systemType.id != m_Systems[SYS_GAMEBOY].id)  // Not a Game Boy
         {
             // Volume macro
-            inst.stdVolEnvSize = RI;
+            inst.stdVolEnvSize = fin.get();
             inst.stdVolEnvValue = new int32_t[inst.stdVolEnvSize];
             
             for (int i = 0; i < inst.stdVolEnvSize; i++)
             {
                 // 4 bytes, little-endian
-                inst.stdVolEnvValue[i] = RI;
-                inst.stdVolEnvValue[i] |= RI << 8;
-                inst.stdVolEnvValue[i] |= RI << 16;
-                inst.stdVolEnvValue[i] |= RI << 24;
+                inst.stdVolEnvValue[i] = fin.get();
+                inst.stdVolEnvValue[i] |= fin.get() << 8;
+                inst.stdVolEnvValue[i] |= fin.get() << 16;
+                inst.stdVolEnvValue[i] |= fin.get() << 24;
             }
 
             if (inst.stdVolEnvSize > 0)
-                inst.stdVolEnvLoopPos = RI;
+                inst.stdVolEnvLoopPos = fin.get();
         }
 
         // Arpeggio macro
-        inst.stdArpEnvSize = RI;
+        inst.stdArpEnvSize = fin.get();
         inst.stdArpEnvValue = new int32_t[inst.stdArpEnvSize];
         
         for (int i = 0; i < inst.stdArpEnvSize; i++)
         {
             // 4 bytes, little-endian
-            inst.stdArpEnvValue[i] = RI;
-            inst.stdArpEnvValue[i] |= RI << 8;
-            inst.stdArpEnvValue[i] |= RI << 16;
-            inst.stdArpEnvValue[i] |= RI << 24;
+            inst.stdArpEnvValue[i] = fin.get();
+            inst.stdArpEnvValue[i] |= fin.get() << 8;
+            inst.stdArpEnvValue[i] |= fin.get() << 16;
+            inst.stdArpEnvValue[i] |= fin.get() << 24;
         }
 
         if (inst.stdArpEnvSize > 0)
-            inst.stdArpEnvLoopPos = RI;
+            inst.stdArpEnvLoopPos = fin.get();
         
-        inst.stdArpMacroMode = RI;
+        inst.stdArpMacroMode = fin.get();
 
         // Duty/Noise macro
-        inst.stdDutyNoiseEnvSize = RI;
+        inst.stdDutyNoiseEnvSize = fin.get();
         inst.stdDutyNoiseEnvValue = new int32_t[inst.stdDutyNoiseEnvSize];
         
         for (int i = 0; i < inst.stdDutyNoiseEnvSize; i++)
         {
             // 4 bytes, little-endian
-            inst.stdDutyNoiseEnvValue[i] = RI;
-            inst.stdDutyNoiseEnvValue[i] |= RI << 8;
-            inst.stdDutyNoiseEnvValue[i] |= RI << 16;
-            inst.stdDutyNoiseEnvValue[i] |= RI << 24;
+            inst.stdDutyNoiseEnvValue[i] = fin.get();
+            inst.stdDutyNoiseEnvValue[i] |= fin.get() << 8;
+            inst.stdDutyNoiseEnvValue[i] |= fin.get() << 16;
+            inst.stdDutyNoiseEnvValue[i] |= fin.get() << 24;
         }
 
         if (inst.stdDutyNoiseEnvSize > 0)
-            inst.stdDutyNoiseEnvLoopPos = RI;
+            inst.stdDutyNoiseEnvLoopPos = fin.get();
 
         // Wavetable macro
-        inst.stdWavetableEnvSize = RI;
+        inst.stdWavetableEnvSize = fin.get();
         inst.stdWavetableEnvValue = new int32_t[inst.stdWavetableEnvSize];
         
         for (int i = 0; i < inst.stdWavetableEnvSize; i++)
         {
             // 4 bytes, little-endian
-            inst.stdWavetableEnvValue[i] = RI;
-            inst.stdWavetableEnvValue[i] |= RI << 8;
-            inst.stdWavetableEnvValue[i] |= RI << 16;
-            inst.stdWavetableEnvValue[i] |= RI << 24;
+            inst.stdWavetableEnvValue[i] = fin.get();
+            inst.stdWavetableEnvValue[i] |= fin.get() << 8;
+            inst.stdWavetableEnvValue[i] |= fin.get() << 16;
+            inst.stdWavetableEnvValue[i] |= fin.get() << 24;
         }
 
         if (inst.stdWavetableEnvSize > 0)
-            inst.stdWavetableEnvLoopPos = RI;
+            inst.stdWavetableEnvLoopPos = fin.get();
 
         // Per system data
         if (systemType.id == m_Systems[SYS_C64_SID_8580].id || systemType.id == m_Systems[SYS_C64_SID_6581].id) // Using Commodore 64
         {
-            inst.stdC64TriWaveEn = RI;
-            inst.stdC64SawWaveEn = RI;
-            inst.stdC64PulseWaveEn = RI;
-            inst.stdC64NoiseWaveEn = RI;
-            inst.stdC64Attack = RI;
-            inst.stdC64Decay = RI;
-            inst.stdC64Sustain = RI;
-            inst.stdC64Release = RI;
-            inst.stdC64PulseWidth = RI;
-            inst.stdC64RingModEn = RI;
-            inst.stdC64SyncModEn = RI;
-            inst.stdC64ToFilter = RI;
-            inst.stdC64VolMacroToFilterCutoffEn = RI;
-            inst.stdC64UseFilterValuesFromInst = RI;
+            inst.stdC64TriWaveEn = fin.get();
+            inst.stdC64SawWaveEn = fin.get();
+            inst.stdC64PulseWaveEn = fin.get();
+            inst.stdC64NoiseWaveEn = fin.get();
+            inst.stdC64Attack = fin.get();
+            inst.stdC64Decay = fin.get();
+            inst.stdC64Sustain = fin.get();
+            inst.stdC64Release = fin.get();
+            inst.stdC64PulseWidth = fin.get();
+            inst.stdC64RingModEn = fin.get();
+            inst.stdC64SyncModEn = fin.get();
+            inst.stdC64ToFilter = fin.get();
+            inst.stdC64VolMacroToFilterCutoffEn = fin.get();
+            inst.stdC64UseFilterValuesFromInst = fin.get();
             
             // Filter globals
-            inst.stdC64FilterResonance = RI;
-            inst.stdC64FilterCutoff = RI;
-            inst.stdC64FilterHighPass = RI;
-            inst.stdC64FilterLowPass = RI;
-            inst.stdC64FilterCH2Off = RI;
+            inst.stdC64FilterResonance = fin.get();
+            inst.stdC64FilterCutoff = fin.get();
+            inst.stdC64FilterHighPass = fin.get();
+            inst.stdC64FilterLowPass = fin.get();
+            inst.stdC64FilterCH2Off = fin.get();
         }
         else if (systemType.id == m_Systems[SYS_GAMEBOY].id) // Using Game Boy
         {
-            inst.stdGBEnvVol = RI;
-            inst.stdGBEnvDir = RI;
-            inst.stdGBEnvLen = RI;
-            inst.stdGBSoundLen = RI;
+            inst.stdGBEnvVol = fin.get();
+            inst.stdGBEnvDir = fin.get();
+            inst.stdGBEnvLen = fin.get();
+            inst.stdGBSoundLen = fin.get();
         }
     }
 
     return inst;
 }
 
-void DMF::LoadWavetablesData(uint8_t **fBuff, uint32_t *pos)
+void DMF::LoadWavetablesData(zstr::ifstream& fin)
 {
-    m_TotalWavetables = RI;
+    m_TotalWavetables = fin.get();
     
     m_WavetableSizes = new uint32_t[m_TotalWavetables];
     m_WavetableValues = new uint32_t*[m_TotalWavetables];
 
     for (int i = 0; i < m_TotalWavetables; i++)
     {
-        m_WavetableSizes[i] = RI;
-        m_WavetableSizes[i] |= RI << 8;
-        m_WavetableSizes[i] |= RI << 16;
-        m_WavetableSizes[i] |= RI << 24;
+        m_WavetableSizes[i] = fin.get();
+        m_WavetableSizes[i] |= fin.get() << 8;
+        m_WavetableSizes[i] |= fin.get() << 16;
+        m_WavetableSizes[i] |= fin.get() << 24;
 
         m_WavetableValues[i] = new uint32_t[m_WavetableSizes[i]];
 
         for (unsigned j = 0; j < m_WavetableSizes[i]; j++)
         {
-            m_WavetableValues[i][j] = RI;
-            m_WavetableValues[i][j] |= RI << 8;
-            m_WavetableValues[i][j] |= RI << 16;
-            m_WavetableValues[i][j] |= RI << 24;
+            m_WavetableValues[i][j] = fin.get();
+            m_WavetableValues[i][j] |= fin.get() << 8;
+            m_WavetableValues[i][j] |= fin.get() << 16;
+            m_WavetableValues[i][j] |= fin.get() << 24;
         }
     }
 }
 
-void DMF::LoadPatternsData(uint8_t **fBuff, uint32_t *pos)
+void DMF::LoadPatternsData(zstr::ifstream& fin)
 {
     // patternValues[channel][pattern number][pattern row number]
     m_PatternValues = new PatternRow**[m_System.channels];
@@ -622,45 +504,51 @@ void DMF::LoadPatternsData(uint8_t **fBuff, uint32_t *pos)
     
     uint8_t patternMatrixNumber;
 
-    for (int channel = 0; channel < m_System.channels; channel++)
+    for (unsigned channel = 0; channel < m_System.channels; channel++)
     {
-        m_ChannelEffectsColumnsCount[channel] = RI;
+        m_ChannelEffectsColumnsCount[channel] = fin.get();
 
-        // Maybe use calloc instead of malloc in the line below?
         m_PatternValues[channel] = new PatternRow*[m_PatternMatrixMaxValues[channel] + 1];
-        for (int i = 0; i < m_PatternMatrixMaxValues[channel] + 1; i++)
+        for (unsigned i = 0; i < m_PatternMatrixMaxValues[channel] + 1u; i++)
         {
             m_PatternValues[channel][i] = nullptr;
         }
 
-        for (int rowInPatternMatrix = 0; rowInPatternMatrix < m_ModuleInfo.totalRowsInPatternMatrix; rowInPatternMatrix++)
+        for (unsigned rowInPatternMatrix = 0; rowInPatternMatrix < m_ModuleInfo.totalRowsInPatternMatrix; rowInPatternMatrix++)
         {
             patternMatrixNumber = m_PatternMatrixValues[channel][rowInPatternMatrix];
+
             if (m_PatternValues[channel][patternMatrixNumber]) // If pattern has been loaded previously
             {
-                *pos += (8 + 4 * m_ChannelEffectsColumnsCount[channel]) * m_ModuleInfo.totalRowsPerPattern; // Unnecessary information
-                continue; // Skip patterns that have already been loaded 
+                // Skip patterns that have already been loaded (unnecessary information)
+                // zstr's seekg method does not seem to work, so I will use this:
+                unsigned seekAmount = (8 + 4 * m_ChannelEffectsColumnsCount[channel]) * m_ModuleInfo.totalRowsPerPattern;
+                while (0 < seekAmount--)
+                {
+                    fin.get();
+                }
+                continue;
             }
 
             m_PatternValues[channel][patternMatrixNumber] = new PatternRow[m_ModuleInfo.totalRowsPerPattern];
+
             for (uint32_t row = 0; row < m_ModuleInfo.totalRowsPerPattern; row++)
             {
-                m_PatternValues[channel][patternMatrixNumber][row] = LoadPatternRow(fBuff, pos, m_ChannelEffectsColumnsCount[channel]);
+                m_PatternValues[channel][patternMatrixNumber][row] = LoadPatternRow(fin, m_ChannelEffectsColumnsCount[channel]);
             }
         }
     }
 }
 
-PatternRow DMF::LoadPatternRow(uint8_t **fBuff, uint32_t *pos, int effectsColumnsCount)
+PatternRow DMF::LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount)
 {
     PatternRow pat;
-    pat.note = (Note){0, 0};
-    pat.note.pitch = RI;
-    pat.note.pitch |= RI << 8; // Unused byte. Storing it anyway.
-    pat.note.octave = RI;
-    pat.note.octave |= RI << 8; // Unused byte. Storing it anyway.
-    pat.volume = RI;
-    pat.volume |= RI << 8;
+    pat.note.pitch = fin.get();
+    pat.note.pitch |= fin.get() << 8; // Unused byte. Storing it anyway.
+    pat.note.octave = fin.get();
+    pat.note.octave |= fin.get() << 8; // Unused byte. Storing it anyway.
+    pat.volume = fin.get();
+    pat.volume |= fin.get() << 8;
 
     // NOTE: C# is considered the 1st note of an octave rather than C- like in the Deflemask program.
 
@@ -671,54 +559,53 @@ PatternRow DMF::LoadPatternRow(uint8_t **fBuff, uint32_t *pos, int effectsColumn
 
     for (int col = 0; col < effectsColumnsCount; col++)
     {
-        pat.effectCode[col] = RI;
-        pat.effectCode[col] |= RI << 8;
-        pat.effectValue[col] = RI;
-        pat.effectValue[col] |= RI << 8;
+        pat.effectCode[col] = fin.get();
+        pat.effectCode[col] |= fin.get() << 8;
+        pat.effectValue[col] = fin.get();
+        pat.effectValue[col] |= fin.get() << 8;
     }
 
-    pat.instrument = RI;
-    pat.instrument |= RI << 8;
+    pat.instrument = fin.get();
+    pat.instrument |= fin.get() << 8;
 
     return pat;
 }
 
-void DMF::LoadPCMSamplesData(uint8_t **fBuff, uint32_t *pos)
+void DMF::LoadPCMSamplesData(zstr::ifstream& fin)
 {
-    m_TotalPCMSamples = RI;
+    m_TotalPCMSamples = fin.get();
     m_PCMSamples = new PCMSample[m_TotalPCMSamples];
 
-    for (int sample = 0; sample < m_TotalPCMSamples; sample++)
+    for (unsigned sample = 0; sample < m_TotalPCMSamples; sample++)
     {
-        m_PCMSamples[sample] = LoadPCMSample(fBuff, pos);
+        m_PCMSamples[sample] = LoadPCMSample(fin);
     }
 }
 
-PCMSample DMF::LoadPCMSample(uint8_t **fBuff, uint32_t *pos)
+PCMSample DMF::LoadPCMSample(zstr::ifstream& fin)
 {
     PCMSample sample;
 
-    sample.size = RI;
-    sample.size |= RI << 8;
-    sample.size |= RI << 16;
-    sample.size |= RI << 24;
+    sample.size = fin.get();
+    sample.size |= fin.get() << 8;
+    sample.size |= fin.get() << 16;
+    sample.size |= fin.get() << 24;
 
-    uint8_t name_size = RI;
+    uint8_t name_size = fin.get();
     sample.name = new char[name_size];
-    strncpy(sample.name, (char *)(&(*fBuff)[*pos]), name_size + 1);
+    fin.read(sample.name, name_size);
     sample.name[name_size] = '\0';
-    *pos += name_size;
 
-    sample.rate = RI;
-    sample.pitch = RI;
-    sample.amp = RI;
-    sample.bits = RI;
+    sample.rate = fin.get();
+    sample.pitch = fin.get();
+    sample.amp = fin.get();
+    sample.bits = fin.get();
 
     sample.data = new uint16_t[sample.size];
     for (uint32_t i = 0; i < sample.size; i++)
     {
-        sample.data[i] = RI;
-        sample.data[i] |= RI << 8;
+        sample.data[i] = fin.get();
+        sample.data[i] |= fin.get() << 8;
     }
 
     return sample;

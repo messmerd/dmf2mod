@@ -1,23 +1,16 @@
 /*
 dmf.h
-Written by Dalton Messmer <messmer.dalton@gmail.com>. 
+Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
 Provides functions for loading a dmf file according to the 
-spec sheet at http://www.deflemask.com/DMF_SPECS.txt. 
+spec sheet at http://www.deflemask.com/DMF_SPECS.txt.
 
-Requires the zlib compression library from https://zlib.net. 
+Requires the zlib compression library from https://zlib.net.
 */
 
 #pragma once
 
 #include "modules.h"
-
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <cstdint>
-#include <cassert>
-
 #include "zstr/zstr.hpp"
 
 // Deflemask allows four effects columns per channel regardless of the system 
@@ -138,8 +131,8 @@ typedef struct PCMSample
 
 typedef struct PatternRow
 {
-    Note note; 
-    int16_t volume; 
+    Note note;
+    int16_t volume;
     int16_t effectCode[MAX_EFFECTS_COLUMN_COUNT];
     int16_t effectValue[MAX_EFFECTS_COLUMN_COUNT];
     int16_t instrument;
@@ -154,7 +147,7 @@ typedef enum DMF_IMPORT_ERROR
 class DMF : public Module, public ModuleStatic<DMF>
 {
 public:
-    static System SYSTEMS(SYSTEM_TYPE systemType) { return m_Systems[systemType]; }
+    static constexpr System SYSTEMS(SYSTEM_TYPE systemType) { return m_Systems[systemType]; }
 
     DMF();
     ~DMF();
@@ -192,15 +185,15 @@ public:
 private:
     System GetSystem(uint8_t systemByte);
     void LoadVisualInfo(zstr::ifstream& fin);
-    void LoadModuleInfo(uint8_t **fBuff, uint32_t *pos);
-    void LoadPatternMatrixValues(uint8_t **fBuff, uint32_t *pos);
-    void LoadInstrumentsData(uint8_t **fBuff, uint32_t *pos);
-    Instrument LoadInstrument(uint8_t **fBuff, uint32_t *pos, System systemType);
-    void LoadWavetablesData(uint8_t **fBuff, uint32_t *pos);
-    void LoadPatternsData(uint8_t **fBuff, uint32_t *pos);
-    PatternRow LoadPatternRow(uint8_t **fBuff, uint32_t *pos, int effectsColumnsCount);
-    void LoadPCMSamplesData(uint8_t **fBuff, uint32_t *pos);
-    PCMSample LoadPCMSample(uint8_t **fBuff, uint32_t *pos);
+    void LoadModuleInfo(zstr::ifstream& fin);
+    void LoadPatternMatrixValues(zstr::ifstream& fin);
+    void LoadInstrumentsData(zstr::ifstream& fin);
+    Instrument LoadInstrument(zstr::ifstream& fin, System systemType);
+    void LoadWavetablesData(zstr::ifstream& fin);
+    void LoadPatternsData(zstr::ifstream& fin);
+    PatternRow LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount);
+    void LoadPCMSamplesData(zstr::ifstream& fin);
+    PCMSample LoadPCMSample(zstr::ifstream& fin);
 
 private:
     uint8_t         m_DMFFileVersion;

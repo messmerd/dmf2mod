@@ -128,10 +128,12 @@ bool MODConversionOptions::ParseArgs(std::vector<std::string>& args)
     unsigned i = 0;
     while (i < args.size())
     {
+        bool processedFlag = false;
         if (args[i] == "--downsample")
         {
             Downsample = true;
             args.erase(args.begin() + i);
+            processedFlag = true;
         }
         else if (args[i].substr(0, 10) == "--effects=")
         {
@@ -148,13 +150,16 @@ bool MODConversionOptions::ParseArgs(std::vector<std::string>& args)
                 return true;
             }
             args.erase(args.begin() + i);
+            processedFlag = true;
         }
         else
         {
             std::cout << "ERROR: Unrecognized option '" << args[i] << "'" << std::endl;
             return true;
         }
-        i++;
+        
+        if (!processedFlag)
+            i++;
     }
 
     return false;
@@ -394,7 +399,6 @@ void _exportMOD(const char *fname, DMF *dmfObj, CMD_Options options)
 
     uint8_t** const patternMatrixValues = dmf->GetPatternMatrixValues();
     PatternRow*** const patternValues = dmf->GetPatternValues();
-    patternValues[0] = nullptr; // TEST
 
     // The main MODChannelState structs should NOT update during patterns or parts of 
     //   patterns that the Position Jump (Bxx) effect skips over. (Ignore loops)
@@ -415,7 +419,7 @@ void _exportMOD(const char *fname, DMF *dmfObj, CMD_Options options)
                 pat = patternValues[chan][patternMatrixValues[chan][patMatRow]][patRow];
                 effectCode = pat.effectCode[0];
                 effectValue = pat.effectValue[0];
-                
+
                 // If just arrived at jump destination:
                 if (patMatRow == jumpDestination && patRow == 0 && stateSuspended)
                 {
@@ -427,43 +431,43 @@ void _exportMOD(const char *fname, DMF *dmfObj, CMD_Options options)
                     stateSuspended = false;
                     jumpDestination = -1;
                 }
-                
+
                 #pragma region UPDATE_STATE
                 // If a Position Jump command was found and it's not in a section skipped by another Position Jump:
                 if (effectCode == DMF_POSJUMP && !stateSuspended)
                 {
-                    if (effectValue >= patMatRow) // If not a loop 
+                    if (effectValue >= patMatRow) // If not a loop
                     {
-                        // Save copies of states  
+                        // Save copies of states
                         for (int v = 0; v < DMF::SYSTEMS(SYS_GAMEBOY).channels; v++)
                         {
-                            stateJumpCopy[v] = state[v]; 
+                            stateJumpCopy[v] = state[v];
                         }
-                        stateSuspended = true; 
-                        jumpDestination = effectValue; 
+                        stateSuspended = true;
+                        jumpDestination = effectValue;
                     }
                 }
                 else if (effectCode == DMF_SETDUTYCYCLE && state[chan].dutyCycle != effectValue && chan <= DMF_GAMEBOY_SQW2) // If sqw channel duty cycle needs to change 
                 {
                     if (effectValue >= 0 && effectValue <= 3)
                     {
-                        state[chan].dutyCycle = effectValue; 
-                        state[chan].sampleChanged = true; 
+                        state[chan].dutyCycle = effectValue;
+                        state[chan].sampleChanged = true;
                     }
                 }
                 else if (effectCode == DMF_SETWAVE && state[chan].wavetable != effectValue && chan == DMF_GAMEBOY_WAVE) // If wave channel wavetable needs to change 
                 {
                     if (effectValue >= 0 && effectValue < dmf->GetTotalWavetables())
                     {
-                        state[chan].wavetable = effectValue; 
+                        state[chan].wavetable = effectValue;
                         state[chan].sampleChanged = true;
                     }
                 }
                 #pragma endregion
-                
+
                 if (WriteProTrackerPatternRow(fout, &pat, &state[chan]))
                 {
-                    // Error occurred while writing the pattern row 
+                    // Error occurred while writing the pattern row
                     delete[] noteRangeStart;
                     delete[] sampMap;
                     delete[] sampleLength;
@@ -1162,10 +1166,10 @@ static void exportSampleInfo(std::ofstream& fout, int8_t ptSampleNumLow, int8_t 
             {
                 switch (indexLow)
                 {
-                    case 0: fout << "SQW, Duty 12.5%% (high)"; break;
-                    case 1: fout << "SQW, Duty 25%% (high)  "; break;
-                    case 2: fout << "SQW, Duty 50%% (high)  "; break;
-                    case 3: fout << "SQW, Duty 75%% (high)  "; break;
+                    case 0: fout << "SQW, Duty 12.5% (high)"; break;
+                    case 1: fout << "SQW, Duty 25% (high)  "; break;
+                    case 2: fout << "SQW, Duty 50% (high)  "; break;
+                    case 3: fout << "SQW, Duty 75% (high)  "; break;
                 }
             }
             else  // WAVE 
@@ -1301,14 +1305,14 @@ static uint8_t getPTTempo(double bpm)
 
 static void setError(MOD_ERROR error)
 {
-    // Store error 
+    // Store error
     issues.error.errorCode = error;
     issues.error.errorInfo = "";
 }
 
 static void setErrorMsg(MOD_ERROR error, std::string msg)
 {
-    // Store error 
+    // Store error
     issues.error.errorCode = error;
     issues.error.errorInfo = msg;
 }
@@ -1366,14 +1370,14 @@ void printError()
 
 void printWarnings()
 {
-    if (issues.warnings.warningCode == MOD_WARNING_NONE) 
+    if (issues.warnings.warningCode == MOD_WARNING_NONE)
     {
         std::cout << "No warnings.\n" << std::endl;
     }
 
     unsigned int i = 1; // Iterate through warnings
 
-    while (i < 1 << 15) 
+    while (i < 1 << 15)
     {
         if (i & issues.warnings.warningCode) // If this warning occurred 
         {
@@ -1391,7 +1395,7 @@ void printWarnings()
                 case MOD_WARNING_PITCH_HIGH:
                     std::cout << "Cannot use the highest Deflemask note (C-8) on some MOD players including ProTracker.\n" << std::endl;
                     break;
-                case MOD_WARNING_TEMPO_LOW: 
+                case MOD_WARNING_TEMPO_LOW:
                     std::cout << "Tempo is too low for ProTracker. Using 16 bpm instead." << std::endl;
                     std::cout << "         ProTracker only supports tempos between 16 and 127.5 bpm." << std::endl;
                     break;

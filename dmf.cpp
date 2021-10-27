@@ -302,6 +302,7 @@ void DMF::LoadPatternMatrixValues(zstr::ifstream& fin)
         for (int j = 0; j < m_ModuleInfo.totalRowsInPatternMatrix; j++)
         {
             m_PatternMatrixValues[i][j] = fin.get();
+            
             if (m_PatternMatrixValues[i][j] > m_PatternMatrixMaxValues[i])
             {
                 m_PatternMatrixMaxValues[i] = m_PatternMatrixValues[i][j];
@@ -508,12 +509,12 @@ void DMF::LoadPatternsData(zstr::ifstream& fin)
     {
         m_ChannelEffectsColumnsCount[channel] = fin.get();
 
-        m_PatternValues[channel] = new PatternRow*[m_PatternMatrixMaxValues[channel] + 1];
+        m_PatternValues[channel] = new PatternRow*[m_PatternMatrixMaxValues[channel] + 1]();
+        /*
         for (unsigned i = 0; i < m_PatternMatrixMaxValues[channel] + 1u; i++)
         {
             m_PatternValues[channel][i] = nullptr;
-        }
-
+        }*/
         for (unsigned rowInPatternMatrix = 0; rowInPatternMatrix < m_ModuleInfo.totalRowsInPatternMatrix; rowInPatternMatrix++)
         {
             patternMatrixNumber = m_PatternMatrixValues[channel][rowInPatternMatrix];

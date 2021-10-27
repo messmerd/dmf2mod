@@ -173,7 +173,7 @@ bool ParseFlags(std::vector<std::string>& args, CommonFlags& flags)
         std::string& str = args[i];
 
         // Handle single character flags
-        if (!str.empty() && str[0] == '-')
+        if (str.size() >= 2 && str[0] == '-' && str[1] != '-')
         {
             // Can have multiple flags together. For example "-fsd"
             for (unsigned j = 1; j < str.size(); j++)
@@ -304,7 +304,8 @@ bool FileExists(const std::string& filename)
 std::string GetFileExtension(const std::string& filename)
 {
     const size_t dotPos = filename.rfind('.');
-    if (dotPos == 0 || dotPos + 1 >= filename.size())
+    // If dot is at start, not found, or at end:
+    if (dotPos == 0 || dotPos == std::string::npos || dotPos + 1 >= filename.size())
         return "";
 
     return filename.substr(dotPos + 1);

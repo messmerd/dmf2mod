@@ -24,9 +24,19 @@ int main(int argc, char *argv[])
     if (!options)
         return 0;
 
-    // Import the input file
+    /*
+    // Import the input file using more explicit way:
     Module input = Module::Create(io.InputType);
     if (input.Load(io.InputFile.c_str()))
+    {
+        // Error occurred during import
+        return 1;
+    }
+    */
+
+    // Import the input file by inferring module type
+    Module input = Module::Create(io.InputFile);
+    if (!input)
     {
         // Error occurred during import
         return 1;

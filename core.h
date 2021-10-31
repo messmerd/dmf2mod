@@ -127,8 +127,6 @@ private:
 class ModuleBase
 {
 public:
-    friend class Module;
-
     virtual ~ModuleBase() {};
 
 protected:
@@ -175,6 +173,9 @@ public:
      * Get the name of the module
      */
     virtual std::string GetName() const = 0;
+
+private:
+    friend class Module;
 };
 
 
@@ -183,6 +184,20 @@ class Module
 {
 public:
     Module() { m_Module = nullptr; };
+    Module(Module &&other) : m_Module(std::move(other.m_Module))
+    {
+        other.m_Module.reset();
+    }
+    
+    Module& operator=(Module&& other)
+    {
+        if (this != &other)
+        {
+            m_Module = std::move(other.m_Module);
+        }
+        return *this;
+    }
+
     ~Module() { m_Module.reset(); }
 
 private:
@@ -193,9 +208,8 @@ public:
 
     /*
      * Create a new module using the ModuleType enum to specify the desired module type
-     * If the resulting Module object evaluates to true or Get() == nullptr, the module type is 
+     * If the resulting Module object evaluates to false or Get() == nullptr, the module type is 
      * probably not registered
-     * TODO: Is Module being copied when returned and is that OK given the unique_ptr member?
      */
     static Module Create(ModuleType type)
     {
@@ -220,6 +234,20 @@ public:
     {
         // Create<T>() is only enabled if T is a derived class of both Module and ModuleStatic<T>
         return Module(new T);
+    }
+
+    /*
+     * Create and load a new module given a filename. Module type is inferred from the file extension.
+     */
+    static Module Create(const std::string& filename)
+    {
+        const ModuleType type = ModuleUtils::GetTypeFromFilename(filename);
+        Module m = Module::Create(type);
+        if (!m)
+            return m;
+        if (m.Load(filename))
+            return m;
+        return m;
     }
 
     /*
@@ -310,6 +338,20 @@ class ConversionOptions
 {
 public:
     ConversionOptions() { m_Options = nullptr; };
+    ConversionOptions(ConversionOptions &&other) : m_Options(std::move(other.m_Options))
+    {
+        other.m_Options.reset();
+    }
+
+    ConversionOptions& operator=(ConversionOptions&& other)
+    {
+        if (this != &other)
+        {
+            m_Options = std::move(other.m_Options);
+        }
+        return *this;
+    }
+
     ~ConversionOptions() { m_Options.reset(); }
 
 private:
@@ -334,9 +376,8 @@ public:
 
     /*
      * Create a new module using the ModuleType enum to specify the desired module type
-     * If the resulting ConversionOptions object evaluates to true or Get() == nullptr, the module type 
+     * If the resulting ConversionOptions object evaluates to false or Get() == nullptr, the module type 
      * is probably not registered
-     * TODO: Is ConversionOptions being copied when returned and is that OK given the unique_ptr member?
      */
     static ConversionOptions Create(ModuleType type)
     {
@@ -375,25 +416,7 @@ private:
             return;
         m_Options->PrintHelp();
     }
-
-    std::unique_ptr<ConversionOptionsBase>& GetUnique()
-    {
-        return m_Options;
-    }
-
-    void Set(ConversionOptionsBase* options)
-    {
-        m_Options.reset();
-        if (options)
-            m_Options = std::unique_ptr<ConversionOptionsBase>(options);
-    }
-
-    void MoveFrom(ConversionOptions& options)
-    {
-        m_Options = std::move(options.m_Options);
-        options.Set(nullptr);
-    }
-
+    
 private:
     std::unique_ptr<ConversionOptionsBase> m_Options;
 };

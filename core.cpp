@@ -155,7 +155,7 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
             return true;
         }
         
-        options.MoveFrom(optionsTemp);
+        options = std::move(optionsTemp); // Invoke move assignment operator
         return false;
     }
 

@@ -63,51 +63,50 @@ typedef struct MODConversionStatus {
     MODWarning warnings;
 } MODConversionStatus;
 
-class MOD : public Module, public ModuleStatic<MOD>
+class MOD : public ModuleBase, public ModuleStatic<MOD>
 {
 public:
     MOD() {};
     ~MOD() {};
     void CleanUp() {};
 
-    bool Load(const char* filename) override
+    bool Load(const std::string& filename) override
     {
         return false;
     }
 
-    bool Save(const char* filename) override
+    bool Save(const std::string& filename) override
     {
         return false;
     }
 
-    ModuleType GetType() override { return _Type; }
+    ModuleType GetType() const override { return _Type; }
 
-    std::string GetFileExtension() override { return _FileExtension; }
+    std::string GetFileExtension() const override { return _FileExtension; }
 
-    std::string GetName() override { return ""; }
+    std::string GetName() const override { return ""; }
 };
 
-class MODConversionOptions : public ConversionOptions, public ConversionOptionsStatic<MODConversionOptions>
+class MODConversionOptions : public ConversionOptionsBase, public ConversionOptionsStatic<MODConversionOptions>
 {
 public:
     MODConversionOptions()
     {
-        OutputFile = "";
         Downsample = false;
         Effects = EffectsEnum::Max;
     }
 
     ~MODConversionOptions() {}
 
-    ModuleType GetType() override { return _Type; }
+    ModuleType GetType() const override { return _Type; }
     
     enum class EffectsEnum
     {
         Min, Max
     };
 
-    EffectsEnum GetEffects() { return Effects; }
-    bool GetDownsample() { return Downsample; }
+    EffectsEnum GetEffects() const { return Effects; }
+    bool GetDownsample() const { return Downsample; }
 
 private:
     bool ParseArgs(std::vector<std::string>& args) override;
@@ -119,7 +118,7 @@ private:
 
 
 // Exports a DMF object "dmfObj" to a MOD file "fname" using the options "options"
-MODConversionStatus exportMOD(const char* fname, DMF* dmfObj, ConversionOptions* options);
+MODConversionStatus exportMOD(const char* fname, const Module& module, const ConversionOptions& options);
 
 void cleanUp();
 

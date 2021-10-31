@@ -144,7 +144,7 @@ typedef enum DMF_IMPORT_ERROR
     IMPORT_ERROR_FAIL=1
 } DMF_IMPORT_ERROR;
 
-class DMF : public Module, public ModuleStatic<DMF>
+class DMF : public ModuleBase, public ModuleStatic<DMF>
 {
 public:
     static constexpr System SYSTEMS(SYSTEM_TYPE systemType) { return m_Systems[systemType]; }
@@ -153,21 +153,26 @@ public:
     ~DMF();
     void CleanUp();
 
-    bool Load(const char* filename) override;
-    bool Save(const char* filename) override;
+    bool Load(const std::string& filename) override;
+    bool Save(const std::string& filename) override;
 
-    ModuleType GetType() override { return _Type; }
+    ModuleType GetType() const override { return _Type; }
 
-    std::string GetFileExtension() override { return _FileExtension; }
+    std::string GetFileExtension() const override { return _FileExtension; }
 
-    std::string GetName() { return m_VisualInfo.songName; }
+    std::string GetName() const override
+    {
+        if (!m_VisualInfo.songName)
+            return "";
+        return m_VisualInfo.songName;
+    }
 
     ////////////
 
     DMF_IMPORT_ERROR Status() { return m_ImportError; };
 
     // Returns the initial BPM of the module when given ModuleInfo
-    double GetBPM();
+    double GetBPM() const;
 
     const System& GetSystem() const { return m_System; }
     const VisualInfo& GetVisualInfo() const { return m_VisualInfo; }
@@ -178,9 +183,9 @@ public:
     uint8_t GetTotalWavetables() const { return m_TotalWavetables; }
 
     uint32_t** const GetWavetableValues() const { return m_WavetableValues; }
-    uint32_t GetWavetableValue(unsigned wavetable, unsigned index) { return m_WavetableValues[wavetable][index]; }
+    uint32_t GetWavetableValue(unsigned wavetable, unsigned index) const { return m_WavetableValues[wavetable][index]; }
 
-    PatternRow*** const GetPatternValues() { return m_PatternValues; }
+    PatternRow*** const GetPatternValues() const { return m_PatternValues; }
 
 private:
     System GetSystem(uint8_t systemByte);
@@ -217,17 +222,13 @@ private:
     DMF_IMPORT_ERROR m_ImportError;
 };
 
-class DMFConversionOptions : public ConversionOptions, public ConversionOptionsStatic<DMFConversionOptions>
+class DMFConversionOptions : public ConversionOptionsBase, public ConversionOptionsStatic<DMFConversionOptions>
 {
 public:
-    DMFConversionOptions()
-    {
-        OutputFile = "";
-    }
-
+    DMFConversionOptions() {}
     ~DMFConversionOptions() {}
 
-    ModuleType GetType() override { return _Type; }
+    ModuleType GetType() const override { return _Type; }
     bool ParseArgs(std::vector<std::string>& args) override { return false; } // DMF files don't have any conversion flags right now
     void PrintHelp() override;
 };

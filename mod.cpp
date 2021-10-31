@@ -44,7 +44,7 @@ typedef struct MODChannelState
 #define PT_NOTE_VOLUMEMAX 64
 #define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 
-static void _exportMOD(const char *fname, DMF *dmfObj, CMD_Options options);
+static void _exportMOD(const char *fname, const DMF *dmfObj, CMD_Options options);
 
 static int initSamples(std::ofstream& fout, Note **lowestNote, Note **highestNote);
 static int finalizeSampMap(std::ofstream& fout, Note *lowestNote, Note *highestNote);
@@ -64,7 +64,7 @@ static void setErrorMsg(MOD_ERROR error, std::string msg);
 static void addWarning(MOD_WARNING warning);
 
 static CMD_Options opt;
-static DMF *dmf;
+static const DMF *dmf;
 
 /*
     sampMap gives the ProTracker (PT) sample numbers for a given SQW / WAVE sample of either low note range or high note range. 
@@ -171,19 +171,20 @@ void MODConversionOptions::PrintHelp()
 
     std::cout.setf(std::ios_base::left);
     std::cout << std::setw(25) << "--downsample" << "Allow wavetables to lose information through downsampling if needed." << std::endl;
-    std::cout << std::setw(25) << "--effects=<MIN, MAX>" << "The number of ProTracker effects to use. (Default: MAX)" << std::endl;
+    std::cout << std::setw(25) << "--effects=[MIN,MAX]" << "The number of ProTracker effects to use. (Default: MAX)" << std::endl;
 }
 
-MODConversionStatus exportMOD(const char* fname, DMF* dmfObj, ConversionOptions* options)
+MODConversionStatus exportMOD(const char* fname, const Module& module, const ConversionOptions& options)
 {
-    MODConversionOptions* modOptions = reinterpret_cast<MODConversionOptions*>(options);
+    
+    const MODConversionOptions* modOptions = reinterpret_cast<const MODConversionOptions*>(options.Get());
     CMD_Options _opt;
     _opt.allowDownsampling = modOptions->GetDownsample();
     _opt.effects = modOptions->GetEffects() == MODConversionOptions::EffectsEnum::Max ? 2 : 1;
     
     // TODO: This function will attempt to export to mod using several different combinations of 
     //      options to find the best option that works for the dmf file 
-    _exportMOD(fname, dmfObj, _opt);
+    _exportMOD(fname, module.Get()->Cast<DMF>(), _opt);
     
     if (issues.error.errorCode != MOD_ERROR_NONE)
     {
@@ -208,7 +209,7 @@ MODConversionStatus exportMOD(const char* fname, DMF* dmfObj, ConversionOptions*
     return issues;
 }
 
-void _exportMOD(const char *fname, DMF *dmfObj, CMD_Options options)
+void _exportMOD(const char *fname, const DMF *dmfObj, CMD_Options options)
 {
     std::ofstream fout;
     dmf = dmfObj; // Allow any function in this file to access DMF contents w/o passing it as an argument.

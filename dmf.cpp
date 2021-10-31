@@ -147,7 +147,7 @@ void DMFConversionOptions::PrintHelp()
     std::cout << "DMF files have no conversion options." << std::endl;
 }
 
-bool DMF::Load(const char* filename)
+bool DMF::Load(const std::string& filename)
 {
     CleanUp();
     m_ImportError = IMPORT_ERROR_FAIL;
@@ -232,7 +232,7 @@ bool DMF::Load(const char* filename)
     return false;
 }
 
-bool DMF::Save(const char* filename)
+bool DMF::Save(const std::string& filename)
 {
     // Not implemented
     return false;
@@ -612,7 +612,7 @@ PCMSample DMF::LoadPCMSample(zstr::ifstream& fin)
     return sample;
 }
 
-double DMF::GetBPM()
+double DMF::GetBPM() const
 {
     // Returns the initial BPM of the module
     unsigned int globalTick;

@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "converter.h"
+#include "core.h"
 
 // Add all supported modules to this enum
 enum class ModuleType

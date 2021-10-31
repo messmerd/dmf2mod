@@ -1,4 +1,4 @@
-#include "converter.h"
+#include "core.h"
 #include "modules.h"
 
 #include <string>
@@ -10,9 +10,9 @@
 #include <fstream>
 
 // Initialize module registration maps
-std::map<ModuleType, std::function<Module*(void)>> ModuleUtils::RegistrationMap = {};
+std::map<ModuleType, std::function<ModuleBase*(void)>> ModuleUtils::RegistrationMap = {};
 std::map<std::string, ModuleType> ModuleUtils::FileExtensionMap = {};
-std::map<ModuleType, std::function<ConversionOptions*(void)>> ModuleUtils::ConversionOptionsRegistrationMap = {};
+std::map<ModuleType, std::function<ConversionOptionsBase*(void)>> ModuleUtils::ConversionOptionsRegistrationMap = {};
 
 struct CommonFlags
 {
@@ -22,13 +22,13 @@ struct CommonFlags
 
 static bool ParseFlags(std::vector<std::string>& args, CommonFlags& flags);
 
-bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo, ConversionOptions*& options)
+bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo, ConversionOptions& options)
 {
     inputOutputInfo.InputFile = "";
     inputOutputInfo.InputType = ModuleType::NONE;
     inputOutputInfo.OutputFile = "";
     inputOutputInfo.OutputType = ModuleType::NONE;
-    options = nullptr;
+    //options = nullptr;
 
     std::vector<std::string> args(argc, "");
     for (int i = 0; i < argc; i++)
@@ -141,7 +141,7 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
         args.erase(args.begin(), args.begin() + 3);
         argc -= 3;
 
-        ConversionOptions* optionsTemp = ConversionOptions::Create(inputOutputInfo.OutputType);
+        ConversionOptions optionsTemp = ConversionOptions::Create(inputOutputInfo.OutputType);
         if (!optionsTemp)
         {
             std::cout << "ERROR: Failed to create ConversionOptions-derived object for the module type '" << GetFileExtension(outputFile) 
@@ -149,15 +149,13 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
             return true;
         }
 
-        if (!args.empty() && optionsTemp->ParseArgs(args))
+        if (!args.empty() && optionsTemp.ParseArgs(args))
         {
             // An error occurred while parsing the module-specific arguments
-            delete optionsTemp;
-            optionsTemp = nullptr;
             return true;
         }
         
-        options = optionsTemp;
+        options.MoveFrom(optionsTemp);
         return false;
     }
 
@@ -250,7 +248,7 @@ bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType
     // If module-specific help was requested
     if (moduleType != ModuleType::NONE)
     {
-        ConversionOptions* options = ConversionOptions::Create(moduleType);
+        ConversionOptions options = ConversionOptions::Create(moduleType);
         if (!options)
         {
             std::string extension = GetExtensionFromType(moduleType);
@@ -266,8 +264,7 @@ bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType
             return true;
         }
 
-        options->PrintHelp();
-        delete options;
+        options.PrintHelp();
         return false;
     }
 
@@ -289,10 +286,24 @@ bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType
     std::cout << "Options:" << std::endl;
 
     std::cout.setf(std::ios_base::left);
-    std::cout << std::setw(25) << "-f, --force" << "Overwrite output file" << std::endl;
+    std::cout << std::setw(25) << "-f, --force" << "Overwrite output file." << std::endl;
     std::cout << std::setw(25) << "--help [module type]" << "Display this help message. Provide module type (i.e. mod) for module-specific options." << std::endl;
 
     return false;
+}
+
+ModuleType Module::GetType() const
+{
+    if (!m_Module)
+        return ModuleType::NONE;
+    return m_Module->GetType();
+}
+
+ModuleType ConversionOptions::GetType() const
+{
+    if (!m_Options)
+        return ModuleType::NONE;
+    return m_Options->GetType();
 }
 
 bool FileExists(const std::string& filename)

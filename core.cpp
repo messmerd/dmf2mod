@@ -14,13 +14,17 @@ std::map<ModuleType, std::function<ModuleBase*(void)>> ModuleUtils::Registration
 std::map<std::string, ModuleType> ModuleUtils::FileExtensionMap = {};
 std::map<ModuleType, std::function<ConversionOptionsBase*(void)>> ModuleUtils::ConversionOptionsRegistrationMap = {};
 
-struct CommonFlags
-{
-    bool force = false;
-    // More to be added later
-};
-
 static bool ParseFlags(std::vector<std::string>& args, CommonFlags& flags);
+
+std::vector<std::string> ModuleUtils::GetAvaliableModules()
+{
+    std::vector<std::string> vec;
+    for (const auto& mapPair : FileExtensionMap)
+    {
+        vec.push_back(mapPair.first);
+    }
+    return vec;
+}
 
 bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo, ConversionOptions& options)
 {
@@ -62,6 +66,8 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
         CommonFlags flags;
         if (ParseFlags(args, flags))
             return true;
+
+        SetCoreOptions(flags);
 
         std::string outputFile, inputFile;
         
@@ -183,6 +189,10 @@ bool ParseFlags(std::vector<std::string>& args, CommonFlags& flags)
                     flags.force = true;
                     str.erase(j--);
                     break;
+                case 's':
+                    flags.silent = true;
+                    str.erase(j--);
+                    break;
                 default:
                     // If a flag is not recognized, it may be a flag used by a module, so don't throw an error
                     //std::cout << "ERROR: The flag '-" << c << "' is unsupported." << std::endl;
@@ -200,6 +210,12 @@ bool ParseFlags(std::vector<std::string>& args, CommonFlags& flags)
         else if (str == "--force")
         {
             flags.force = true;
+            args.erase(args.begin() + i);
+            i--;
+        }
+        else if (str == "--silent")
+        {
+            flags.silent = true;
             args.erase(args.begin() + i);
             i--;
         }
@@ -241,6 +257,44 @@ std::string ModuleUtils::GetExtensionFromType(ModuleType moduleType)
             return mapPair.first;
     }
     return "";
+}
+
+std::string ModuleUtils::GetBaseNameFromFilename(const std::string& filename)
+{
+    // Filename must contain base name, a dot, then the extension
+    if (filename.size() <= 2)
+        return "";
+
+    const size_t slashPos = filename.find_first_of("\\/");
+    // If file separator is at the end:
+    if (slashPos != std::string::npos && slashPos >= filename.size() - 2)
+        return "";
+
+    const size_t startPos = slashPos == std::string::npos ? 0 : slashPos + 1;
+
+    const size_t dotPos = filename.rfind('.');
+    // If dot is at start, not found, or at end:
+    if (dotPos == 0 || dotPos == std::string::npos || dotPos + 1 >= filename.size())
+        return "";
+
+    // The dot should come after the start position
+    if (startPos >= dotPos)
+        return "";
+
+    return filename.substr(startPos, dotPos - startPos);
+}
+
+std::string ModuleUtils::ReplaceFileExtension(const std::string& filename, const std::string& newFileExtension)
+{
+    // filename must contain a file extension
+    // newFileExtension should not contain a dot
+
+    const size_t dotPos = filename.rfind('.');
+    // If dot is at start, not found, or at end:
+    if (dotPos == 0 || dotPos == std::string::npos || dotPos + 1 >= filename.size())
+        return "";
+
+    return filename.substr(0, dotPos + 1) + newFileExtension;
 }
 
 bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType)
@@ -304,6 +358,20 @@ ModuleType ConversionOptions::GetType() const
     if (!m_Options)
         return ModuleType::NONE;
     return m_Options->GetType();
+}
+
+void Status::PrintError()
+{
+    if (ErrorOccurred())
+        std::cout << m_ErrorMessage;
+}
+
+void Status::PrintWarnings()
+{
+    for (const auto& message : m_WarningMessages)
+    {
+        std::cout << message << std::endl;
+    }
 }
 
 bool FileExists(const std::string& filename)

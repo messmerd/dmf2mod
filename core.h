@@ -28,6 +28,96 @@ template<> const std::function<ConversionOptionsBase*(void)> ModuleStatic<module
 template<> const ModuleType ConversionOptionsStatic<optionsClass>::_Type = enumType;
 
 
+struct CommonFlags
+{
+    bool force = false;
+    bool silent = false;
+    // More to be added later
+};
+
+
+class Status
+{
+public:
+
+    // Common error codes are defined here
+    // Module-specific error codes can be implemented using positive values
+    enum class ConvertError : int
+    {
+        Success=0,
+        InvalidArgument=-1,
+        UnsupportedInputType=-2,
+    };
+
+    static constexpr int RegistrationError = -666;
+
+public:
+    Status()
+    {
+        Clear();
+        m_ErrorMessageCreator = nullptr;
+    }
+
+    bool ErrorOccurred() const { return m_ErrorCode != 0; }
+    bool Failed() const { return ErrorOccurred(); }
+    int GetLastErrorCode() const { return m_ErrorCode; }
+    
+    template <class T, 
+        class = typename std::enable_if<
+        (std::is_enum<T>{} || std::is_integral<T>{}) &&
+        (!std::is_enum<T>{} || std::is_convertible<std::underlying_type_t<T>, int>{})
+        >::type>
+    void SetError(T errorCode, const std::string errorMessage = "")
+    {
+        m_ErrorCode = static_cast<int>(errorCode);
+        if (m_ErrorCode > 0)
+        {
+            if (m_ErrorMessageCreator)
+                m_ErrorMessage = m_ErrorMessageCreator(m_ErrorCode, errorMessage);
+            else
+                m_ErrorMessage = errorMessage;
+        }
+        else
+        {
+            // TODO: Create an error message creator for common errors
+            m_ErrorMessage = errorMessage;
+        }
+    }
+
+    void PrintError();
+
+    bool WarningsIssued() const { return !m_WarningMessages.empty(); }
+    void AddWarning(const std::string& warningMessage)
+    {
+        m_WarningMessages.push_back(warningMessage);
+    }
+    void PrintWarnings();
+
+    void Clear()
+    {
+        m_ErrorCode = 0;
+        m_ErrorMessage.clear();
+        m_WarningMessages.clear();
+    }
+
+    operator bool() const { return ErrorOccurred(); }
+
+    void SetErrorMessageCreator(const std::function<std::string(int, const std::string&)>& func)
+    {
+        m_ErrorMessageCreator = func;
+    }
+
+private:
+    int m_ErrorCode;
+    std::string m_ErrorMessage;
+
+    std::vector<std::string> m_WarningMessages;
+
+    // Creates module-specific error message from 
+    std::function<std::string(int, const std::string&)> m_ErrorMessageCreator;
+};
+
+
 // CRTP so each class derived from Module can have its own static type variable and static creation
 template<typename T>
 class ModuleStatic
@@ -79,11 +169,16 @@ class ModuleUtils
 {
 public:
     static void RegisterModules();
+    static std::vector<std::string> GetAvaliableModules();
     static bool ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo, ConversionOptions& options);
+    static CommonFlags GetCoreOptions();
+    static void SetCoreOptions(CommonFlags& options) { m_CoreOptions = options; };
 
     static ModuleType GetTypeFromFilename(const std::string& filename);
     static ModuleType GetTypeFromFileExtension(const std::string& extension);
     static std::string GetExtensionFromType(ModuleType moduleType);
+    static std::string GetBaseNameFromFilename(const std::string& filename);
+    static std::string ReplaceFileExtension(const std::string& filename, const std::string& newFileExtension);
     
 private:
     friend class Module;
@@ -120,6 +215,9 @@ private:
 
     // Map which registers a module type enum value with the static conversion option create function associated with that module
     static std::map<ModuleType, std::function<ConversionOptionsBase*(void)>> ConversionOptionsRegistrationMap;
+
+    // Core conversion options
+    static CommonFlags m_CoreOptions;
 };
 
 
@@ -129,7 +227,6 @@ class ModuleBase
 public:
     virtual ~ModuleBase() {};
 
-protected:
     /*
      * Load the specified module file
      * Returns true upon failure
@@ -142,7 +239,22 @@ protected:
      */
     virtual bool Save(const std::string& filename) = 0;
 
-public:
+    /*
+     * Converts the module to the specified type using the provided conversion options
+     */
+    Module Convert(ModuleType type, ConversionOptions& options)
+    {
+        // TODO: Check if type is same as current type. If so, create a copy?
+        Module output = Module::Create(type);
+        if (!output)
+            return output;
+        output.Get()->ConvertFrom(this, options);
+        return output;
+    }
+
+    bool ErrorOccurred() const { return m_Status.ErrorOccurred(); }
+
+    Status GetStatus() const { return m_Status; }
 
     /*
      * Cast a Module pointer to a pointer of a derived type
@@ -174,8 +286,12 @@ public:
      */
     virtual std::string GetName() const = 0;
 
-private:
+protected:
     friend class Module;
+
+    virtual bool ConvertFrom(const ModuleBase* input, ConversionOptions& options) = 0;
+
+    Status m_Status;
 };
 
 
@@ -183,7 +299,11 @@ private:
 class Module
 {
 public:
-    Module() { m_Module = nullptr; };
+    Module()
+    {
+        m_Module = nullptr;
+    };
+
     Module(Module &&other) : m_Module(std::move(other.m_Module))
     {
         other.m_Module.reset();
@@ -201,7 +321,10 @@ public:
     ~Module() { m_Module.reset(); }
 
 private:
-    Module(ModuleBase* module) { m_Module = std::unique_ptr<ModuleBase>(module); }
+    Module(ModuleBase* module)
+    {
+        m_Module = std::unique_ptr<ModuleBase>(module);
+    }
 
 public:
     operator bool() const { return m_Module.get(); }
@@ -238,8 +361,9 @@ public:
 
     /*
      * Create and load a new module given a filename. Module type is inferred from the file extension.
+     * Returns
      */
-    static Module Create(const std::string& filename)
+    static Module CreateAndLoad(const std::string& filename)
     {
         const ModuleType type = ModuleUtils::GetTypeFromFilename(filename);
         Module m = Module::Create(type);
@@ -251,9 +375,42 @@ public:
     }
 
     /*
+     * Converts the module to the specified type using the provided conversion options
+     */
+    Module Convert(ModuleType type, ConversionOptions& options)
+    {
+        if (!m_Module)
+            return Module();
+        return m_Module->Convert(type, options);
+    }
+
+    bool ErrorOccurred() const
+    {
+        if (!m_Module)
+            return true;
+        return m_Module->m_Status.ErrorOccurred();
+    }
+
+    Status GetStatus() const
+    {
+        if (!m_Module)
+        {
+            Status s;
+            s.SetError(Status::RegistrationError);
+            return s;
+        }
+        return m_Module->m_Status;
+    }
+
+    /*
      * Get the pointer to the module this class wraps
      */
     const ModuleBase* Get() const { return m_Module.get(); }
+
+    /*
+     * Get the pointer to the module this class wraps
+     */
+    ModuleBase* Get() { return m_Module.get(); }
 
     /*
      * Load the specified module file
@@ -315,11 +472,25 @@ public:
     virtual ~ConversionOptionsBase() {};
 
     /*
+     * Cast an options pointer to a pointer of a derived type
+     */
+    template <class T>
+    const T* Cast() const
+    {
+        const T* ptr = reinterpret_cast<const T*>(this);
+        static_assert(ptr);
+        return ptr;
+    }
+
+    /*
      * Get a ModuleType enum value representing the type of the conversion option's module
      */
     virtual ModuleType GetType() const = 0;
 
-    std::string GetOutputFile() const { return m_OutputFile; }
+    /*
+     * Get the filename of the output file. Returns empty string if error occurred.
+     */
+    std::string GetOutputFilename() const { return m_OutputFile; }
 
 protected:
     friend class ModuleUtils;
@@ -400,6 +571,16 @@ public:
      */
     ModuleType GetType() const;
 
+    /*
+     * Get the filename of the output file. Returns empty string if error occurred.
+     */
+    std::string GetOutputFilename() const
+    {
+        if (!m_Options)
+            return "";
+        return m_Options->GetOutputFilename();
+    }
+
 private:
     friend class ModuleUtils;
 
@@ -416,7 +597,7 @@ private:
             return;
         m_Options->PrintHelp();
     }
-    
+
 private:
     std::unique_ptr<ConversionOptionsBase> m_Options;
 };

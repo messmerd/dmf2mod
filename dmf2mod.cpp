@@ -35,22 +35,22 @@ int main(int argc, char *argv[])
     */
 
     // Import the input file by inferring module type
-    Module input = Module::Create(io.InputFile);
-    if (!input)
+    Module input = Module::CreateAndLoad(io.InputFile);
+    if (input.GetStatus().Failed())
     {
         // Error occurred during import
         return 1;
     }
 
-    // Export to a MOD file
-    if (exportMOD(io.OutputFile.c_str(), input, options).error.errorCode != MOD_ERROR_NONE)
+    Module output = input.Convert(io.OutputType, options);
+    if (output.GetStatus().Failed())
     {
-        // Error occurred during export
-        cleanUp();
+        // Error occurred during conversion
         return 1;
     }
 
-    // Deallocate memory
-    cleanUp();
+    if (output.Save(io.OutputFile))
+        return 1; // Error occurred while saving
+
     return 0;
 }

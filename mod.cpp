@@ -23,48 +23,15 @@ rows, only one effect column is allowed per channel, etc.
 #include <fstream>
 #include <cmath>
 #include <cstdio>
+#include <set>
 
 REGISTER_MODULE(MOD, MODConversionOptions, ModuleType::MOD, "mod")
-
-
-// The current square wave duty cycle, note volume, and other information that the 
-//      tracker stores for each channel while playing a tracker file.
-typedef struct MODChannelState
-{
-    DMF_GAMEBOY_CHANNEL channel;
-    uint8_t dutyCycle; 
-    uint8_t wavetable;
-    bool sampleChanged; // True if dutyCycle or wavetable just changed
-    int16_t volume;
-    bool notePlaying;
-    bool onHighNoteRange;
-    bool needToSetVolume;
-} MODChannelState;
 
 #define PT_NOTE_VOLUMEMAX 64
 #define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 
-static void _exportMOD(const char *fname, const DMF *dmfObj, CMD_Options options);
-
-static int initSamples(std::ofstream& fout, Note **lowestNote, Note **highestNote);
-static int finalizeSampMap(std::ofstream& fout, Note *lowestNote, Note *highestNote);
-static void exportSampleInfo(std::ofstream& fout, int8_t ptSampleNumLow, int8_t ptSampleNumHigh, uint8_t indexLow, uint8_t indexHigh, int8_t finetune);
-
-static int WriteProTrackerPatternRow(std::ofstream& fout, PatternRow *pat, MODChannelState *state);
-static uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue);
-static int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect);
-
-static void exportSampleData(std::ofstream& fout);
-static void exportSampleDataHelper(std::ofstream& fout, uint8_t ptSampleNum, uint8_t index);
-
-static uint8_t getPTTempo(double bpm);
-
-static void setError(MOD_ERROR error);
-static void setErrorMsg(MOD_ERROR error, std::string msg);
-static void addWarning(MOD_WARNING warning);
-
-static CMD_Options opt;
-static const DMF *dmf;
+static std::string ErrorMessageCreator(int errorCode, const std::string& arg);
+static std::string GetWarningMessage(MOD::Warning warning);
 
 /*
     sampMap gives the ProTracker (PT) sample numbers for a given SQW / WAVE sample of either low note range or high note range. 
@@ -120,8 +87,15 @@ static std::string filename; // The MOD file name. May not be the same as what t
 
 static bool filePreviouslyExisted = true;
 
-static MODConversionStatus issues = (MODConversionStatus) {{MOD_ERROR_NONE, ""}, {MOD_WARNING_NONE, MOD_WARNING_NONE}};
+static bool downsample;
+static MODConversionOptions::EffectsEnum effects;
 
+MOD::MOD()
+{
+    m_Stream.clear();
+    m_Stream.str(std::string());
+    m_Status.SetErrorMessageCreator(&ErrorMessageCreator);
+}
 
 bool MODConversionOptions::ParseArgs(std::vector<std::string>& args)
 {
@@ -174,88 +148,57 @@ void MODConversionOptions::PrintHelp()
     std::cout << std::setw(25) << "--effects=[MIN,MAX]" << "The number of ProTracker effects to use. (Default: MAX)" << std::endl;
 }
 
-MODConversionStatus exportMOD(const char* fname, const Module& module, const ConversionOptions& options)
+
+bool MOD::ConvertFrom(const ModuleBase* input, ConversionOptions& options)
 {
-    
-    const MODConversionOptions* modOptions = reinterpret_cast<const MODConversionOptions*>(options.Get());
-    CMD_Options _opt;
-    _opt.allowDownsampling = modOptions->GetDownsample();
-    _opt.effects = modOptions->GetEffects() == MODConversionOptions::EffectsEnum::Max ? 2 : 1;
-    
-    // TODO: This function will attempt to export to mod using several different combinations of 
-    //      options to find the best option that works for the dmf file 
-    _exportMOD(fname, module.Get()->Cast<DMF>(), _opt);
-    
-    if (issues.error.errorCode != MOD_ERROR_NONE)
-    {
-        std::cout << "An error occurred during conversion:" << std::endl << std::endl;
-        printError();
-        std::cout << std::endl;
-    }
+    const std::set<std::string> supportedInputTypes = {"dmf"};
 
-    if (issues.warnings.warningCode != MOD_WARNING_NONE)
+    m_Status.Clear();
+
+    if (!input)
     {
-        if (issues.error.errorCode != MOD_ERROR_NONE)
-        {
-            std::cout << "Additionally, these warnings occurred before the error:" << std::endl << std::endl;
-        }
-        else
-        {
-            std::cout << "Warnings occurred during conversion:" << std::endl <<std::endl;
-        }
-        printWarnings();
+        m_Status.SetError(Status::ConvertError::InvalidArgument);
+        return true;
     }
     
-    return issues;
-}
-
-void _exportMOD(const char *fname, const DMF *dmfObj, CMD_Options options)
-{
-    std::ofstream fout;
-    dmf = dmfObj; // Allow any function in this file to access DMF contents w/o passing it as an argument.
-    opt = options;     // Allow any function in this file to access CMD options w/o passing it as an argument.
-
-    ///////////////// EXPORT SONG NAME
-
-    #pragma region EXPORT SONG NAME
-    std::string ext = GetFileExtension(fname);
-    
-    filename = fname;
-    if (ext != "mod")
+    if (supportedInputTypes.count(input->GetFileExtension()) == 0)
     {
-        // Add ".mod" extension if it wasn't specified in the command-line argument
-        filename += ".mod";
-    }
-    
-    std::cout << "Exporting to " << filename << "." << std::endl;
-    filePreviouslyExisted = FileExists(filename);
-    fout.open(filename, std::ios::binary);
-    if (!fout.is_open())
-    {
-        setError(MOD_ERROR_FILE_OPEN);
-        return;
+        m_Status.SetError(Status::ConvertError::UnsupportedInputType);
+        return true;
     }
 
-    std::cout << "Starting to export to MOD..." << std::endl;
+    const bool silent = ModuleUtils::GetCoreOptions().silent;
+    const auto* opt = options.Get()->Cast<MODConversionOptions>();
+    downsample = opt->GetDownsample();
+    effects = opt->GetEffects();
+
+    // Convert from DMF here. Other module types can be added in later.
+    
+    const DMF* dmf = input->Cast<DMF>();
+
+    if (!silent)
+        std::cout << "Starting to convert to MOD..." << std::endl;
     
     if (dmf->GetSystem().id != DMF::SYSTEMS(SYS_GAMEBOY).id) // If it's not a Game Boy
     {
-        setError(MOD_ERROR_NOT_GAMEBOY);
-        return;
+        m_Status.SetError(MOD::NotGameBoy);
+        return true;
     }
 
     const ModuleInfo& moduleInfo = dmf->GetModuleInfo();
     if (moduleInfo.totalRowsInPatternMatrix + (int)usingSetupPattern > 64) // totalRowsInPatternMatrix is 1 more than it actually is 
     {
-        setError(MOD_ERROR_TOO_MANY_PAT_MAT_ROWS);
-        return;
+        m_Status.SetError(MOD::TooManyPatternMatrixRows);
+        return true;
     }
 
     if (moduleInfo.totalRowsPerPattern != 64)
     { 
-        setError(MOD_ERROR_NOT_64_ROW_PATTERN);
-        return;
+        m_Status.SetError(MOD::Not64RowPattern);
+        return true;
     }
+
+    ///////////////// CONVERT SONG NAME
 
     VisualInfo visualInfo = dmf->GetVisualInfo();
 
@@ -264,23 +207,22 @@ void _exportMOD(const char *fname, const DMF *dmfObj, CMD_Options options)
     {
         if (i < visualInfo.songNameLength)
         {
-            fout.put(tolower(visualInfo.songName[i]));
+            m_Stream.put(tolower(visualInfo.songName[i]));
         }
         else
         {
-            fout.put(0);
+            m_Stream.put(0);
         }
     }
     
-    #pragma endregion
 
-    ///////////////// EXPORT SAMPLE INFO
+    ///////////////// CONVERT SAMPLE INFO
 
-    #pragma region EXPORT_SAMPLE_INFO
-    std::cout << "Exporting sample info..." << std::endl;
+    if (!silent)
+        std::cout << "Converting sample info..." << std::endl;
 
     Note *lowestNote, *highestNote;
-    if (initSamples(fout, &lowestNote, &highestNote))
+    if (InitSamples(dmf, &lowestNote, &highestNote))
     {
         // An error occurred in initSamples
         delete[] lowestNote;
@@ -288,7 +230,7 @@ void _exportMOD(const char *fname, const DMF *dmfObj, CMD_Options options)
         delete[] noteRangeStart;
         delete[] sampMap;
         delete[] sampleLength;
-        return;
+        return true;
     }
     delete[] lowestNote;
     delete[] highestNote;
@@ -307,62 +249,59 @@ void _exportMOD(const char *fname, const DMF *dmfObj, CMD_Options options)
         //    of a blank sample is 0x01 and all 29 other bytes are 0x00.
         for (int j = 0; j < 29; j++)
         {
-            fout.put(0);
+            m_Stream.put(0);
         }
-        fout.put(1);
+        m_Stream.put(1);
     }
-
-    #pragma endregion EXPORT_SAMPLE_INFO
 
     ///////////////// EXPORT OTHER INFO
 
-    #pragma region EXPORT_OTHER_INFO
-    std::cout << "Exporting other information..." << std::endl;
+    if (!silent)
+        std::cout << "Converting other information..." << std::endl;
 
-    fout.put(moduleInfo.totalRowsInPatternMatrix + (int)usingSetupPattern);   // Song length in patterns (not total number of patterns) 
-    fout.put(127);                        // 0x7F - Useless byte that has to be here
+    m_Stream.put(moduleInfo.totalRowsInPatternMatrix + (int)usingSetupPattern);   // Song length in patterns (not total number of patterns) 
+    m_Stream.put(127);                        // 0x7F - Useless byte that has to be here
 
     // Pattern matrix (Each ProTracker pattern number is the same as its pattern matrix row number)
     for (uint8_t i = 0; i < moduleInfo.totalRowsInPatternMatrix + (int)usingSetupPattern; i++)
-        fout.put(i);
+        m_Stream.put(i);
     for (uint8_t i = moduleInfo.totalRowsInPatternMatrix + (int)usingSetupPattern; i < 128; i++)
-        fout.put(0);
+        m_Stream.put(0);
     
-    fout << "M.K."; // ProTracker uses "M!K!" if there's more than 64 pattern matrix rows...
-    #pragma endregion EXPORT_OTHER_INFO
-    
-    ///////////////// EXPORT PATTERN DATA
+    m_Stream << "M.K."; // ProTracker uses "M!K!" if there's more than 64 pattern matrix rows...
 
-    #pragma region EXPORT_PATTERN_DATA
-    std::cout << "Exporting pattern data..." << std::endl;
+    ///////////////// CONVERT PATTERN DATA
+
+    if (!silent)
+        std::cout << "Converting pattern data..." << std::endl;
 
     if (usingSetupPattern)
     {
         // Export initial tempo (An approximation. ProTracker can only support Deflemask tempo between 16 and 127.5 bpm.)
-        uint16_t effect = ((uint16_t)PT_SETSPEED << 4) | getPTTempo(dmf->GetBPM());
-        fout.put(0);  // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
-        fout.put(0);  // Sample period/effect param. (lower 8 bits)
-        fout.put((effect & 0x0F00) >> 8); // Sample number (lower 4b); effect code (upper 4b)
-        fout.put(effect & 0x00FF); // Effect code (lower 8 bits)
+        uint16_t effect = ((uint16_t)PT_SETSPEED << 4) | GetPTTempo(dmf->GetBPM());
+        m_Stream.put(0);  // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
+        m_Stream.put(0);  // Sample period/effect param. (lower 8 bits)
+        m_Stream.put((effect & 0x0F00) >> 8); // Sample number (lower 4b); effect code (upper 4b)
+        m_Stream.put(effect & 0x00FF); // Effect code (lower 8 bits)
 
         // Export position jump (once the Pattern Break effect is implemented, it can be used instead.)
         effect = ((uint16_t)PT_POSJUMP << 4) | 1; // Jump to next pattern
-        fout.put(0);  // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
-        fout.put(0);  // Sample period/effect param. (lower 8 bits)
-        fout.put((effect & 0x0F00) >> 8); // Sample number (lower 4b); effect code (upper 4b)
-        fout.put(effect & 0x00FF); // Effect code (lower 8 bits)
+        m_Stream.put(0);  // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
+        m_Stream.put(0);  // Sample period/effect param. (lower 8 bits)
+        m_Stream.put((effect & 0x0F00) >> 8); // Sample number (lower 4b); effect code (upper 4b)
+        m_Stream.put(effect & 0x00FF); // Effect code (lower 8 bits)
 
         // Blank (WAVE channel)
-        fout.put(0); // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
-        fout.put(0); // Sample period/effect param. (lower 8 bits)
-        fout.put(0); // Sample number (lower 4b); effect code (upper 4b)
-        fout.put(0); // Effect code (lower 8 bits)
+        m_Stream.put(0); // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
+        m_Stream.put(0); // Sample period/effect param. (lower 8 bits)
+        m_Stream.put(0); // Sample number (lower 4b); effect code (upper 4b)
+        m_Stream.put(0); // Effect code (lower 8 bits)
 
         // Blank (NOISE channel)
-        fout.put(0); // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
-        fout.put(0); // Sample period/effect param. (lower 8 bits)
-        fout.put(0); // Sample number (lower 4b); effect code (upper 4b)
-        fout.put(0); // Effect code (lower 8 bits)
+        m_Stream.put(0); // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
+        m_Stream.put(0); // Sample period/effect param. (lower 8 bits)
+        m_Stream.put(0); // Sample number (lower 4b); effect code (upper 4b)
+        m_Stream.put(0); // Effect code (lower 8 bits)
         
         // Loop through the rest of the rows in 1st pattern:
         for (int patRow = 1; patRow < 64; patRow++)
@@ -370,10 +309,10 @@ void _exportMOD(const char *fname, const DMF *dmfObj, CMD_Options options)
             // Loop through channels:
             for (int chan = 0; chan < DMF::SYSTEMS(SYS_GAMEBOY).channels; chan++) 
             {
-                fout.put(0); // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
-                fout.put(0); // Sample period/effect param. (lower 8 bits) 
-                fout.put(0); // Sample number (lower 4b); effect code (upper 4b)
-                fout.put(0); // Effect code (lower 8 bits)
+                m_Stream.put(0); // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
+                m_Stream.put(0); // Sample period/effect param. (lower 8 bits) 
+                m_Stream.put(0); // Sample number (lower 4b); effect code (upper 4b)
+                m_Stream.put(0); // Effect code (lower 8 bits)
             }
         }
     }
@@ -466,7 +405,7 @@ void _exportMOD(const char *fname, const DMF *dmfObj, CMD_Options options)
                 }
                 #pragma endregion
 
-                if (WriteProTrackerPatternRow(fout, &pat, &state[chan]))
+                if (WriteProTrackerPatternRow(dmf, &pat, &state[chan]))
                 {
                     // Error occurred while writing the pattern row
                     delete[] noteRangeStart;
@@ -477,44 +416,41 @@ void _exportMOD(const char *fname, const DMF *dmfObj, CMD_Options options)
             }
         }
     }
-    
-    #pragma endregion EXPORT_PATTERN_DATA
 
-    ///////////////// EXPORT SAMPLE DATA
+    ///////////////// CONVERT SAMPLE DATA
 
-    #pragma region EXPORT SAMPLE DATA
-    std::cout << "Exporting samples..." << std::endl;
-    exportSampleData(fout);
-    #pragma endregion EXPORT SAMPLE DATA
+    if (!silent)
+        std::cout << "Converting samples..." << std::endl;
+    ExportSampleData(dmf);
     
     ///////////////// CLEAN UP
-    fout.close();
 
     delete[] noteRangeStart;
     delete[] sampMap;
     delete[] sampleLength;
 
-    std::cout << "Done exporting to MOD!" << std::endl;
+    if (!silent)
+        std::cout << "Done converting to MOD!" << std::endl;
 
     // Success
+    return false;
 }
 
-
-static int WriteProTrackerPatternRow(std::ofstream& fout, PatternRow *pat, MODChannelState *state)
+int MOD::WriteProTrackerPatternRow(const DMF* dmf, PatternRow *pat, MODChannelState *state)
 {
-    // Writes 4 bytes of pattern row information to the .mod file 
+    // Writes 4 bytes of pattern row information to the .mod file
     uint16_t effect;
-    if (checkEffects(pat, state, &effect))
+    if (CheckEffects(pat, state, &effect))
     {
         return 1; // An error occurred
     }
 
     if (pat->note.pitch == DMF_NOTE_EMPTY)  // No note is playing. Only handle effects.
     {
-        fout.put(0); // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
-        fout.put(0); // Sample period/effect param. (lower 8 bits)
-        fout.put((effect & 0x0F00) >> 8);  // Sample number (lower 4b) = 0 b/c there's no note; effect code (upper 4b)
-        fout.put(effect & 0x00FF);         // Effect code (lower 8 bits)
+        m_Stream.put(0); // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
+        m_Stream.put(0); // Sample period/effect param. (lower 8 bits)
+        m_Stream.put((effect & 0x0F00) >> 8);  // Sample number (lower 4b) = 0 b/c there's no note; effect code (upper 4b)
+        m_Stream.put(effect & 0x00FF);         // Effect code (lower 8 bits)
     }
     else if (pat->note.pitch == DMF_NOTE_OFF) // Note OFF. Only handle note OFF effect.
     {
@@ -523,10 +459,10 @@ static int WriteProTrackerPatternRow(std::ofstream& fout, PatternRow *pat, MODCh
         //uint16_t period = proTrackerPeriodTable[2][DMF_NOTE_C % 12]; // This note won't be played, but it makes ProTracker happy.
         //fout.put((period & 0x0F00) >> 8);  // Sample number (upper 4b); sample period/effect param. (upper 4b)
         //fout.put(period & 0x00FF);         // Sample period/effect param. (lower 8 bits)
-        fout.put(0);                         // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
-        fout.put(0);                         // Sample period/effect param. (lower 8 bits)
-        fout.put((effect & 0x0F00) >> 8);    // Sample number (lower 4b); effect code (upper 4b)
-        fout.put(effect & 0x00FF);           // Effect code (lower 8 bits)
+        m_Stream.put(0);                         // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
+        m_Stream.put(0);                         // Sample period/effect param. (lower 8 bits)
+        m_Stream.put((effect & 0x0F00) >> 8);    // Sample number (lower 4b); effect code (upper 4b)
+        m_Stream.put(effect & 0x00FF);           // Effect code (lower 8 bits)
     }
     else  // A note is playing
     {
@@ -601,10 +537,10 @@ static int WriteProTrackerPatternRow(std::ofstream& fout, PatternRow *pat, MODCh
             sampleNumber = 0; // Keep noise channel quiet since it isn't implemented yet.
         }
 
-        fout.put((sampleNumber & 0xF0) | ((period & 0x0F00) >> 8));  // Sample number (upper 4b); sample period/effect param. (upper 4b)
-        fout.put(period & 0x00FF);                                   // Sample period/effect param. (lower 8 bits)
-        fout.put((sampleNumber << 4) | ((effect & 0x0F00) >> 8));    // Sample number (lower 4b); effect code (upper 4b)
-        fout.put(effect & 0x00FF);                                   // Effect code (lower 8 bits)
+        m_Stream.put((sampleNumber & 0xF0) | ((period & 0x0F00) >> 8));  // Sample number (upper 4b); sample period/effect param. (upper 4b)
+        m_Stream.put(period & 0x00FF);                                   // Sample period/effect param. (lower 8 bits)
+        m_Stream.put((sampleNumber << 4) | ((effect & 0x0F00) >> 8));    // Sample number (lower 4b); effect code (upper 4b)
+        m_Stream.put(effect & 0x00FF);                                   // Effect code (lower 8 bits)
         
         state->notePlaying = true;
     }
@@ -612,11 +548,11 @@ static int WriteProTrackerPatternRow(std::ofstream& fout, PatternRow *pat, MODCh
    return 0; // Success
 }
 
-static int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
+int MOD::CheckEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
 {
-    if (opt.effects == 2) // If using maximum amount of effects
+    if (effects == MODConversionOptions::EffectsEnum::Max) // If using maximum amount of effects
     {
-        *effect = getProTrackerEffect(pat->effectCode[0], pat->effectValue[0]); // Effects must be in first row
+        *effect = GetProTrackerEffect(pat->effectCode[0], pat->effectValue[0]); // Effects must be in first row
         if (pat->volume != state->volume && pat->volume != DMF_NOTE_NOVOLUME && (pat->note.pitch >= 1 && pat->note.pitch <= 12)) // If the note volume changes, and the volume is connected to a note
         {
             if (*effect != PT_NOEFFECT_CODE) // If an effect is already being used
@@ -627,12 +563,12 @@ static int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effec
                     Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
                     so it does not count.
                 */
-                setError(MOD_ERROR_EFFECT_VOLUME);
+                m_Status.SetError(MOD::Error::EffectVolume);
                 return 1;
             }
             else // Only the volume changed
             {
-                uint8_t newVolume = round(pat->volume / 15.0 * 65.0); // Convert DMF volume to PT volume
+                uint8_t newVolume = std::round(pat->volume / 15.0 * 65.0); // Convert DMF volume to PT volume
                 *effect = ((uint16_t)PT_SETVOLUME << 4) | newVolume; // ???
                 //printf("Vol effect = %x, effect code = %d, effect val = %d, dmf vol = %d\n", effect, PT_SETVOLUME, newVolume, pat->volume);
                 state->volume = pat->volume; // Update the state
@@ -649,7 +585,7 @@ static int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effec
                     Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
                     so it does not count.
                 */
-                setError(MOD_ERROR_EFFECT_VOLUME);
+                m_Status.SetError(MOD::Error::EffectVolume);
                 return 1;
             }
             else // No effects except the note OFF
@@ -690,7 +626,7 @@ static int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effec
                 Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
                 so it does not count.
             */
-            setError(MOD_ERROR_MULTIPLE_EFFECT);
+            m_Status.SetError(MOD::Error::MultipleEffects);
             return 1;
         }
         else if (total_effects == 0)
@@ -701,7 +637,7 @@ static int checkEffects(PatternRow *pat, MODChannelState *state, uint16_t *effec
     return 0; // Success
 }
 
-static uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
+uint16_t MOD::GetProTrackerEffect(int16_t effectCode, int16_t effectValue)
 {
     // An effect is represented with 12 bits, which is 3 groups of 4 bits: [e][x][y].
     // The effect code is [e] or [e][x], and the effect value is [x][y] or [y].
@@ -795,7 +731,7 @@ static uint16_t getProTrackerEffect(int16_t effectCode, int16_t effectValue)
     return ((uint16_t)ptEff << 4) | ptEffVal;
 }
 
-static int initSamples(std::ofstream& fout, Note **lowestNote, Note **highestNote)
+int MOD::InitSamples(const DMF* dmf, Note **lowestNote, Note **highestNote)
 {
     // This function loops through all DMF pattern contents to find the highest and lowest notes 
     //  for each square wave duty cycle and each wavetable. It also finds which SQW duty cycles are 
@@ -943,10 +879,10 @@ static int initSamples(std::ofstream& fout, Note **lowestNote, Note **highestNot
         }
     }
 
-    return finalizeSampMap(fout, *lowestNote, *highestNote);
+    return FinalizeSampMap(dmf, *lowestNote, *highestNote);
 }
 
-static int finalizeSampMap(std::ofstream& fout, Note *lowestNote, Note *highestNote)
+int MOD::FinalizeSampMap(const DMF* dmf, Note *lowestNote, Note *highestNote)
 {
     // This function assigns ProTracker (PT) sample numbers and exports sample info
 
@@ -996,9 +932,9 @@ static int finalizeSampMap(std::ofstream& fout, Note *lowestNote, Note *highestN
             else if (NoteCompare(&lowestNote[i], {DMF_NOTE_C, 3}) >= 0 && NoteCompare(&highestNote[i], {DMF_NOTE_B, 6}) <= 0) 
             {
                 // If between C-4 and B-6 (Deflemask tracker note format) and none of the above options work 
-                if (i >= 4 && !opt.allowDownsampling) // If on a wavetable instrument and can't downsample it 
+                if (i >= 4 && !downsample) // If on a wavetable instrument and can't downsample it 
                 {
-                    setErrorMsg(MOD_ERROR_WAVE_DOWNSAMPLE, std::to_string(i - 4));
+                    m_Status.SetError(MOD::Error::WaveDownsample, std::to_string(i - 4));
                     return 1;
                 }
                 
@@ -1010,9 +946,9 @@ static int finalizeSampMap(std::ofstream& fout, Note *lowestNote, Note *highestN
             else if (NoteCompare(&lowestNote[i], {DMF_NOTE_C, 4}) >= 0 && NoteCompare(&highestNote[i], {DMF_NOTE_B, 7}) <= 0) 
             {
                 // If between C-5 and B-7 (Deflemask tracker note format)
-                if (i >= 4 && !opt.allowDownsampling) // If on a wavetable instrument and can't downsample it
+                if (i >= 4 && !downsample) // If on a wavetable instrument and can't downsample it
                 {
-                    setErrorMsg(MOD_ERROR_WAVE_DOWNSAMPLE, std::to_string(i - 4));
+                    m_Status.SetError(MOD::Error::WaveDownsample, std::to_string(i - 4));
                     return 1;
                 }
                 
@@ -1023,9 +959,9 @@ static int finalizeSampMap(std::ofstream& fout, Note *lowestNote, Note *highestN
             else if (NoteCompare(&highestNote[i], {DMF_NOTE_C, 7}) == 0)
             {
                 // If between C#5 and C-8 (highest note) (Deflemask tracker note format):
-                if (i >= 4 && !opt.allowDownsampling) // If on a wavetable instrument and can't downsample it
+                if (i >= 4 && !downsample) // If on a wavetable instrument and can't downsample it
                 {
-                    setErrorMsg(MOD_ERROR_WAVE_DOWNSAMPLE, std::to_string(i - 4));
+                    m_Status.SetError(MOD::Error::WaveDownsample, std::to_string(i - 4));
                     return 1;
                 }
                 
@@ -1046,7 +982,7 @@ static int finalizeSampMap(std::ofstream& fout, Note *lowestNote, Note *highestN
                 } 
                 sampMap[indexLow] = ptSampleNum; // Assign PT sample number to this square wave / WAVE sample
                 sampMap[indexHigh] = -1; // No PT sample needed for this square wave / WAVE sample (high note range)
-                exportSampleInfo(fout, ptSampleNum, -1, indexLow, indexHigh, finetune);
+                ExportSampleInfo(dmf, ptSampleNum, -1, indexLow, indexHigh, finetune);
                 ptSampleNum++;
             }
 
@@ -1059,11 +995,11 @@ static int finalizeSampMap(std::ofstream& fout, Note *lowestNote, Note *highestN
             sampleLength[indexHigh] = 8; // High note range (C-5 to B-7)
 
             // If on a wavetable sample and cannot downsample it:
-            if (i >= 4 && !opt.allowDownsampling)
+            if (i >= 4 && !downsample)
             {
-                if (!opt.allowDownsampling)
+                if (!downsample)
                 {
-                    setErrorMsg(MOD_ERROR_WAVE_DOWNSAMPLE, std::to_string(i - 4));
+                    m_Status.SetError(MOD::Error::WaveDownsample, std::to_string(i - 4));
                     return 1;
                 }
 
@@ -1082,7 +1018,7 @@ static int finalizeSampMap(std::ofstream& fout, Note *lowestNote, Note *highestN
 
             if (NoteCompare(&highestNote[i], {DMF_NOTE_C, 7}) == 0)
             {
-                addWarning(MOD_WARNING_PITCH_HIGH);
+                m_Status.AddWarning(GetWarningMessage(MOD::Warning::PitchHigh));
             }
 
             /*
@@ -1105,7 +1041,7 @@ static int finalizeSampMap(std::ofstream& fout, Note *lowestNote, Note *highestN
 
             sampMap[indexLow] = ptSampleNum; // Assign PT sample number to this square wave / WAVE sample
             sampMap[indexHigh] = ptSampleNum + 1; // Assign PT sample number to this square wave / WAVE sample
-            exportSampleInfo(fout, ptSampleNum, ptSampleNum + 1, indexLow, indexHigh, finetune);
+            ExportSampleInfo(dmf, ptSampleNum, ptSampleNum + 1, indexLow, indexHigh, finetune);
             ptSampleNum += 2;
 
         }
@@ -1115,8 +1051,8 @@ static int finalizeSampMap(std::ofstream& fout, Note *lowestNote, Note *highestN
     return 0; // Success
 }
 
-static void exportSampleInfo(std::ofstream& fout, int8_t ptSampleNumLow, int8_t ptSampleNumHigh, uint8_t indexLow, uint8_t indexHigh, int8_t finetune)
-{   
+void MOD::ExportSampleInfo(const DMF* dmf, int8_t ptSampleNumLow, int8_t ptSampleNumHigh, uint8_t indexLow, uint8_t indexHigh, int8_t finetune)
+{
     uint8_t index;
 
     for (int i = 0; i < 2; i++) // 0 == low note range, 1 == high note range
@@ -1131,15 +1067,15 @@ static void exportSampleInfo(std::ofstream& fout, int8_t ptSampleNumLow, int8_t 
                 {
                     switch (indexLow)
                     {
-                        case 0: fout << "SQW, Duty 12.5% (low) "; break;
-                        case 1: fout << "SQW, Duty 25% (low)   "; break;
-                        case 2: fout << "SQW, Duty 50% (low)   "; break;
-                        case 3: fout << "SQW, Duty 75% (low)   "; break;
+                        case 0: m_Stream << "SQW, Duty 12.5% (low) "; break;
+                        case 1: m_Stream << "SQW, Duty 25% (low)   "; break;
+                        case 2: m_Stream << "SQW, Duty 50% (low)   "; break;
+                        case 3: m_Stream << "SQW, Duty 75% (low)   "; break;
                     }
                 }
                 else  // WAVE
                 {
-                    fout << "Wavetable #" << std::left << std::setw(2) << std::to_string(index - 4) << " (low)   ";
+                    m_Stream << "Wavetable #" << std::left << std::setw(2) << std::to_string(index - 4) << " (low)   ";
                 }
             }
             else // Else, no "(low)" text.
@@ -1148,15 +1084,15 @@ static void exportSampleInfo(std::ofstream& fout, int8_t ptSampleNumLow, int8_t 
                 {
                     switch (indexLow)
                     {
-                        case 0: fout << "SQW, Duty 12.5%       "; break;
-                        case 1: fout << "SQW, Duty 25%         "; break;
-                        case 2: fout << "SQW, Duty 50%         "; break;
-                        case 3: fout << "SQW, Duty 75%         "; break;
+                        case 0: m_Stream << "SQW, Duty 12.5%       "; break;
+                        case 1: m_Stream << "SQW, Duty 25%         "; break;
+                        case 2: m_Stream << "SQW, Duty 50%         "; break;
+                        case 3: m_Stream << "SQW, Duty 75%         "; break;
                     }
                 }
                 else  // WAVE
                 {
-                    fout << "Wavetable #" << std::left << std::setw(2) << std::to_string(index - 4) << "         ";
+                    m_Stream << "Wavetable #" << std::left << std::setw(2) << std::to_string(index - 4) << "         ";
                 }
             }
         }
@@ -1167,15 +1103,15 @@ static void exportSampleInfo(std::ofstream& fout, int8_t ptSampleNumLow, int8_t 
             {
                 switch (indexLow)
                 {
-                    case 0: fout << "SQW, Duty 12.5% (high)"; break;
-                    case 1: fout << "SQW, Duty 25% (high)  "; break;
-                    case 2: fout << "SQW, Duty 50% (high)  "; break;
-                    case 3: fout << "SQW, Duty 75% (high)  "; break;
+                    case 0: m_Stream << "SQW, Duty 12.5% (high)"; break;
+                    case 1: m_Stream << "SQW, Duty 25% (high)  "; break;
+                    case 2: m_Stream << "SQW, Duty 50% (high)  "; break;
+                    case 3: m_Stream << "SQW, Duty 75% (high)  "; break;
                 }
             }
-            else  // WAVE 
+            else  // WAVE
             {
-                fout << "Wavetable #" << std::left << std::setw(2) << std::to_string(index - 8 - dmf->GetTotalWavetables()) << " (high)  ";
+                m_Stream << "Wavetable #" << std::left << std::setw(2) << std::to_string(index - 8 - dmf->GetTotalWavetables()) << " (high)  ";
             }
             
         }
@@ -1184,18 +1120,18 @@ static void exportSampleInfo(std::ofstream& fout, int8_t ptSampleNumLow, int8_t 
             break; 
         }
 
-        fout.put(sampleLength[index] >> 9);             // Length byte 0
-        fout.put(sampleLength[index] >> 1);             // Length byte 1
-        fout.put(finetune);                             // Finetune value !!!
-        fout.put(PT_NOTE_VOLUMEMAX);                    // Sample volume
-        fout.put(0);                                    // Repeat offset byte 0
-        fout.put(0);                                    // Repeat offset byte 1
-        fout.put(sampleLength[index] >> 9);                 // Sample repeat length byte 0
-        fout.put((sampleLength[index] >> 1) & 0x00FF);      // Sample repeat length byte 1
+        m_Stream.put(sampleLength[index] >> 9);                 // Length byte 0
+        m_Stream.put(sampleLength[index] >> 1);                 // Length byte 1
+        m_Stream.put(finetune);                                 // Finetune value !!!
+        m_Stream.put(PT_NOTE_VOLUMEMAX);                        // Sample volume
+        m_Stream.put(0);                                        // Repeat offset byte 0
+        m_Stream.put(0);                                        // Repeat offset byte 1
+        m_Stream.put(sampleLength[index] >> 9);                 // Sample repeat length byte 0
+        m_Stream.put((sampleLength[index] >> 1) & 0x00FF);      // Sample repeat length byte 1
     }
 }
 
-static void exportSampleData(std::ofstream& fout)
+void MOD::ExportSampleData(const DMF* dmf)
 { 
     uint8_t ptSampleNum = 1;
     const uint8_t totalWavetables = dmf->GetTotalWavetables();
@@ -1204,18 +1140,18 @@ static void exportSampleData(std::ofstream& fout)
     {
         if (sampMap[i] == ptSampleNum)
         {
-            exportSampleDataHelper(fout, ptSampleNum, i);
+            ExportSampleDataHelper(dmf, ptSampleNum, i);
             ptSampleNum++; 
             if (sampMap[i + 4 + totalWavetables] == ptSampleNum)
             {
-                exportSampleDataHelper(fout, ptSampleNum, i + 4 + totalWavetables);
+                ExportSampleDataHelper(dmf, ptSampleNum, i + 4 + totalWavetables);
                 ptSampleNum++;
             }
         }
     }
 }
 
-static void exportSampleDataHelper(std::ofstream& fout, uint8_t ptSampleNum, uint8_t index)
+void MOD::ExportSampleDataHelper(const DMF* dmf, uint8_t ptSampleNum, uint8_t index)
 {
     // This function must be called for SQW / WAVE samples in the same 
     //      order as their PT sample numbers. The exportSampleData function guarantees it.
@@ -1233,11 +1169,11 @@ static void exportSampleDataHelper(std::ofstream& fout, uint8_t ptSampleNum, uin
         {
             if ((i * 8.f) / sampleLength[index] <= (float)duty[dutyNum])
             {
-                fout.put(127); // high
+                m_Stream.put(127); // high
             }
             else
             {
-                fout.put(-10); // low
+                m_Stream.put(-10); // low
             }
         }
     }
@@ -1250,17 +1186,17 @@ static void exportSampleDataHelper(std::ofstream& fout, uint8_t ptSampleNum, uin
             if (sampleLength[index] == 128) // Quadruple length
             {
                 // Convert from DMF sample values (0 to 15) to PT sample values (-128 to 127).
-                fout.put((int8_t)((dmf->GetWavetableValue(waveNum, i / 4) / 15.f * 255.f) - 128.f));
+                m_Stream.put((int8_t)((dmf->GetWavetableValue(waveNum, i / 4) / 15.f * 255.f) - 128.f));
             }
             else if (sampleLength[index] == 64) // Double length
             {
                 // Convert from DMF sample values (0 to 15) to PT sample values (-128 to 127).
-                fout.put((int8_t)((dmf->GetWavetableValue(waveNum, i / 2) / 15.f * 255.f) - 128.f));
+                m_Stream.put((int8_t)((dmf->GetWavetableValue(waveNum, i / 2) / 15.f * 255.f) - 128.f));
             }
             else if (sampleLength[index] == 32) // Normal length 
             {
                 // Convert from DMF sample values (0 to 15) to PT sample values (-128 to 127).
-                fout.put((int8_t)((dmf->GetWavetableValue(waveNum, i) / 15.f * 255.f) - 128.f));
+                m_Stream.put((int8_t)((dmf->GetWavetableValue(waveNum, i) / 15.f * 255.f) - 128.f));
             }
             else if (sampleLength[index] == 16) // Half length (loss of information)
             {
@@ -1268,7 +1204,7 @@ static void exportSampleDataHelper(std::ofstream& fout, uint8_t ptSampleNum, uin
                 int avg = (int8_t)((dmf->GetWavetableValue(waveNum, i * 2) / 15.f * 255.f) - 128.f);
                 avg += (int8_t)((dmf->GetWavetableValue(waveNum, (i * 2) + 1) / 15.f * 255.f) - 128.f);
                 avg /= 2;
-                fout.put((int8_t)avg);
+                m_Stream.put((int8_t)avg);
             }
             else if (sampleLength[index] == 8) // Quarter length (loss of information)
             {
@@ -1277,24 +1213,24 @@ static void exportSampleDataHelper(std::ofstream& fout, uint8_t ptSampleNum, uin
                 avg += (int8_t)((dmf->GetWavetableValue(waveNum, (i * 4) + 1) / 15.f * 255.f) - 128.f);
                 avg += (int8_t)((dmf->GetWavetableValue(waveNum, (i * 4) + 2) / 15.f * 255.f) - 128.f);
                 avg += (int8_t)((dmf->GetWavetableValue(waveNum, (i * 4) + 3) / 15.f * 255.f) - 128.f);
-                avg /= 4; 
-                fout.put((int8_t)avg);
+                avg /= 4;
+                m_Stream.put((int8_t)avg);
             }
         }
     }
 }
 
-static uint8_t getPTTempo(double bpm)
+uint8_t MOD::GetPTTempo(double bpm)
 {
     // Get ProTracker tempo from Deflemask bpm.
     if (bpm * 2.0 > 255.0) // If tempo is too high (over 127.5 bpm)
     {
-        addWarning(MOD_WARNING_TEMPO_HIGH);
+        m_Status.AddWarning(GetWarningMessage(MOD::Warning::TempoHigh));
         return 255;
     }
     else if (bpm * 2.0 < 32.0) // If tempo is too low (under 16 bpm)
     {
-        addWarning(MOD_WARNING_TEMPO_LOW);
+        m_Status.AddWarning(GetWarningMessage(MOD::Warning::TempoLow));
         return 32;
     }
     else // Tempo is okay for ProTracker
@@ -1304,135 +1240,50 @@ static uint8_t getPTTempo(double bpm)
     }
 }
 
-static void setError(MOD_ERROR error)
+static std::string GetWarningMessage(MOD::Warning warning)
 {
-    // Store error
-    issues.error.errorCode = error;
-    issues.error.errorInfo = "";
-}
-
-static void setErrorMsg(MOD_ERROR error, std::string msg)
-{
-    // Store error
-    issues.error.errorCode = error;
-    issues.error.errorInfo = msg;
-}
-
-static void addWarning(MOD_WARNING warning)
-{
-    if (warning != MOD_WARNING_NONE)
+    switch (warning)
     {
-        // Make note if the same warning has occurred before
-        issues.warnings.multipleWarnings |= issues.warnings.warningCode & warning; 
-        // Store warning 
-        issues.warnings.warningCode |= warning;
-    }
-    else
-    {
-        // Reset warnings
-        issues.warnings.multipleWarnings = MOD_WARNING_NONE;
-        issues.warnings.warningCode = MOD_WARNING_NONE;
-    }
-}
-
-void printError()
-{
-    switch (issues.error.errorCode)
-    {
-        case MOD_ERROR_NONE:
-            std::cout << "No errors occurred." << std::endl;
-            break;
-        case MOD_ERROR_FILE_OPEN:
-            std::cout << "ERROR: Failed to open MOD file to write." << std::endl;
-            break;
-        case MOD_ERROR_NOT_GAMEBOY:
-            std::cout << "ERROR: Only the Game Boy system is currently supported." << std::endl;
-            break;
-        case MOD_ERROR_TOO_MANY_PAT_MAT_ROWS:
-            std::cout << "ERROR: Too many rows of patterns in the pattern matrix. 64 is the maximum. (63 if using Setup Pattern.)" << std::endl;
-            break;
-        case MOD_ERROR_NOT_64_ROW_PATTERN:
-            std::cout << "ERROR: Patterns must have 64 rows." << std::endl;
-            std::cout << "       A workaround for this issue is planned for a future update to dmf2mod." << std::endl;
-            break;
-        case MOD_ERROR_WAVE_DOWNSAMPLE: 
-            std::cout << "ERROR: Cannot use wavetable instrument #" << issues.error.errorInfo << " without loss of information." << std::endl;
-            std::cout << "       Try using the '--downsample' option." << std::endl;
-            break;
-        case MOD_ERROR_EFFECT_VOLUME:
-            std::cout << "ERROR: An effect and a volume change (or Note OFF) cannot both appear in the same row of the same channel." << std::endl;
-            std::cout << "       Try fixing this issue in Deflemask or use the '--effects=MIN' option." << std::endl;
-            break;
-        case MOD_ERROR_MULTIPLE_EFFECT:
-            std::cout << "ERROR: No more than one Note OFF, Volume Change, or Position Jump can appear in the same row of the same channel." << std::endl;
+        case MOD::Warning::PitchHigh:
+            return std::string("Cannot use the highest Deflemask note (C-8) on some MOD players including ProTracker.");
+        case MOD::Warning::TempoLow:
+            return std::string("Tempo is too low for ProTracker. Using 16 bpm instead.")
+                    + std::string("         ProTracker only supports tempos between 16 and 127.5 bpm.");
+        case MOD::Warning::TempoHigh:
+            return std::string("Tempo is too high for ProTracker. Using 127.5 bpm instead.")
+                    + std::string("         ProTracker only supports tempos between 16 and 127.5 bpm.");
+        case MOD::Warning::EffectIgnored:
+            return std::string("A Deflemask effect was ignored due to limitations of the MOD format.");
+        default:
+            return "";
             break;
     }
 }
 
-void printWarnings()
+std::string ErrorMessageCreator(int errorCode, const std::string& arg)
 {
-    if (issues.warnings.warningCode == MOD_WARNING_NONE)
+    switch (errorCode)
     {
-        std::cout << "No warnings.\n" << std::endl;
+        case MOD::Error::Success:
+            return std::string("No errors occurred.");
+        case MOD::Error::FileOpen:
+            return std::string("ERROR: Failed to open MOD file to write.");
+        case MOD::Error::NotGameBoy:
+            return std::string("ERROR: Only the Game Boy system is currently supported.");
+        case MOD::Error::TooManyPatternMatrixRows:
+            return std::string("ERROR: Too many rows of patterns in the pattern matrix. 64 is the maximum. (63 if using Setup Pattern.)");
+        case MOD::Error::Not64RowPattern:
+            return std::string("ERROR: Patterns must have 64 rows.\n")
+                    + std::string("       A workaround for this issue is planned for a future update to dmf2mod.");
+        case MOD::Error::WaveDownsample:
+            return std::string("ERROR: Cannot use wavetable instrument #") + arg + std::string(" without loss of information.\n")
+                    + std::string("       Try using the '--downsample' option.");
+        case MOD::Error::EffectVolume:
+            return std::string("ERROR: An effect and a volume change (or Note OFF) cannot both appear in the same row of the same channel.\n")
+                    + std::string("       Try fixing this issue in Deflemask or use the '--effects=MIN' option.");
+        case MOD::Error::MultipleEffects:
+            return std::string("ERROR: No more than one Note OFF, Volume Change, or Position Jump can appear in the same row of the same channel.");
+        default:
+            return "";
     }
-
-    unsigned int i = 1; // Iterate through warnings
-
-    while (i < 1 << 15)
-    {
-        if (i & issues.warnings.warningCode) // If this warning occurred 
-        {
-            if (i & issues.warnings.multipleWarnings) // If this warning occurred more than once 
-            {
-                std::cout << "WARNING (MULTIPLE OCCURRENCES): ";
-            }
-            else
-            {
-                std::cout << "WARNING: ";
-            }
-            
-            switch (i)
-            {
-                case MOD_WARNING_PITCH_HIGH:
-                    std::cout << "Cannot use the highest Deflemask note (C-8) on some MOD players including ProTracker.\n" << std::endl;
-                    break;
-                case MOD_WARNING_TEMPO_LOW:
-                    std::cout << "Tempo is too low for ProTracker. Using 16 bpm instead." << std::endl;
-                    std::cout << "         ProTracker only supports tempos between 16 and 127.5 bpm." << std::endl;
-                    break;
-                case MOD_WARNING_TEMPO_HIGH: 
-                    std::cout << "Tempo is too high for ProTracker. Using 127.5 bpm instead." << std::endl;
-                    std::cout << "         ProTracker only supports tempos between 16 and 127.5 bpm." << std::endl;
-                    break;
-                case MOD_WARNING_EFFECT_IGNORED: 
-                    std::cout << "A Deflemask effect was ignored due to limitations of the MOD format." << std::endl;
-                    break;
-                default:
-                    // No more warnings are defined 
-                    i = 1 << 14; // Cause while loop to end 
-                    break;
-            }
-            std::cout << std::endl;
-        }
-        
-        i <<= 1; // Next warning
-    }
-}
-
-void cleanUp()
-{
-    issues.error.errorInfo.clear();
-
-    // Remove the MOD file if an error occurred and dmf2mod created the MOD file:
-    if (issues.error.errorCode != MOD_ERROR_NONE && !filePreviouslyExisted)
-    {
-        // This will fail if you try to run dmf2mod without elevated permissions:
-        remove(filename.c_str());
-        ///perror("An error occurred when attempting to delete file: ");
-
-        // TODO: Write MOD data to a buffer, then if conversion finishes successfully, write that buffer 
-        //      to the file. This would be a better solution and solve potential problems like the one above.
-    }
-
-    filename.clear();
 }

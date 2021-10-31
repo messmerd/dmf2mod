@@ -13,8 +13,23 @@ rows, only one effect column is allowed per channel, etc.
 #pragma once
 
 #include <string>
+#include <sstream>
 
 #include "dmf.h"
+
+// The current square wave duty cycle, note volume, and other information that the 
+//      tracker stores for each channel while playing a tracker file.
+typedef struct MODChannelState
+{
+    DMF_GAMEBOY_CHANNEL channel;
+    uint8_t dutyCycle; 
+    uint8_t wavetable;
+    bool sampleChanged; // True if dutyCycle or wavetable just changed
+    int16_t volume;
+    bool notePlaying;
+    bool onHighNoteRange;
+    bool needToSetVolume;
+} MODChannelState;
 
 typedef struct CMD_Options {
     uint8_t effects; // 0 == none; 1 == minimum; 2 == maximum 
@@ -33,40 +48,13 @@ typedef enum PT_EFFECT {
     PT_SETFINETUNE=0xE5, PT_LOOPPATTERN=0xE6, PT_SETTREMOLOWAVEFORM=0xE7, PT_RETRIGGERSAMPLE=0xE9, PT_FINEVOLSLIDEUP=0xEA, 
     PT_FINEVOLSLIDEDOWN=0xEB, PT_CUTSAMPLE=0xEC, PT_DELAYSAMPLE=0xED, PT_DELAYPATTERN=0xEE, PT_INVERTLOOP=0xEF,
     PT_SETSPEED=0xF0
-} PT_EFFECT; 
+} PT_EFFECT;
 
-// Error codes 
-typedef enum MOD_ERROR {
-    MOD_ERROR_NONE=0, MOD_ERROR_FILE_OPEN, MOD_ERROR_NOT_GAMEBOY, MOD_ERROR_TOO_MANY_PAT_MAT_ROWS, 
-    MOD_ERROR_NOT_64_ROW_PATTERN, MOD_ERROR_WAVE_DOWNSAMPLE, MOD_ERROR_EFFECT_VOLUME, MOD_ERROR_MULTIPLE_EFFECT 
-} MOD_ERROR;
-
-// Error information used by multiple functions 
-typedef struct MODError {
-    MOD_ERROR errorCode;
-    std::string errorInfo;
-} MODError;
-
-// Warning codes 
-typedef enum MOD_WARNING { 
-    MOD_WARNING_NONE=0, MOD_WARNING_PITCH_HIGH=1, MOD_WARNING_TEMPO_LOW=2, 
-    MOD_WARNING_TEMPO_HIGH=4, MOD_WARNING_EFFECT_IGNORED=8
-} MOD_WARNING;
-
-// Warning information used by multiple functions
-typedef struct MODWarning {
-    uint16_t warningCode, multipleWarnings;
-} MODWarning;
-
-typedef struct MODConversionStatus {
-    MODError error;
-    MODWarning warnings;
-} MODConversionStatus;
 
 class MOD : public ModuleBase, public ModuleStatic<MOD>
 {
 public:
-    MOD() {};
+    MOD();
     ~MOD() {};
     void CleanUp() {};
 
@@ -85,6 +73,44 @@ public:
     std::string GetFileExtension() const override { return _FileExtension; }
 
     std::string GetName() const override { return ""; }
+
+    enum Error
+    {
+        Success=0,
+        FileOpen,
+        NotGameBoy,
+        TooManyPatternMatrixRows,
+        Not64RowPattern,
+        WaveDownsample,
+        EffectVolume,
+        MultipleEffects
+    };
+
+    enum Warning
+    {
+        None=0,
+        PitchHigh,
+        TempoLow,
+        TempoHigh,
+        EffectIgnored
+    };
+
+private:
+    bool ConvertFrom(const ModuleBase* input, ConversionOptions& options) override;
+
+    int InitSamples(const DMF* dmf, Note **lowestNote, Note **highestNote);
+    int FinalizeSampMap(const DMF* dmf, Note *lowestNote, Note *highestNote);
+    void ExportSampleInfo(const DMF* dmf, int8_t ptSampleNumLow, int8_t ptSampleNumHigh, uint8_t indexLow, uint8_t indexHigh, int8_t finetune);
+    void ExportSampleData(const DMF* dmf);
+    void ExportSampleDataHelper(const DMF* dmf, uint8_t ptSampleNum, uint8_t index);
+    int WriteProTrackerPatternRow(const DMF* dmf, PatternRow *pat, MODChannelState *state);
+    int CheckEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect);
+    uint16_t GetProTrackerEffect(int16_t effectCode, int16_t effectValue);
+
+    uint8_t GetPTTempo(double bpm);
+
+    //typedef std::basic_stringstream<unsigned char> bytestream;
+    std::stringstream m_Stream;
 };
 
 class MODConversionOptions : public ConversionOptionsBase, public ConversionOptionsStatic<MODConversionOptions>
@@ -115,13 +141,3 @@ private:
     bool Downsample;
     EffectsEnum Effects;
 };
-
-
-// Exports a DMF object "dmfObj" to a MOD file "fname" using the options "options"
-MODConversionStatus exportMOD(const char* fname, const Module& module, const ConversionOptions& options);
-
-void cleanUp();
-
-void printError();
-void printWarnings();
-

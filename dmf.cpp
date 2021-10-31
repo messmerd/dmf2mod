@@ -37,6 +37,8 @@ const System DMF::m_Systems[] = {
 	[SYS_YM2151] = {.id = 0x08, .name = "YM2151", .channels = 13}
 };
 
+static bool silent;
+
 DMF::DMF()
 {
     // Initialize pointers to nullptr to prevent segfault when freeing memory if the import fails:
@@ -53,6 +55,7 @@ DMF::DMF()
     m_PCMSamples = nullptr;
 
     m_ImportError = IMPORT_ERROR_FAIL;
+    silent = ModuleUtils::GetCoreOptions().silent;
 }
 
 DMF::~DMF()
@@ -152,7 +155,8 @@ bool DMF::Load(const std::string& filename)
     CleanUp();
     m_ImportError = IMPORT_ERROR_FAIL;
 
-    std::cout << "Starting to import the DMF file..." << std::endl;
+    if (!silent)
+        std::cout << "Starting to import the DMF file..." << std::endl;
 
     if (ModuleUtils::GetTypeFromFilename(filename) != ModuleType::DMF)
     {
@@ -161,7 +165,8 @@ bool DMF::Load(const std::string& filename)
         return true;
     }
 
-    std::cout << "DMF Filename: " << filename << std::endl;
+    if (!silent)
+        std::cout << "DMF Filename: " << filename << std::endl;
 
     zstr::ifstream fin(filename, std::ios_base::binary);
     if (fin.fail())
@@ -196,37 +201,47 @@ bool DMF::Load(const std::string& filename)
 
     ///////////////// SYSTEM SET
     m_System = GetSystem(fin.get());
-    std::cout << "System: " << m_System.name << " (channels: " << std::to_string(m_System.channels) << ")" << std::endl;
+    
+    if (!silent)
+        std::cout << "System: " << m_System.name << " (channels: " << std::to_string(m_System.channels) << ")" << std::endl;
 
     ///////////////// VISUAL INFORMATION
     LoadVisualInfo(fin);
-    std::cout << "Loaded visual information." << std::endl;
+    if (!silent)
+        std::cout << "Loaded visual information." << std::endl;
 
     ///////////////// MODULE INFORMATION
     LoadModuleInfo(fin);
-    std::cout << "Loaded module." << std::endl;
+    if (!silent)
+        std::cout << "Loaded module." << std::endl;
 
     ///////////////// PATTERN MATRIX VALUES
     LoadPatternMatrixValues(fin);
-    std::cout << "Loaded pattern matrix values." << std::endl;
+    if (!silent)
+        std::cout << "Loaded pattern matrix values." << std::endl;
 
     ///////////////// INSTRUMENTS DATA
     LoadInstrumentsData(fin);
-    std::cout << "Loaded instruments." << std::endl;
+    if (!silent)
+        std::cout << "Loaded instruments." << std::endl;
 
     ///////////////// WAVETABLES DATA
     LoadWavetablesData(fin);
-    std::cout << "Loaded " << std::to_string(m_TotalWavetables) << " wavetable(s)." << std::endl;
+    if (!silent)
+        std::cout << "Loaded " << std::to_string(m_TotalWavetables) << " wavetable(s)." << std::endl;
 
     ///////////////// PATTERNS DATA
     LoadPatternsData(fin);
-    std::cout << "Loaded patterns." << std::endl;
+    if (!silent)
+        std::cout << "Loaded patterns." << std::endl;
 
     ///////////////// PCM SAMPLES DATA
     LoadPCMSamplesData(fin);
-    std::cout << "Loaded PCM Samples." << std::endl;
+    if (!silent)
+        std::cout << "Loaded PCM Samples." << std::endl;
 
-    std::cout << "Done loading DMF file!" << std::endl << std::endl;
+    if (!silent)
+        std::cout << "Done loading DMF file." << std::endl << std::endl;
 
     m_ImportError = IMPORT_ERROR_SUCCESS;
     return false;
@@ -256,14 +271,16 @@ void DMF::LoadVisualInfo(zstr::ifstream& fin)
     fin.read(m_VisualInfo.songName, m_VisualInfo.songNameLength);
     m_VisualInfo.songName[m_VisualInfo.songNameLength] = '\0';
 
-    std::cout << "Title: " << m_VisualInfo.songName << std::endl;
+    if (!silent)
+        std::cout << "Title: " << m_VisualInfo.songName << std::endl;
 
     m_VisualInfo.songAuthorLength = fin.get();
     m_VisualInfo.songAuthor = new char[m_VisualInfo.songAuthorLength + 1];
     fin.read(m_VisualInfo.songAuthor, m_VisualInfo.songAuthorLength);
     m_VisualInfo.songAuthor[m_VisualInfo.songAuthorLength] = '\0';
 
-    std::cout << "Author: " << m_VisualInfo.songAuthor << std::endl;
+    if (!silent)
+        std::cout << "Author: " << m_VisualInfo.songAuthor << std::endl;
 
     m_VisualInfo.highlightAPatterns = fin.get();
     m_VisualInfo.highlightBPatterns = fin.get();

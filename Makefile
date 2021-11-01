@@ -8,7 +8,7 @@ ZLIB_MAKE	= make --directory=zlib --makefile=win32/Makefile.gcc
 ZLIB_CLEAN	= make clean --directory=zlib --makefile=win32/Makefile.gcc
 else
 OUT	= dmf2mod
-ZLIB_MAKE	= ./zlib/configure --static && make --directory=zlib
+ZLIB_MAKE	= chmod +x ./zlib/configure && ./zlib/configure --static && make --directory=zlib
 ZLIB_CLEAN	= make clean --directory=zlib
 endif
 

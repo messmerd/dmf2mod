@@ -29,21 +29,22 @@ And that's it!
 
 Note that `g++`, `gcc`, and `make` must be installed and added to the PATH in order to build.
 
-## Usage 
+## Usage
 ```
 dmf2mod output.[ext] input.dmf [options]
 dmf2mod [ext] input.dmf [options]
-``` 
+```
 Options:
 ```
 -f, --force              Overwrite output file.
 --help [module type]     Displays the help message. Provide module type (i.e. mod) for module-specific options.
+-s, --silent             Print nothing to stdout besides errors and/or warnings.
 ```
 
 Options when converting to MOD:
 ```
---downsample             Allow wavetables to lose information through downsampling if needed. 
---effects=[MIN,MAX]      The number of ProTracker effects to use. (Default: MAX) 
+--downsample             Allow wavetables to lose information through downsampling if needed.
+--effects=[min,max]      The number of ProTracker effects to use. (Default: max)
 ```
  
 ## DMF-->MOD Limitations

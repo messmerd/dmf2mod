@@ -13,7 +13,7 @@
 // TODO: Right now, only effect column 0 is used. But two dmf effects 
 //      could potentially be used if one of them is 10xx or 12xx. Need to allow for that. 
 
-// TODO: Add '--effects=NONE' option, which does not use any ProTracker effects. 
+// TODO: Add '--effects=none' option, which does not use any ProTracker effects. 
 
 // TODO: Delete output file if an error occurred while creating it?
 
@@ -127,7 +127,7 @@ bool MODConversionOptions::ParseArgs(std::vector<std::string>& args)
                 Effects = EffectsEnum::Max;
             else
             {
-                std::cout << "ERROR: For the option '--effects=', the acceptable values are: MIN, MAX.\n";
+                std::cout << "ERROR: For the option '--effects=', the acceptable values are: min, max.\n";
                 return true;
             }
             args.erase(args.begin() + i);
@@ -152,7 +152,7 @@ void MODConversionOptions::PrintHelp()
 
     std::cout.setf(std::ios_base::left);
     std::cout << std::setw(25) << "--downsample" << "Allow wavetables to lose information through downsampling if needed.\n";
-    std::cout << std::setw(25) << "--effects=[MIN,MAX]" << "The number of ProTracker effects to use. (Default: MAX)\n";
+    std::cout << std::setw(25) << "--effects=[min,max]" << "The number of ProTracker effects to use. (Default: max)\n";
 }
 
 MOD::MOD()
@@ -1314,7 +1314,7 @@ std::string ErrorMessageCreator(Status::Category category, int errorCode, const 
                             + std::string("       Try using the '--downsample' option.");
                 case (int)MOD::ConvertError::EffectVolume:
                     return std::string("An effect and a volume change (or Note OFF) cannot both appear in the same row of the same channel.\n")
-                            + std::string("       Try fixing this issue in Deflemask or use the '--effects=MIN' option.");
+                            + std::string("       Try fixing this issue in Deflemask or use the '--effects=min' option.");
                 case (int)MOD::ConvertError::MultipleEffects:
                     return "No more than one Note OFF, Volume Change, or Position Jump can appear in the same row of the same channel.";
                 default:

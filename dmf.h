@@ -1,26 +1,19 @@
 /*
-dmf.h
-Written by Dalton Messmer <messmer.dalton@gmail.com>. 
+    dmf.h
+    Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-Provides functions for loading a .dmf file according to the 
-spec sheet at http://www.deflemask.com/DMF_SPECS.txt. 
+    Declares the Module-derived class for Deflemask's DMF files.
 
-Requires the zlib compression library from https://zlib.net. 
+    DMF file support was written according to the specs at 
+    http://www.deflemask.com/DMF_SPECS.txt.
+
+    Requires the zlib compression library from https://zlib.net.
 */
 
-#ifndef __DMF_H__
-#define __DMF_H__
+#pragma once
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-#include <assert.h>
-#include <stdbool.h>
-
-// For inflating .dmf files so that they can be read 
-#include "zlib.h"
-#include "zconf.h"
+#include "modules.h"
+#include "zstr/zstr.hpp"
 
 // Deflemask allows four effects columns per channel regardless of the system 
 #define MAX_EFFECTS_COLUMN_COUNT 4 
@@ -58,30 +51,34 @@ typedef enum DMF_EFFECT {
 
 // Deflemask effects exclusive to the Game Boy system:
 typedef enum DMF_GAMEBOY_EFFECT {
-    DMF_SETWAVE=0x10, DMF_SETNOISEPOLYCOUNTERMODE=0x11, DMF_SETDUTYCYCLE=0x12, DMF_SETSWEEPTIMESHIFT=0x13, DMF_SETSWEEPDIR=0x14
+    DMF_SETWAVE=0x10, 
+    DMF_SETNOISEPOLYCOUNTERMODE=0x11, 
+    DMF_SETDUTYCYCLE=0x12, 
+    DMF_SETSWEEPTIMESHIFT=0x13, 
+    DMF_SETSWEEPDIR=0x14
 } DMF_GAMEBOY_EFFECT;
 
 // To do: Add enums for effects exclusive to the rest of Deflemask's systems. 
 
-typedef struct Note 
+typedef struct Note
 {
-    uint16_t pitch; 
-    uint16_t octave;  
-} Note; 
+    uint16_t pitch;
+    uint16_t octave;
+} Note;
 
 typedef struct System
 {
     uint8_t id;
-    char *name;
+    const char* name;
     uint8_t channels;
 } System;
 
-// SYSTEM_TYPE values also correspond to indices in Systems array. 
-typedef enum SYSTEM_TYPE 
+// SYSTEM_TYPE values also correspond to indices in DMF::m_Systems array.
+typedef enum SYSTEM_TYPE
 {
-    SYS_ERROR, SYS_GENESIS, SYS_GENESIS_CH3, SYS_SMS, SYS_GAMEBOY, 
+    SYS_ERROR=0, SYS_GENESIS, SYS_GENESIS_CH3, SYS_SMS, SYS_GAMEBOY, 
     SYS_PCENGINE, SYS_NES, SYS_C64_SID_8580, SYS_C64_SID_6581, SYS_YM2151
-} SYSTEM_TYPE; 
+} SYSTEM_TYPE;
 
 typedef struct VisualInfo
 {
@@ -136,49 +133,128 @@ typedef struct PCMSample
 
 typedef struct PatternRow
 {
-    Note note; 
-    int16_t volume; 
+    Note note;
+    int16_t volume;
     int16_t effectCode[MAX_EFFECTS_COLUMN_COUNT];
     int16_t effectValue[MAX_EFFECTS_COLUMN_COUNT];
     int16_t instrument;
 } PatternRow; 
 
-typedef struct DMFContents
+typedef enum DMF_IMPORT_ERROR
 {
-    uint8_t dmfFileVersion; 
-    System sys; 
-    VisualInfo visualInfo; 
-    ModuleInfo moduleInfo; 
-    uint8_t **patternMatrixValues; 
-    uint8_t *patternMatrixMaxValues; 
-    uint8_t totalInstruments; 
-    Instrument* instruments; 
-    uint8_t totalWavetables; 
-    uint32_t *wavetableSizes;   
-    uint32_t **wavetableValues; 
-    PatternRow ***patternValues; 
-    uint8_t *channelEffectsColumnsCount; 
-    uint8_t totalPCMSamples; 
-    PCMSample *pcmSamples; 
-} DMFContents; 
+    IMPORT_ERROR_SUCCESS=0,
+    IMPORT_ERROR_FAIL=1
+} DMF_IMPORT_ERROR;
 
-// Deflemask Game Boy channels 
+class DMF : public ModuleBase, public ModuleStatic<DMF>
+{
+public:
+    static constexpr System SYSTEMS(SYSTEM_TYPE systemType) { return m_Systems[systemType]; }
+
+    enum ImportError
+    {
+        Success=0,
+        UnspecifiedError
+    };
+
+    enum class ImportWarning {};
+    enum class ExportError {};
+    enum class ExportWarning {};
+    enum class ConvertError {};
+    enum class ConvertWarning {};
+
+    DMF();
+    ~DMF();
+    void CleanUp();
+
+    bool Import(const std::string& filename) override;
+    bool Export(const std::string& filename) override;
+
+    ModuleType GetType() const override { return _Type; }
+
+    std::string GetFileExtension() const override { return _FileExtension; }
+
+    std::string GetName() const override
+    {
+        if (!m_VisualInfo.songName)
+            return "";
+        return m_VisualInfo.songName;
+    }
+
+    ////////////
+
+    // Returns the initial BPM of the module when given ModuleInfo
+    double GetBPM() const;
+
+    const System& GetSystem() const { return m_System; }
+    const VisualInfo& GetVisualInfo() const { return m_VisualInfo; }
+    const ModuleInfo& GetModuleInfo() const { return m_ModuleInfo; }
+
+    uint8_t** const GetPatternMatrixValues() const { return m_PatternMatrixValues; }
+
+    uint8_t GetTotalWavetables() const { return m_TotalWavetables; }
+
+    uint32_t** const GetWavetableValues() const { return m_WavetableValues; }
+    uint32_t GetWavetableValue(unsigned wavetable, unsigned index) const { return m_WavetableValues[wavetable][index]; }
+
+    PatternRow*** const GetPatternValues() const { return m_PatternValues; }
+
+private:
+    bool ConvertFrom(const Module* input, ConversionOptionsPtr& options) override
+    {
+        return true; // Not implemented
+    };
+
+    System GetSystem(uint8_t systemByte);
+    void LoadVisualInfo(zstr::ifstream& fin);
+    void LoadModuleInfo(zstr::ifstream& fin);
+    void LoadPatternMatrixValues(zstr::ifstream& fin);
+    void LoadInstrumentsData(zstr::ifstream& fin);
+    Instrument LoadInstrument(zstr::ifstream& fin, System systemType);
+    void LoadWavetablesData(zstr::ifstream& fin);
+    void LoadPatternsData(zstr::ifstream& fin);
+    PatternRow LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount);
+    void LoadPCMSamplesData(zstr::ifstream& fin);
+    PCMSample LoadPCMSample(zstr::ifstream& fin);
+
+private:
+    uint8_t         m_DMFFileVersion;
+    System          m_System;
+    VisualInfo      m_VisualInfo;
+    ModuleInfo      m_ModuleInfo;
+    uint8_t**       m_PatternMatrixValues;
+    uint8_t*        m_PatternMatrixMaxValues;
+    uint8_t         m_TotalInstruments;
+    Instrument*     m_Instruments;
+    uint8_t         m_TotalWavetables;
+    uint32_t*       m_WavetableSizes;
+    uint32_t**      m_WavetableValues;
+    PatternRow***   m_PatternValues;
+    uint8_t*        m_ChannelEffectsColumnsCount;
+    uint8_t         m_TotalPCMSamples;
+    PCMSample*      m_PCMSamples;
+
+    static const System m_Systems[];
+};
+
+class DMFConversionOptions : public ConversionOptionsBase, public ConversionOptionsStatic<DMFConversionOptions>
+{
+public:
+    DMFConversionOptions() {}
+    ~DMFConversionOptions() {}
+
+    ModuleType GetType() const override { return _Type; }
+    bool ParseArgs(std::vector<std::string>& args) override { return false; } // DMF files don't have any conversion flags right now
+    void PrintHelp() override;
+};
+
+// Deflemask Game Boy channels
 typedef enum DMF_GAMEBOY_CHANNEL {
     DMF_GAMEBOY_SQW1=0, DMF_GAMEBOY_SQW2=1, DMF_GAMEBOY_WAVE=2, DMF_GAMEBOY_NOISE=3
-} DMF_GAMEBOY_CHANNEL; 
+} DMF_GAMEBOY_CHANNEL;
 
-// Imports the .dmf file "fname" and stores it in the struct "dmf" 
-int importDMF(const char *fname, DMFContents *dmf); 
+// Compares notes n1 and n2. Returns 1 if n1 > n2, -1 if n1 < n2, and 0 if n1 == n2.
+int8_t NoteCompare(const Note *n1, const Note *n2);
 
-// Returns the initial bpm of the module when given ModuleInfo 
-double getBPM(const ModuleInfo *info);  
+int8_t NoteCompare(const Note* n1, const Note n2);
 
-// Compares notes n1 and n2. Returns 1 if n1 > n2, -1 if n1 < n2, and 0 if n1 == n2. 
-int8_t noteCompare(const Note *n1, const Note *n2); 
-
-// Frees the dynamically allocated memory used by a DMFContents struct 
-void freeDMF(DMFContents *dmf); 
-
-char *getFilenameExt(const char *fname); 
-
-#endif 

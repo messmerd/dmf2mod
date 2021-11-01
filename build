@@ -1,9 +1,0 @@
-#!/bin/sh
-
-# Build script for Linux / Mac 
-
-cd ./zlib
-./configure
-make
-cd ../
-make 

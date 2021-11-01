@@ -1,11 +1,13 @@
 /*
-dmf.cpp
-Written by Dalton Messmer <messmer.dalton@gmail.com>.
+    dmf.cpp
+    Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-Provides functions for loading a dmf file according to the 
-spec sheet at http://www.deflemask.com/DMF_SPECS.txt.
+    Implements the Module-derived class for Deflemask's DMF files.
 
-Requires the zlib compression library from https://zlib.net.
+    DMF file support was written according to the specs at 
+    http://www.deflemask.com/DMF_SPECS.txt.
+
+    Requires the zlib compression library from https://zlib.net.
 */
 
 #include "dmf.h"
@@ -17,6 +19,7 @@ REGISTER_MODULE(DMF, DMFConversionOptions, ModuleType::DMF, "dmf")
 #include "zconf.h"
 
 #include <iostream>
+#include <iomanip>
 #include <string>
 #include <fstream>
 
@@ -37,8 +40,6 @@ const System DMF::m_Systems[] = {
 	[SYS_YM2151] = {.id = 0x08, .name = "YM2151", .channels = 13}
 };
 
-static bool silent;
-
 DMF::DMF()
 {
     // Initialize pointers to nullptr to prevent segfault when freeing memory if the import fails:
@@ -53,9 +54,6 @@ DMF::DMF()
     m_WavetableValues = nullptr;
     m_ChannelEffectsColumnsCount = nullptr;
     m_PCMSamples = nullptr;
-
-    m_ImportError = IMPORT_ERROR_FAIL;
-    silent = ModuleUtils::GetCoreOptions().silent;
 }
 
 DMF::~DMF()
@@ -147,32 +145,32 @@ void DMF::CleanUp()
 
 void DMFConversionOptions::PrintHelp()
 { 
-    std::cout << "DMF files have no conversion options." << std::endl;
+    std::cout << "DMF files have no conversion options.\n";
 }
 
-bool DMF::Load(const std::string& filename)
+bool DMF::Import(const std::string& filename)
 {
     CleanUp();
-    m_ImportError = IMPORT_ERROR_FAIL;
+    m_Status.Clear();
+
+    const bool silent = ModuleUtils::GetCoreOptions().silent;
 
     if (!silent)
-        std::cout << "Starting to import the DMF file..." << std::endl;
+        std::cout << "Starting to import the DMF file...\n";
 
     if (ModuleUtils::GetTypeFromFilename(filename) != ModuleType::DMF)
     {
-        std::cout << "ERROR: Input file has the wrong file extension." << std::endl << "Please use a DMF file." << std::endl;
-        m_ImportError = IMPORT_ERROR_FAIL;
+        m_Status.SetError(Status::Category::Import, DMF::ImportError::UnspecifiedError, "Input file has the wrong file extension.\nPlease use a DMF file.");
         return true;
     }
 
     if (!silent)
-        std::cout << "DMF Filename: " << filename << std::endl;
+        std::cout << "DMF Filename: " << filename << "\n";
 
     zstr::ifstream fin(filename, std::ios_base::binary);
     if (fin.fail())
     {
-        std::cout << "ERROR: Failed to open DMF file." << std::endl;
-        m_ImportError = IMPORT_ERROR_FAIL;
+        m_Status.SetError(Status::Category::Import, DMF::ImportError::UnspecifiedError, "Failed to open DMF file.");
         return true;
     }
 
@@ -184,18 +182,28 @@ bool DMF::Load(const std::string& filename)
     
     if (std::string(header) != ".DelekDefleMask.")
     {
-        std::cout << "ERROR: DMF format header is bad.\n" << std::endl;
-        m_ImportError = IMPORT_ERROR_FAIL;
+        m_Status.SetError(Status::Category::Import, DMF::ImportError::UnspecifiedError, "DMF format header is bad.");
         return true;
     }
 
     m_DMFFileVersion = fin.get();
     if (m_DMFFileVersion != DMF_FILE_VERSION)
     {
-        std::cout << "ERROR: Deflemask file version must be " << (int)DMF_FILE_VERSION << " (0x" << std::ios_base::hex << (int)DMF_FILE_VERSION << ")."
-            << "The given DMF file is version " << (int)DMF_FILE_VERSION << " (0x" << std::ios_base::hex << (int)DMF_FILE_VERSION << ")." << std::endl;
-            std::cout << "       You can convert older DMF files to the correct version by opening them in DefleMask v0.12.0 and then saving them." << std::endl;
-        m_ImportError = IMPORT_ERROR_FAIL;
+        std::stringstream stream;
+        stream << "0x" << std::setfill('0') << std::setw(2) << std::hex << DMF_FILE_VERSION;
+        std::string hex = stream.str();
+
+        std::string errorMsg = "Deflemask file version must be " + std::to_string(DMF_FILE_VERSION) + " (" + hex + ").\n";
+        
+        stream.clear();
+        stream.str("");
+        stream << "0x" << std::setfill('0') << std::setw(2) << std::hex << m_DMFFileVersion;
+        hex = stream.str();
+
+        errorMsg += "The given DMF file is version " + std::to_string(m_DMFFileVersion) + " (" + hex + ").\n";
+        errorMsg += "       You can convert older DMF files to a supported version by opening them in a newer version of DefleMask and then saving them.";
+        
+        m_Status.SetError(Status::Category::Import, DMF::ImportError::UnspecifiedError, errorMsg);
         return true;
     }
 
@@ -203,51 +211,54 @@ bool DMF::Load(const std::string& filename)
     m_System = GetSystem(fin.get());
     
     if (!silent)
-        std::cout << "System: " << m_System.name << " (channels: " << std::to_string(m_System.channels) << ")" << std::endl;
+        std::cout << "System: " << m_System.name << " (channels: " << std::to_string(m_System.channels) << ")\n";
 
     ///////////////// VISUAL INFORMATION
     LoadVisualInfo(fin);
     if (!silent)
-        std::cout << "Loaded visual information." << std::endl;
+    {
+        std::cout << "Title: " << m_VisualInfo.songName << "\n";
+        std::cout << "Author: " << m_VisualInfo.songAuthor << "\n";
+        std::cout << "Loaded visual information." << "\n";
+    }
 
     ///////////////// MODULE INFORMATION
     LoadModuleInfo(fin);
     if (!silent)
-        std::cout << "Loaded module." << std::endl;
+        std::cout << "Loaded module.\n";
 
     ///////////////// PATTERN MATRIX VALUES
     LoadPatternMatrixValues(fin);
     if (!silent)
-        std::cout << "Loaded pattern matrix values." << std::endl;
+        std::cout << "Loaded pattern matrix values.\n";
 
     ///////////////// INSTRUMENTS DATA
     LoadInstrumentsData(fin);
     if (!silent)
-        std::cout << "Loaded instruments." << std::endl;
+        std::cout << "Loaded instruments.\n";
 
     ///////////////// WAVETABLES DATA
     LoadWavetablesData(fin);
     if (!silent)
-        std::cout << "Loaded " << std::to_string(m_TotalWavetables) << " wavetable(s)." << std::endl;
+        std::cout << "Loaded " << std::to_string(m_TotalWavetables) << " wavetable(s).\n";
 
     ///////////////// PATTERNS DATA
     LoadPatternsData(fin);
     if (!silent)
-        std::cout << "Loaded patterns." << std::endl;
+        std::cout << "Loaded patterns.\n";
 
     ///////////////// PCM SAMPLES DATA
     LoadPCMSamplesData(fin);
     if (!silent)
-        std::cout << "Loaded PCM Samples." << std::endl;
+        std::cout << "Loaded PCM Samples.\n";
 
     if (!silent)
-        std::cout << "Done loading DMF file." << std::endl << std::endl;
+        std::cout << "Done importing DMF file.\n\n";
 
-    m_ImportError = IMPORT_ERROR_SUCCESS;
     return false;
 }
 
-bool DMF::Save(const std::string& filename)
+bool DMF::Export(const std::string& filename)
 {
     // Not implemented
     return false;
@@ -271,16 +282,10 @@ void DMF::LoadVisualInfo(zstr::ifstream& fin)
     fin.read(m_VisualInfo.songName, m_VisualInfo.songNameLength);
     m_VisualInfo.songName[m_VisualInfo.songNameLength] = '\0';
 
-    if (!silent)
-        std::cout << "Title: " << m_VisualInfo.songName << std::endl;
-
     m_VisualInfo.songAuthorLength = fin.get();
     m_VisualInfo.songAuthor = new char[m_VisualInfo.songAuthorLength + 1];
     fin.read(m_VisualInfo.songAuthor, m_VisualInfo.songAuthorLength);
     m_VisualInfo.songAuthor[m_VisualInfo.songAuthorLength] = '\0';
-
-    if (!silent)
-        std::cout << "Author: " << m_VisualInfo.songAuthor << std::endl;
 
     m_VisualInfo.highlightAPatterns = fin.get();
     m_VisualInfo.highlightBPatterns = fin.get();

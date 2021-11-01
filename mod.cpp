@@ -1,19 +1,21 @@
 /*
-mod.cpp
-Written by Dalton Messmer <messmer.dalton@gmail.com>.
+    mod.cpp
+    Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-Provides functions for exporting the contents of a DMF file
-to ProTracker's .mod format. 
+    Implements the Module-derived class for ProTracker's MOD files.
 
-Several limitations apply in order to export. For example, the 
-DMF file must use the Game Boy system, patterns must have 64 
-rows, only one effect column is allowed per channel, etc. 
+    Several limitations apply in order to export. For example, 
+    for DMF --> MOD, the DMF file must use the Game Boy system, 
+    patterns must have 64 rows, only one effect column is allowed 
+    per channel, etc.
 */
 
 // TODO: Right now, only effect column 0 is used. But two dmf effects 
 //      could potentially be used if one of them is 10xx or 12xx. Need to allow for that. 
 
 // TODO: Add '--effects=NONE' option, which does not use any ProTracker effects. 
+
+// TODO: Delete output file if an error occurred while creating it?
 
 #include "mod.h"
 
@@ -30,8 +32,22 @@ REGISTER_MODULE(MOD, MODConversionOptions, ModuleType::MOD, "mod")
 #define PT_NOTE_VOLUMEMAX 64
 #define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 
-static std::string ErrorMessageCreator(int errorCode, const std::string& arg);
-static std::string GetWarningMessage(MOD::Warning warning);
+static std::string ErrorMessageCreator(Status::Category category, int errorCode, const std::string& arg);
+static std::string GetWarningMessage(MOD::ConvertWarning warning);
+
+// The current square wave duty cycle, note volume, and other information that the 
+//      tracker stores for each channel while playing a tracker file.
+typedef struct MODChannelState
+{
+    DMF_GAMEBOY_CHANNEL channel;
+    uint8_t dutyCycle; 
+    uint8_t wavetable;
+    bool sampleChanged; // True if dutyCycle or wavetable just changed
+    int16_t volume;
+    bool notePlaying;
+    bool onHighNoteRange;
+    bool needToSetVolume;
+} MODChannelState;
 
 /*
     sampMap gives the ProTracker (PT) sample numbers for a given SQW / WAVE sample of either low note range or high note range. 
@@ -83,19 +99,10 @@ static uint16_t proTrackerPeriodTable[5][12] = {
 
 static bool usingSetupPattern = true; // Whether to use a pattern at the start of the module to set up the initial tempo and other stuff. 
 
-static std::string filename; // The MOD file name. May not be the same as what the user gave dmf2mod.
-
-static bool filePreviouslyExisted = true;
+//static std::string filename; // The MOD file name. May not be the same as what the user gave dmf2mod.
 
 static bool downsample;
 static MODConversionOptions::EffectsEnum effects;
-
-MOD::MOD()
-{
-    m_Stream.clear();
-    m_Stream.str(std::string());
-    m_Status.SetErrorMessageCreator(&ErrorMessageCreator);
-}
 
 bool MODConversionOptions::ParseArgs(std::vector<std::string>& args)
 {
@@ -120,7 +127,7 @@ bool MODConversionOptions::ParseArgs(std::vector<std::string>& args)
                 Effects = EffectsEnum::Max;
             else
             {
-                std::cout << "ERROR: For the option '--effects=', the acceptable values are: MIN, MAX." << std::endl;
+                std::cout << "ERROR: For the option '--effects=', the acceptable values are: MIN, MAX.\n";
                 return true;
             }
             args.erase(args.begin() + i);
@@ -128,7 +135,7 @@ bool MODConversionOptions::ParseArgs(std::vector<std::string>& args)
         }
         else
         {
-            std::cout << "ERROR: Unrecognized option '" << args[i] << "'" << std::endl;
+            std::cout << "ERROR: Unrecognized option '" << args[i] << "'\n";
             return true;
         }
         
@@ -141,15 +148,39 @@ bool MODConversionOptions::ParseArgs(std::vector<std::string>& args)
 
 void MODConversionOptions::PrintHelp()
 {
-    std::cout << "MOD Options:" << std::endl;
+    std::cout << "MOD Options:\n";
 
     std::cout.setf(std::ios_base::left);
-    std::cout << std::setw(25) << "--downsample" << "Allow wavetables to lose information through downsampling if needed." << std::endl;
-    std::cout << std::setw(25) << "--effects=[MIN,MAX]" << "The number of ProTracker effects to use. (Default: MAX)" << std::endl;
+    std::cout << std::setw(25) << "--downsample" << "Allow wavetables to lose information through downsampling if needed.\n";
+    std::cout << std::setw(25) << "--effects=[MIN,MAX]" << "The number of ProTracker effects to use. (Default: MAX)\n";
 }
 
+MOD::MOD()
+{
+    m_Stream.clear();
+    m_Stream.str(std::string());
+    m_Status.SetErrorMessageCreator(&ErrorMessageCreator);
+}
 
-bool MOD::ConvertFrom(const ModuleBase* input, ConversionOptions& options)
+bool MOD::Export(const std::string& filename)
+{
+    m_Status.Clear();
+    std::ofstream outFile(filename, std::ios::binary);
+    if (!outFile.is_open())
+    {
+        m_Status.SetError(Status::Category::Export, Status::ExportError::FileOpen);
+        return true;
+    }
+    outFile << m_Stream.rdbuf();
+    outFile.close();
+
+    if (!ModuleUtils::GetCoreOptions().silent)
+        std::cout << "Saved MOD file to disk.\n\n";
+
+    return false;
+}
+
+bool MOD::ConvertFrom(const Module* input, ConversionOptionsPtr& options)
 {
     const std::set<std::string> supportedInputTypes = {"dmf"};
 
@@ -157,18 +188,18 @@ bool MOD::ConvertFrom(const ModuleBase* input, ConversionOptions& options)
 
     if (!input)
     {
-        m_Status.SetError(Status::ConvertError::InvalidArgument);
+        m_Status.SetError(Status::Category::Convert, Status::ConvertError::InvalidArgument);
         return true;
     }
     
     if (supportedInputTypes.count(input->GetFileExtension()) == 0)
     {
-        m_Status.SetError(Status::ConvertError::UnsupportedInputType);
+        m_Status.SetError(Status::Category::Convert, Status::ConvertError::UnsupportedInputType, input->GetFileExtension());
         return true;
     }
 
     const bool silent = ModuleUtils::GetCoreOptions().silent;
-    const auto* opt = options.Get()->Cast<MODConversionOptions>();
+    const auto* opt = options.get()->Cast<MODConversionOptions>();
     downsample = opt->GetDownsample();
     effects = opt->GetEffects();
 
@@ -177,24 +208,24 @@ bool MOD::ConvertFrom(const ModuleBase* input, ConversionOptions& options)
     const DMF* dmf = input->Cast<DMF>();
 
     if (!silent)
-        std::cout << "Starting to convert to MOD..." << std::endl;
+        std::cout << "Starting to convert to MOD...\n";
     
     if (dmf->GetSystem().id != DMF::SYSTEMS(SYS_GAMEBOY).id) // If it's not a Game Boy
     {
-        m_Status.SetError(MOD::NotGameBoy);
+        m_Status.SetError(Status::Category::Convert, MOD::ConvertError::NotGameBoy);
         return true;
     }
 
     const ModuleInfo& moduleInfo = dmf->GetModuleInfo();
     if (moduleInfo.totalRowsInPatternMatrix + (int)usingSetupPattern > 64) // totalRowsInPatternMatrix is 1 more than it actually is 
     {
-        m_Status.SetError(MOD::TooManyPatternMatrixRows);
+        m_Status.SetError(Status::Category::Convert, MOD::ConvertError::TooManyPatternMatrixRows);
         return true;
     }
 
     if (moduleInfo.totalRowsPerPattern != 64)
     { 
-        m_Status.SetError(MOD::Not64RowPattern);
+        m_Status.SetError(Status::Category::Convert, MOD::ConvertError::Not64RowPattern);
         return true;
     }
 
@@ -214,12 +245,11 @@ bool MOD::ConvertFrom(const ModuleBase* input, ConversionOptions& options)
             m_Stream.put(0);
         }
     }
-    
 
     ///////////////// CONVERT SAMPLE INFO
 
     if (!silent)
-        std::cout << "Converting sample info..." << std::endl;
+        std::cout << "Converting sample info...\n";
 
     Note *lowestNote, *highestNote;
     if (InitSamples(dmf, &lowestNote, &highestNote))
@@ -257,7 +287,7 @@ bool MOD::ConvertFrom(const ModuleBase* input, ConversionOptions& options)
     ///////////////// EXPORT OTHER INFO
 
     if (!silent)
-        std::cout << "Converting other information..." << std::endl;
+        std::cout << "Converting other information...\n";
 
     m_Stream.put(moduleInfo.totalRowsInPatternMatrix + (int)usingSetupPattern);   // Song length in patterns (not total number of patterns) 
     m_Stream.put(127);                        // 0x7F - Useless byte that has to be here
@@ -273,7 +303,7 @@ bool MOD::ConvertFrom(const ModuleBase* input, ConversionOptions& options)
     ///////////////// CONVERT PATTERN DATA
 
     if (!silent)
-        std::cout << "Converting pattern data..." << std::endl;
+        std::cout << "Converting pattern data...\n";
 
     if (usingSetupPattern)
     {
@@ -411,7 +441,7 @@ bool MOD::ConvertFrom(const ModuleBase* input, ConversionOptions& options)
                     delete[] noteRangeStart;
                     delete[] sampMap;
                     delete[] sampleLength;
-                    return;
+                    return true;
                 }
             }
         }
@@ -420,7 +450,7 @@ bool MOD::ConvertFrom(const ModuleBase* input, ConversionOptions& options)
     ///////////////// CONVERT SAMPLE DATA
 
     if (!silent)
-        std::cout << "Converting samples..." << std::endl;
+        std::cout << "Converting samples...\n";
     ExportSampleData(dmf);
     
     ///////////////// CLEAN UP
@@ -430,7 +460,7 @@ bool MOD::ConvertFrom(const ModuleBase* input, ConversionOptions& options)
     delete[] sampleLength;
 
     if (!silent)
-        std::cout << "Done converting to MOD!" << std::endl;
+        std::cout << "Done converting to MOD.\n\n";
 
     // Success
     return false;
@@ -563,7 +593,7 @@ int MOD::CheckEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
                     Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
                     so it does not count.
                 */
-                m_Status.SetError(MOD::Error::EffectVolume);
+                m_Status.SetError(Status::Category::Convert, MOD::ConvertError::EffectVolume);
                 return 1;
             }
             else // Only the volume changed
@@ -585,7 +615,7 @@ int MOD::CheckEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
                     Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
                     so it does not count.
                 */
-                m_Status.SetError(MOD::Error::EffectVolume);
+                m_Status.SetError(Status::Category::Convert, MOD::ConvertError::EffectVolume);
                 return 1;
             }
             else // No effects except the note OFF
@@ -626,7 +656,7 @@ int MOD::CheckEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
                 Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
                 so it does not count.
             */
-            m_Status.SetError(MOD::Error::MultipleEffects);
+            m_Status.SetError(Status::Category::Convert, MOD::ConvertError::MultipleEffects);
             return 1;
         }
         else if (total_effects == 0)
@@ -934,7 +964,7 @@ int MOD::FinalizeSampMap(const DMF* dmf, Note *lowestNote, Note *highestNote)
                 // If between C-4 and B-6 (Deflemask tracker note format) and none of the above options work 
                 if (i >= 4 && !downsample) // If on a wavetable instrument and can't downsample it 
                 {
-                    m_Status.SetError(MOD::Error::WaveDownsample, std::to_string(i - 4));
+                    m_Status.SetError(Status::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(i - 4));
                     return 1;
                 }
                 
@@ -948,7 +978,7 @@ int MOD::FinalizeSampMap(const DMF* dmf, Note *lowestNote, Note *highestNote)
                 // If between C-5 and B-7 (Deflemask tracker note format)
                 if (i >= 4 && !downsample) // If on a wavetable instrument and can't downsample it
                 {
-                    m_Status.SetError(MOD::Error::WaveDownsample, std::to_string(i - 4));
+                    m_Status.SetError(Status::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(i - 4));
                     return 1;
                 }
                 
@@ -961,7 +991,7 @@ int MOD::FinalizeSampMap(const DMF* dmf, Note *lowestNote, Note *highestNote)
                 // If between C#5 and C-8 (highest note) (Deflemask tracker note format):
                 if (i >= 4 && !downsample) // If on a wavetable instrument and can't downsample it
                 {
-                    m_Status.SetError(MOD::Error::WaveDownsample, std::to_string(i - 4));
+                    m_Status.SetError(Status::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(i - 4));
                     return 1;
                 }
                 
@@ -999,7 +1029,7 @@ int MOD::FinalizeSampMap(const DMF* dmf, Note *lowestNote, Note *highestNote)
             {
                 if (!downsample)
                 {
-                    m_Status.SetError(MOD::Error::WaveDownsample, std::to_string(i - 4));
+                    m_Status.SetError(Status::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(i - 4));
                     return 1;
                 }
 
@@ -1018,7 +1048,7 @@ int MOD::FinalizeSampMap(const DMF* dmf, Note *lowestNote, Note *highestNote)
 
             if (NoteCompare(&highestNote[i], {DMF_NOTE_C, 7}) == 0)
             {
-                m_Status.AddWarning(GetWarningMessage(MOD::Warning::PitchHigh));
+                m_Status.AddWarning(GetWarningMessage(MOD::ConvertWarning::PitchHigh));
             }
 
             /*
@@ -1225,12 +1255,12 @@ uint8_t MOD::GetPTTempo(double bpm)
     // Get ProTracker tempo from Deflemask bpm.
     if (bpm * 2.0 > 255.0) // If tempo is too high (over 127.5 bpm)
     {
-        m_Status.AddWarning(GetWarningMessage(MOD::Warning::TempoHigh));
+        m_Status.AddWarning(GetWarningMessage(MOD::ConvertWarning::TempoHigh));
         return 255;
     }
     else if (bpm * 2.0 < 32.0) // If tempo is too low (under 16 bpm)
     {
-        m_Status.AddWarning(GetWarningMessage(MOD::Warning::TempoLow));
+        m_Status.AddWarning(GetWarningMessage(MOD::ConvertWarning::TempoLow));
         return 32;
     }
     else // Tempo is okay for ProTracker
@@ -1240,50 +1270,57 @@ uint8_t MOD::GetPTTempo(double bpm)
     }
 }
 
-static std::string GetWarningMessage(MOD::Warning warning)
+static std::string GetWarningMessage(MOD::ConvertWarning warning)
 {
     switch (warning)
     {
-        case MOD::Warning::PitchHigh:
-            return std::string("Cannot use the highest Deflemask note (C-8) on some MOD players including ProTracker.");
-        case MOD::Warning::TempoLow:
+        case MOD::ConvertWarning::PitchHigh:
+            return "Cannot use the highest Deflemask note (C-8) on some MOD players including ProTracker.";
+        case MOD::ConvertWarning::TempoLow:
             return std::string("Tempo is too low for ProTracker. Using 16 bpm instead.")
                     + std::string("         ProTracker only supports tempos between 16 and 127.5 bpm.");
-        case MOD::Warning::TempoHigh:
+        case MOD::ConvertWarning::TempoHigh:
             return std::string("Tempo is too high for ProTracker. Using 127.5 bpm instead.")
                     + std::string("         ProTracker only supports tempos between 16 and 127.5 bpm.");
-        case MOD::Warning::EffectIgnored:
-            return std::string("A Deflemask effect was ignored due to limitations of the MOD format.");
+        case MOD::ConvertWarning::EffectIgnored:
+            return "A Deflemask effect was ignored due to limitations of the MOD format.";
         default:
             return "";
-            break;
     }
 }
 
-std::string ErrorMessageCreator(int errorCode, const std::string& arg)
+std::string ErrorMessageCreator(Status::Category category, int errorCode, const std::string& arg)
 {
-    switch (errorCode)
+    switch (category)
     {
-        case MOD::Error::Success:
-            return std::string("No errors occurred.");
-        case MOD::Error::FileOpen:
-            return std::string("ERROR: Failed to open MOD file to write.");
-        case MOD::Error::NotGameBoy:
-            return std::string("ERROR: Only the Game Boy system is currently supported.");
-        case MOD::Error::TooManyPatternMatrixRows:
-            return std::string("ERROR: Too many rows of patterns in the pattern matrix. 64 is the maximum. (63 if using Setup Pattern.)");
-        case MOD::Error::Not64RowPattern:
-            return std::string("ERROR: Patterns must have 64 rows.\n")
-                    + std::string("       A workaround for this issue is planned for a future update to dmf2mod.");
-        case MOD::Error::WaveDownsample:
-            return std::string("ERROR: Cannot use wavetable instrument #") + arg + std::string(" without loss of information.\n")
-                    + std::string("       Try using the '--downsample' option.");
-        case MOD::Error::EffectVolume:
-            return std::string("ERROR: An effect and a volume change (or Note OFF) cannot both appear in the same row of the same channel.\n")
-                    + std::string("       Try fixing this issue in Deflemask or use the '--effects=MIN' option.");
-        case MOD::Error::MultipleEffects:
-            return std::string("ERROR: No more than one Note OFF, Volume Change, or Position Jump can appear in the same row of the same channel.");
-        default:
-            return "";
+        case Status::Category::Import:
+            return "No error.";
+        case Status::Category::Export:
+            return "No error.";
+        case Status::Category::Convert:
+            switch (errorCode)
+            {
+                case (int)MOD::ConvertError::Success:
+                    return "No error.";
+                case (int)MOD::ConvertError::NotGameBoy:
+                    return "Only the Game Boy system is currently supported.";
+                case (int)MOD::ConvertError::TooManyPatternMatrixRows:
+                    return "Too many rows of patterns in the pattern matrix. 64 is the maximum. (63 if using Setup Pattern.)";
+                case (int)MOD::ConvertError::Not64RowPattern:
+                    return std::string("Patterns must have 64 rows.\n")
+                            + std::string("       A workaround for this issue is planned for a future update to dmf2mod.");
+                case (int)MOD::ConvertError::WaveDownsample:
+                    return std::string("Cannot use wavetable instrument #") + arg + std::string(" without loss of information.\n")
+                            + std::string("       Try using the '--downsample' option.");
+                case (int)MOD::ConvertError::EffectVolume:
+                    return std::string("An effect and a volume change (or Note OFF) cannot both appear in the same row of the same channel.\n")
+                            + std::string("       Try fixing this issue in Deflemask or use the '--effects=MIN' option.");
+                case (int)MOD::ConvertError::MultipleEffects:
+                    return "No more than one Note OFF, Volume Change, or Position Jump can appear in the same row of the same channel.";
+                default:
+                    return "";
+            }
+            break;
     }
+    return "";
 }

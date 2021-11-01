@@ -1,3 +1,13 @@
+/*
+    core.cpp
+    Written by Dalton Messmer <messmer.dalton@gmail.com>.
+
+    Defines various classes used by dmf2mod.
+
+    Everything in core.h/core.cpp is written to be 
+    module-independent.
+*/
+
 #include "core.h"
 #include "modules.h"
 
@@ -6,13 +16,15 @@
 #include <iomanip>
 #include <map>
 #include <functional>
-//#include <filesystem>
 #include <fstream>
+//#include <filesystem>
 
 // Initialize module registration maps
 std::map<ModuleType, std::function<ModuleBase*(void)>> ModuleUtils::RegistrationMap = {};
 std::map<std::string, ModuleType> ModuleUtils::FileExtensionMap = {};
 std::map<ModuleType, std::function<ConversionOptionsBase*(void)>> ModuleUtils::ConversionOptionsRegistrationMap = {};
+
+CommonFlags ModuleUtils::m_CoreOptions = {};
 
 static bool ParseFlags(std::vector<std::string>& args, CommonFlags& flags);
 
@@ -26,7 +38,7 @@ std::vector<std::string> ModuleUtils::GetAvaliableModules()
     return vec;
 }
 
-bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo, ConversionOptions& options)
+bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo, ConversionOptionsPtr& options)
 {
     inputOutputInfo.InputFile = "";
     inputOutputInfo.InputType = ModuleType::NONE;
@@ -52,7 +64,7 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
         }
         else
         {
-            std::cout << "ERROR: Could not parse arguments." << std::endl;
+            std::cout << "ERROR: Could not parse arguments.\n";
             return true;
         }
     }
@@ -80,13 +92,13 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
             }
             else
             {
-                std::cout << "ERROR: Input file type '" << GetFileExtension(args[2]) << "' is unsupported." << std::endl;
+                std::cout << "ERROR: Input file type '" << GetFileExtension(args[2]) << "' is unsupported.\n";
                 return true;
             }
         }
         else
         {
-            std::cout << "ERROR: The input file '" << args[2] << "' could not be found." << std::endl;
+            std::cout << "ERROR: The input file '" << args[2] << "' could not be found.\n";
             return true;
         }
         
@@ -98,7 +110,7 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
                 const size_t dotPos = inputFile.rfind('.');
                 if (dotPos == 0 || dotPos + 1 >= inputFile.size())
                 {
-                    std::cout << "ERROR: The input file is invalid." << std::endl;
+                    std::cout << "ERROR: The input file is invalid.\n";
                     return true;
                 }
 
@@ -107,7 +119,7 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
             }
             else
             {
-                std::cout << "ERROR: '" << args[1] << "' is not a valid module type." << std::endl;
+                std::cout << "ERROR: '" << args[1] << "' is not a valid module type.\n";
                 return true;
             }
         }
@@ -116,14 +128,14 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
             outputFile = args[1];
             if (GetTypeFromFilename(args[1]) == ModuleType::NONE)
             {
-                std::cout << "ERROR: '" << GetFileExtension(args[1]) << "' is not a valid module type." << std::endl;
+                std::cout << "ERROR: '" << GetFileExtension(args[1]) << "' is not a valid module type.\n";
                 return true;
             }
         }
         
         if (FileExists(outputFile) && !flags.force)
         {
-            std::cout << "ERROR: The output file '" << outputFile << "' already exists. Run with the '-f' flag to allow the file to be overwritten." << std::endl;
+            std::cout << "ERROR: The output file '" << outputFile << "' already exists. Run with the '-f' flag to allow the file to be overwritten.\n";
             return true;
         }
 
@@ -134,7 +146,7 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
 
         if (inputOutputInfo.InputType == inputOutputInfo.OutputType)
         {
-            std::cout << "The output file is the same type as the input file. No conversion necessary." << std::endl;
+            std::cout << "The output file is the same type as the input file. No conversion necessary.\n";
             return true;
         }
 
@@ -147,15 +159,15 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
         args.erase(args.begin(), args.begin() + 3);
         argc -= 3;
 
-        ConversionOptions optionsTemp = ConversionOptions::Create(inputOutputInfo.OutputType);
+        ConversionOptionsPtr optionsTemp = ConversionOptions::Create(inputOutputInfo.OutputType);
         if (!optionsTemp)
         {
-            std::cout << "ERROR: Failed to create ConversionOptions-derived object for the module type '" << GetFileExtension(outputFile) 
-                << "'. The module may not be properly registered with dmf2mod." << std::endl;
+            std::cout << "ERROR: Failed to create ConversionOptionsBase-derived object for the module type '" << GetFileExtension(outputFile) 
+                << "'. The module may not be properly registered with dmf2mod.\n";
             return true;
         }
 
-        if (!args.empty() && optionsTemp.ParseArgs(args))
+        if (!args.empty() && optionsTemp->ParseArgs(args))
         {
             // An error occurred while parsing the module-specific arguments
             return true;
@@ -187,15 +199,14 @@ bool ParseFlags(std::vector<std::string>& args, CommonFlags& flags)
                 {
                 case 'f':
                     flags.force = true;
-                    str.erase(j--);
+                    str.erase(j--, 1);
                     break;
                 case 's':
                     flags.silent = true;
-                    str.erase(j--);
+                    str.erase(j--, 1);
                     break;
                 default:
                     // If a flag is not recognized, it may be a flag used by a module, so don't throw an error
-                    //std::cout << "ERROR: The flag '-" << c << "' is unsupported." << std::endl;
                     break;
                 }
             }
@@ -297,90 +308,7 @@ std::string ModuleUtils::ReplaceFileExtension(const std::string& filename, const
     return filename.substr(0, dotPos + 1) + newFileExtension;
 }
 
-bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType)
-{
-    // If module-specific help was requested
-    if (moduleType != ModuleType::NONE)
-    {
-        ConversionOptions options = ConversionOptions::Create(moduleType);
-        if (!options)
-        {
-            std::string extension = GetExtensionFromType(moduleType);
-            if (extension.empty())
-            {
-                std::cout << "ERROR: The module is not propery registered with dmf2mod." << std::endl;
-            }
-            else
-            {
-                std::cout << "ERROR: Failed to create ConversionOptions-derived object for the module type '" << extension 
-                    << "'. The module may not be properly registered with dmf2mod." << std::endl;
-            }
-            return true;
-        }
-
-        options.PrintHelp();
-        return false;
-    }
-
-    // Print generic help
-
-    std::cout << "dmf2mod v" << DMF2MOD_VERSION << std::endl;
-    std::cout << "Created by Dalton Messmer <messmer.dalton@gmail.com>" << std::endl;
-
-    /*
-    std::string ext = std::string(".") + GetFileExtension(executable);
-    if (ext != ".exe")
-        ext = "";
-    */
-
-    std::cout.setf(std::ios_base::left);
-    std::cout << std::setw(25) << "Usage:" << "dmf2mod" << " output.[ext] input.dmf [options]" << std::endl;
-    std::cout << std::setw(25) << "" << "dmf2mod" << " [ext] input.dmf [options]" << std::endl;
-
-    std::cout << "Options:" << std::endl;
-
-    std::cout.setf(std::ios_base::left);
-    std::cout << std::setw(25) << "-f, --force" << "Overwrite output file." << std::endl;
-    std::cout << std::setw(25) << "--help [module type]" << "Display this help message. Provide module type (i.e. mod) for module-specific options." << std::endl;
-
-    return false;
-}
-
-ModuleType Module::GetType() const
-{
-    if (!m_Module)
-        return ModuleType::NONE;
-    return m_Module->GetType();
-}
-
-ModuleType ConversionOptions::GetType() const
-{
-    if (!m_Options)
-        return ModuleType::NONE;
-    return m_Options->GetType();
-}
-
-void Status::PrintError()
-{
-    if (ErrorOccurred())
-        std::cout << m_ErrorMessage;
-}
-
-void Status::PrintWarnings()
-{
-    for (const auto& message : m_WarningMessages)
-    {
-        std::cout << message << std::endl;
-    }
-}
-
-bool FileExists(const std::string& filename)
-{
-    std::ifstream file(filename);
-    return file.is_open();
-}
-
-std::string GetFileExtension(const std::string& filename)
+std::string ModuleUtils::GetFileExtension(const std::string& filename)
 {
     const size_t dotPos = filename.rfind('.');
     // If dot is at start, not found, or at end:
@@ -388,4 +316,115 @@ std::string GetFileExtension(const std::string& filename)
         return "";
 
     return filename.substr(dotPos + 1);
+}
+
+bool ModuleUtils::FileExists(const std::string& filename)
+{
+    std::ifstream file(filename);
+    return file.is_open();
+}
+
+bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType)
+{
+    // If module-specific help was requested
+    if (moduleType != ModuleType::NONE)
+    {
+        ConversionOptionsPtr options = ConversionOptions::Create(moduleType);
+        if (!options)
+        {
+            std::string extension = GetExtensionFromType(moduleType);
+            if (extension.empty())
+            {
+                std::cout << "ERROR: The module is not propery registered with dmf2mod.\n";
+            }
+            else
+            {
+                std::cout << "ERROR: Failed to create ConversionOptions-derived object for the module type '" << extension 
+                    << "'. The module may not be properly registered with dmf2mod.\n";
+            }
+            return true;
+        }
+
+        options->PrintHelp();
+        return false;
+    }
+
+    // Print generic help
+
+    std::cout << "dmf2mod v" << DMF2MOD_VERSION << "\n";
+    std::cout << "Created by Dalton Messmer <messmer.dalton@gmail.com>\n";
+
+    std::cout.setf(std::ios_base::left);
+    std::cout << std::setw(25) << "Usage:" << "dmf2mod" << " output.[ext] input.dmf [options]\n";
+    std::cout << std::setw(25) << "" << "dmf2mod" << " [ext] input.dmf [options]\n";
+
+    std::cout << "Options:\n";
+
+    std::cout.setf(std::ios_base::left);
+    std::cout << std::setw(25) << "-f, --force" << "Overwrite output file.\n";
+    std::cout << std::setw(25) << "--help [module type]" << "Display this help message. Provide module type (i.e. mod) for module-specific options.\n";
+    std::cout << std::setw(25) << "-s, --silent" << "Print nothing to stdout besides errors and/or warnings.\n";
+
+    return false;
+}
+
+void Status::PrintError()
+{
+    if (ErrorOccurred())
+        std::cout << m_ErrorMessage << "\n";
+}
+
+void Status::PrintWarnings()
+{
+    for (const auto& message : m_WarningMessages)
+    {
+        std::cout << message << "\n";
+    }
+}
+
+void Status::PrintAll()
+{
+    PrintError();
+    PrintWarnings();
+}
+
+std::string Status::CommonErrorMessageCreator(Category category, int errorCode, const std::string& arg)
+{
+    switch (category)
+    {
+        case Category::Import:
+            switch (errorCode)
+            {
+                case (int)Status::ImportError::Success:
+                    return "No error.";
+                default:
+                    return "";
+            }
+            break;
+        case Category::Export:
+            switch (errorCode)
+            {
+                case (int)Status::ExportError::Success:
+                    return "No error.";
+                case (int)Status::ExportError::FileOpen:
+                    return "Failed to open file for writing.";
+                default:
+                    return "";
+            }
+            break;
+        case Category::Convert:
+            switch (errorCode)
+            {
+                case (int)Status::ConvertError::Success:
+                    return "No error.";
+                case (int)Status::ConvertError::InvalidArgument:
+                    return "Invalid argument.";
+                case (int)Status::ConvertError::UnsupportedInputType:
+                    return "Input type '" + arg + "' is unsupported for this module.";
+                default:
+                    return "";
+            }
+            break;
+    }
+    return "";
 }

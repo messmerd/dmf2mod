@@ -1,13 +1,13 @@
 /*
-mod.h
-Written by Dalton Messmer <messmer.dalton@gmail.com>. 
+    mod.h
+    Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-Provides functions for exporting the contents of a .dmf file 
-to ProTracker's .mod format. 
+    Declares the Module-derived class for ProTracker's MOD files.
 
-Several limitations apply in order to export. For example, the 
-.dmf file must use the Game Boy system, patterns must have 64 
-rows, only one effect column is allowed per channel, etc.  
+    Several limitations apply in order to export. For example, 
+    for DMF --> MOD, the DMF file must use the Game Boy system, 
+    patterns must have 64 rows, only one effect column is allowed 
+    per channel, etc.
 */
 
 #pragma once
@@ -15,26 +15,12 @@ rows, only one effect column is allowed per channel, etc.
 #include <string>
 #include <sstream>
 
+// Forward defines
+struct Note;
+struct PatternRow;
+struct MODChannelState;
+
 #include "dmf.h"
-
-// The current square wave duty cycle, note volume, and other information that the 
-//      tracker stores for each channel while playing a tracker file.
-typedef struct MODChannelState
-{
-    DMF_GAMEBOY_CHANNEL channel;
-    uint8_t dutyCycle; 
-    uint8_t wavetable;
-    bool sampleChanged; // True if dutyCycle or wavetable just changed
-    int16_t volume;
-    bool notePlaying;
-    bool onHighNoteRange;
-    bool needToSetVolume;
-} MODChannelState;
-
-typedef struct CMD_Options {
-    uint8_t effects; // 0 == none; 1 == minimum; 2 == maximum 
-    bool allowDownsampling; 
-} CMD_Options;
 
 // ProTracker effects
 // An effect is represented with 12 bits, which is 3 groups of 4 bits: [e][x][y]. 
@@ -58,15 +44,13 @@ public:
     ~MOD() {};
     void CleanUp() {};
 
-    bool Load(const std::string& filename) override
+    bool Import(const std::string& filename) override
     {
-        return false;
+        m_Status.Clear();
+        return true;
     }
 
-    bool Save(const std::string& filename) override
-    {
-        return false;
-    }
+    bool Export(const std::string& filename) override;
 
     ModuleType GetType() const override { return _Type; }
 
@@ -74,10 +58,15 @@ public:
 
     std::string GetName() const override { return ""; }
 
-    enum Error
+    enum class ImportError {Success=0};
+    enum class ImportWarning {};
+
+    enum class ExportError {Success=0};
+    enum class ExportWarning {};
+
+    enum class ConvertError
     {
         Success=0,
-        FileOpen,
         NotGameBoy,
         TooManyPatternMatrixRows,
         Not64RowPattern,
@@ -86,7 +75,7 @@ public:
         MultipleEffects
     };
 
-    enum Warning
+    enum class ConvertWarning
     {
         None=0,
         PitchHigh,
@@ -96,7 +85,7 @@ public:
     };
 
 private:
-    bool ConvertFrom(const ModuleBase* input, ConversionOptions& options) override;
+    bool ConvertFrom(const Module* input, ConversionOptionsPtr& options) override;
 
     int InitSamples(const DMF* dmf, Note **lowestNote, Note **highestNote);
     int FinalizeSampMap(const DMF* dmf, Note *lowestNote, Note *highestNote);
@@ -109,7 +98,6 @@ private:
 
     uint8_t GetPTTempo(double bpm);
 
-    //typedef std::basic_stringstream<unsigned char> bytestream;
     std::stringstream m_Stream;
 };
 

@@ -1,11 +1,13 @@
 /*
-dmf.h
-Written by Dalton Messmer <messmer.dalton@gmail.com>.
+    dmf.h
+    Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-Provides functions for loading a dmf file according to the 
-spec sheet at http://www.deflemask.com/DMF_SPECS.txt.
+    Declares the Module-derived class for Deflemask's DMF files.
 
-Requires the zlib compression library from https://zlib.net.
+    DMF file support was written according to the specs at 
+    http://www.deflemask.com/DMF_SPECS.txt.
+
+    Requires the zlib compression library from https://zlib.net.
 */
 
 #pragma once
@@ -58,7 +60,7 @@ typedef enum DMF_GAMEBOY_EFFECT {
 
 // To do: Add enums for effects exclusive to the rest of Deflemask's systems. 
 
-typedef struct Note 
+typedef struct Note
 {
     uint16_t pitch;
     uint16_t octave;
@@ -149,12 +151,24 @@ class DMF : public ModuleBase, public ModuleStatic<DMF>
 public:
     static constexpr System SYSTEMS(SYSTEM_TYPE systemType) { return m_Systems[systemType]; }
 
+    enum ImportError
+    {
+        Success=0,
+        UnspecifiedError
+    };
+
+    enum class ImportWarning {};
+    enum class ExportError {};
+    enum class ExportWarning {};
+    enum class ConvertError {};
+    enum class ConvertWarning {};
+
     DMF();
     ~DMF();
     void CleanUp();
 
-    bool Load(const std::string& filename) override;
-    bool Save(const std::string& filename) override;
+    bool Import(const std::string& filename) override;
+    bool Export(const std::string& filename) override;
 
     ModuleType GetType() const override { return _Type; }
 
@@ -168,8 +182,6 @@ public:
     }
 
     ////////////
-
-    DMF_IMPORT_ERROR Status() { return m_ImportError; };
 
     // Returns the initial BPM of the module when given ModuleInfo
     double GetBPM() const;
@@ -188,6 +200,11 @@ public:
     PatternRow*** const GetPatternValues() const { return m_PatternValues; }
 
 private:
+    bool ConvertFrom(const Module* input, ConversionOptionsPtr& options) override
+    {
+        return true; // Not implemented
+    };
+
     System GetSystem(uint8_t systemByte);
     void LoadVisualInfo(zstr::ifstream& fin);
     void LoadModuleInfo(zstr::ifstream& fin);
@@ -218,8 +235,6 @@ private:
     PCMSample*      m_PCMSamples;
 
     static const System m_Systems[];
-
-    DMF_IMPORT_ERROR m_ImportError;
 };
 
 class DMFConversionOptions : public ConversionOptionsBase, public ConversionOptionsStatic<DMFConversionOptions>
@@ -233,12 +248,12 @@ public:
     void PrintHelp() override;
 };
 
-// Deflemask Game Boy channels 
+// Deflemask Game Boy channels
 typedef enum DMF_GAMEBOY_CHANNEL {
     DMF_GAMEBOY_SQW1=0, DMF_GAMEBOY_SQW2=1, DMF_GAMEBOY_WAVE=2, DMF_GAMEBOY_NOISE=3
-} DMF_GAMEBOY_CHANNEL; 
+} DMF_GAMEBOY_CHANNEL;
 
-// Compares notes n1 and n2. Returns 1 if n1 > n2, -1 if n1 < n2, and 0 if n1 == n2. 
+// Compares notes n1 and n2. Returns 1 if n1 > n2, -1 if n1 < n2, and 0 if n1 == n2.
 int8_t NoteCompare(const Note *n1, const Note *n2);
 
 int8_t NoteCompare(const Note* n1, const Note n2);

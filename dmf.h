@@ -149,7 +149,7 @@ typedef enum DMF_IMPORT_ERROR
 class DMF : public ModuleBase, public ModuleStatic<DMF>
 {
 public:
-    static constexpr System SYSTEMS(SYSTEM_TYPE systemType) { return m_Systems[systemType]; }
+    static const System SYSTEMS(SYSTEM_TYPE systemType) { return m_Systems[systemType]; }
 
     enum ImportError
     {

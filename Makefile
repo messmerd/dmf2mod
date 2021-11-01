@@ -8,8 +8,8 @@ ZLIB_MAKE	= $(MAKE) --directory=zlib --makefile=win32/Makefile.gcc
 ZLIB_CLEAN	= $(MAKE) clean --directory=zlib --makefile=win32/Makefile.gcc
 else
 OUT	= dmf2mod
-ZLIB_MAKE	= chmod +x ./zlib/configure && ./zlib/configure --static && $(MAKE) --directory=zlib
-ZLIB_CLEAN	= $(MAKE) clean --directory=zlib
+ZLIB_MAKE	= cd zlib && chmod +x ./configure && ./configure --static && $(MAKE) && cd ..
+ZLIB_CLEAN	= cd zlib && $(MAKE) clean && cd ..
 endif
 
 CC	 = g++

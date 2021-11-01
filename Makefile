@@ -4,19 +4,19 @@ HEADER	= core.h modules.h mod.h dmf.h zconf.h zlib.h
 
 ifeq ($(OS),Windows_NT)
 OUT	= dmf2mod.exe
-ZLIB_MAKE	= make --directory=zlib --makefile=win32/Makefile.gcc
-ZLIB_CLEAN	= make clean --directory=zlib --makefile=win32/Makefile.gcc
+ZLIB_MAKE	= $(MAKE) --directory=zlib --makefile=win32/Makefile.gcc
+ZLIB_CLEAN	= $(MAKE) clean --directory=zlib --makefile=win32/Makefile.gcc
 else
 OUT	= dmf2mod
-ZLIB_MAKE	= chmod +x ./zlib/configure && ./zlib/configure --static && make --directory=zlib
-ZLIB_CLEAN	= make clean --directory=zlib
+ZLIB_MAKE	= chmod +x ./zlib/configure && ./zlib/configure --static && $(MAKE) --directory=zlib
+ZLIB_CLEAN	= $(MAKE) clean --directory=zlib
 endif
 
 CC	 = g++
 FLAGS	 = -std=c++17 -Izlib -Izstr -g -c -Wall -Wno-unknown-pragmas
 LFLAGS	 = -lm zlib/libz.a
 
-all: $(OBJS) zlib/libz.a
+all: $(OBJS) libz.a
 	$(CC) -g $(OBJS) -o $(OUT) $(LFLAGS)
 
 dmf2mod.o: dmf2mod.cpp
@@ -31,13 +31,13 @@ modules.o: modules.cpp
 mod.o: mod.cpp
 	$(CC) $(FLAGS) mod.cpp
 
-dmf.o: dmf.cpp
+dmf.o: dmf.cpp libz.a
 	$(CC) $(FLAGS) dmf.cpp
 
-.PHONY: clean zlibclean zlib
-
-zlib zlib/libz.a:
+zlib libz.a:
 	$(ZLIB_MAKE)
+
+.PHONY: clean zlibclean zlib
 
 clean:
 	$(RM) $(OUT) $(OBJS)

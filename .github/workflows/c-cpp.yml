@@ -2,9 +2,9 @@ name: C/C++ CI
 
 on:
   push:
-    branches: [ main, cpp_rewrite ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, cpp_rewrite ]
+    branches: [ main ]
 
 jobs:
   build-windows:
@@ -13,10 +13,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-      with:
-       submodules: 'recursive'
-    - name: build script
-      run: .\build.bat
+    - name: build
+      run: make
     - name: run
       run: .\dmf2mod.exe
   
@@ -26,12 +24,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-      with:
-       submodules: 'recursive'
-    - name: permissions
-      run: sudo chmod +x ./build
-    - name: build script
-      run: ./build
+    - name: build
+      run: make
     - name: run
       run: ./dmf2mod
       
@@ -41,11 +35,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-      with:
-       submodules: 'recursive'
-    - name: permissions
-      run: sudo chmod +x ./build
-    - name: build script
-      run: ./build
+    - name: build
+      run: make
     - name: run
       run: ./dmf2mod

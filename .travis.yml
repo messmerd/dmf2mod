@@ -1,9 +1,0 @@
-language: c
-compiler: gcc
-script: 
-  - sudo chmod +x ./build
-  - sudo ./build
-  - sudo ./dmf2mod
-os:
-  - linux
-  - osx

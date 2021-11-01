@@ -1,4 +1,4 @@
-dmf2mod [![Build status](https://ci.appveyor.com/api/projects/status/uvds55gsh593bcnl?svg=true)](https://ci.appveyor.com/project/messmerd/dmf2mod) [![Build Status](https://travis-ci.org/messmerd/dmf2mod.svg?branch=master)](https://travis-ci.org/messmerd/dmf2mod) 
+dmf2mod [![Build Status](https://github.com/messmerd/dmf2mod/workflows/build/badge.svg)](https://github.com/messmerd/dmf2mod/actions?query=workflow%3Abuild)
 ======
 
 A cross-platform command-line utility for converting Deflemask's DMF files to other trackers' module files.

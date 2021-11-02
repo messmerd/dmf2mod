@@ -12,8 +12,6 @@
 
 #include "dmf.h"
 
-REGISTER_MODULE(DMF, DMFConversionOptions, ModuleType::DMF, "dmf")
-
 // For inflating .dmf files so that they can be read
 #include "zlib.h"
 #include "zconf.h"

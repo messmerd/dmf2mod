@@ -35,8 +35,11 @@ typedef std::unique_ptr<Module> ModulePtr;
 typedef ConversionOptionsBase ConversionOptions;
 typedef std::unique_ptr<ConversionOptions> ConversionOptionsPtr;
 
-// Helper macro for setting a module class's info
+// Helper macro for explicit template specialization and setting static variables
 #define REGISTER_MODULE(moduleClass, optionsClass, enumType, fileExt) \
+template class ModuleStatic<moduleClass>; \
+template class ConversionOptionsStatic<optionsClass>; \
+template class ModuleInterface<moduleClass>; \
 template<> const ModuleType ModuleStatic<moduleClass>::m_Type = enumType; \
 template<> const std::string ModuleStatic<moduleClass>::m_FileExtension = fileExt; \
 template<> const std::function<ConversionOptionsBase*(void)> ModuleStatic<moduleClass>::m_CreateConversionOptionsStatic = &ConversionOptionsStatic<optionsClass>::CreateStatic; \

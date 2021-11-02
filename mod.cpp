@@ -27,8 +27,6 @@
 #include <cstdio>
 #include <set>
 
-REGISTER_MODULE(MOD, MODConversionOptions, ModuleType::MOD, "mod")
-
 #define PT_NOTE_VOLUMEMAX 64
 #define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 

@@ -37,7 +37,7 @@ typedef enum PT_EFFECT {
 } PT_EFFECT;
 
 
-class MOD : public ModuleBase, public ModuleStatic<MOD>
+class MOD : public ModuleInterface<MOD>
 {
 public:
     MOD();
@@ -51,10 +51,6 @@ public:
     }
 
     bool Export(const std::string& filename) override;
-
-    ModuleType GetType() const override { return _Type; }
-
-    std::string GetFileExtension() const override { return _FileExtension; }
 
     std::string GetName() const override { return ""; }
 
@@ -101,7 +97,7 @@ private:
     std::stringstream m_Stream;
 };
 
-class MODConversionOptions : public ConversionOptionsBase, public ConversionOptionsStatic<MODConversionOptions>
+class MODConversionOptions : public ConversionOptionsInterface<MODConversionOptions>
 {
 public:
     MODConversionOptions()
@@ -112,8 +108,6 @@ public:
 
     ~MODConversionOptions() {}
 
-    ModuleType GetType() const override { return _Type; }
-    
     enum class EffectsEnum
     {
         Min, Max

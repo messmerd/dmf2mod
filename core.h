@@ -25,11 +25,13 @@ enum class ModuleType;
 class ModuleUtils;
 class ModuleBase;
 class ConversionOptionsBase;
+template <typename T> class ModuleInterface;
+template <typename T> class ConversionOptionsInterface;
 struct InputOutput;
 
+// Typedefs to make usage easier
 typedef ModuleBase Module;
 typedef std::unique_ptr<Module> ModulePtr;
-
 typedef ConversionOptionsBase ConversionOptions;
 typedef std::unique_ptr<ConversionOptions> ConversionOptionsPtr;
 
@@ -181,7 +183,10 @@ public:
     static std::string FileExtension() { return _FileExtension; }
 
 protected:
-    ModuleStatic() {};
+   // This class needs to be inherited
+   ModuleStatic() = default;
+   ModuleStatic(const ModuleStatic&) = default;
+   ModuleStatic(ModuleStatic&&) = default;
     
     const static ModuleType _Type;
     static Module* CreateStatic() { return new T; }
@@ -195,12 +200,16 @@ template <typename T>
 class ConversionOptionsStatic
 {
 public:
+    friend class ModuleUtils;
+    friend class ModuleBase;
+
     static ConversionOptionsBase* CreateStatic() { return new T; }
 
 protected:
-    friend class ModuleUtils;
-    friend class ModuleBase;
-    ConversionOptionsStatic() {};
+    // This class needs to be inherited
+   ConversionOptionsStatic() = default;
+   ConversionOptionsStatic(const ConversionOptionsStatic&) = default;
+   ConversionOptionsStatic(ConversionOptionsStatic&&) = default;
     
     const static ModuleType _Type;
     static ModuleType GetOutputType() { return _Type; }
@@ -233,13 +242,10 @@ private:
 
     /*
      * Registers a module in the registration maps
-     * TODO: Need to also check whether the ConversionOptionsStatic<T> specialization exists
+     * TODO: Need to also check whether the ConversionOptionsStatic<T> specialization exists?
      */
     template <class T, 
-        class = typename std::enable_if<
-            std::is_base_of<ModuleBase, T>{} && 
-            std::is_base_of<ModuleStatic<T>, T>{}
-            >::type>
+        class = typename std::enable_if<std::is_base_of<ModuleInterface<T>, T>{}>::type>
     static void Register()
     {
         // TODO: Check for file extension clashes here.
@@ -291,10 +297,7 @@ public:
      * Create a new module of the desired module type
      */
     template <class T, 
-        class = typename std::enable_if<
-            std::is_base_of<ModuleBase, T>{} && 
-            std::is_base_of<ModuleStatic<T>, T>{}
-            >::type>
+        class = typename std::enable_if<std::is_base_of<ModuleInterface<T>, T>{}>::type>
     static ModulePtr Create()
     {
         // Create<T>() is only enabled if T is a derived class of both Module and ModuleStatic<T>
@@ -333,10 +336,16 @@ public:
      */
     ModulePtr Convert(ModuleType type, ConversionOptionsPtr& options)
     {
-        // TODO: Check if type is same as current type. If so, create a copy?
+        // Don't convert if the types are the same
+        if (type == GetType())
+            return nullptr;
+
+        // Create new module object
         ModulePtr output = Module::Create(type);
         if (!output)
             return nullptr;
+
+        // Perform the conversion
         output->ConvertFrom(this, options);
         return output;
     }
@@ -349,14 +358,10 @@ public:
      * Cast a Module pointer to a pointer of a derived type
      */
     template <class T, 
-        class = typename std::enable_if<
-            std::is_base_of<ModuleBase, T>{} && 
-            std::is_base_of<ModuleStatic<T>, T>{}
-            >::type>
+        class = typename std::enable_if<std::is_base_of<ModuleInterface<T>, T>{}>::type>
     const T* Cast() const
     {
         const T* ptr = reinterpret_cast<const T*>(this);
-        //static_assert(ptr);
         return ptr;
     }
     
@@ -393,13 +398,9 @@ public:
      * Create a new ConversionOptions object for the desired module type
      */
     template <class moduleClass, 
-        class = typename std::enable_if<
-            std::is_base_of<Module, moduleClass>{} && 
-            std::is_base_of<ModuleStatic<moduleClass>, moduleClass>{}
-            >::type>
+        class = typename std::enable_if<std::is_base_of<ModuleInterface<moduleClass>, moduleClass>{}>::type>
     static ConversionOptionsPtr Create()
     {
-        // Create<T>() is only enabled if T is a derived class of both Module and ModuleStatic<T>
         return ConversionOptionsPtr(ModuleStatic<moduleClass>::_CreateConversionOptionsStatic());
     }
 
@@ -422,11 +423,11 @@ public:
     /*
      * Cast an options pointer to a pointer of a derived type
      */
-    template <class T>
-    const T* Cast() const
+    template <class optionsClass, 
+        class = typename std::enable_if<std::is_base_of<ConversionOptionsInterface<optionsClass>, optionsClass>{}>::type>
+    const optionsClass* Cast() const
     {
-        const T* ptr = reinterpret_cast<const T*>(this);
-        //static_assert(ptr);
+        const optionsClass* ptr = reinterpret_cast<const optionsClass*>(this);
         return ptr;
     }
 
@@ -448,6 +449,35 @@ protected:
 
 protected:
     std::string m_OutputFile;
+};
+
+
+// All module classes must inherit this
+template <typename T>
+class ModuleInterface : public ModuleBase, public ModuleStatic<T>
+{
+protected:
+    ModuleType GetType() const override
+    {
+        return ModuleStatic<T>::_Type;
+    }
+
+    std::string GetFileExtension() const override
+    {
+        return ModuleStatic<T>::_FileExtension;
+    }
+};
+
+
+// All conversion options classes must inherit this
+template <typename T>
+class ConversionOptionsInterface : public ConversionOptionsBase, public ConversionOptionsStatic<T>
+{
+protected:
+    ModuleType GetType() const override
+    {
+        return ConversionOptionsStatic<T>::_Type;
+    }
 };
 
 

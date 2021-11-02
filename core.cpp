@@ -335,11 +335,11 @@ bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType
             std::string extension = GetExtensionFromType(moduleType);
             if (extension.empty())
             {
-                std::cout << "ERROR: The module is not propery registered with dmf2mod.\n";
+                std::cerr << "ERROR: The module is not propery registered with dmf2mod.\n";
             }
             else
             {
-                std::cout << "ERROR: Failed to create ConversionOptions-derived object for the module type '" << extension 
+                std::cerr << "ERROR: Failed to create ConversionOptions-derived object for the module type '" << extension 
                     << "'. The module may not be properly registered with dmf2mod.\n";
             }
             return true;
@@ -352,18 +352,18 @@ bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType
     // Print generic help
 
     std::cout << "dmf2mod v" << DMF2MOD_VERSION << "\n";
-    std::cout << "Created by Dalton Messmer <messmer.dalton@gmail.com>\n";
+    std::cout << "Created by Dalton Messmer <messmer.dalton@gmail.com>\n\n";
 
     std::cout.setf(std::ios_base::left);
-    std::cout << std::setw(25) << "Usage:" << "dmf2mod" << " output.[ext] input.dmf [options]\n";
-    std::cout << std::setw(25) << "" << "dmf2mod" << " [ext] input.dmf [options]\n";
+    std::cout << "Usage: dmf2mod output.[ext] input.dmf [options]\n";
+    std::cout << std::setw(7) << "" << "dmf2mod" << " [ext] input.dmf [options]\n";
 
     std::cout << "Options:\n";
 
     std::cout.setf(std::ios_base::left);
-    std::cout << std::setw(25) << "-f, --force" << "Overwrite output file.\n";
-    std::cout << std::setw(25) << "--help [module type]" << "Display this help message. Provide module type (i.e. mod) for module-specific options.\n";
-    std::cout << std::setw(25) << "-s, --silent" << "Print nothing to stdout besides errors and/or warnings.\n";
+    std::cout << std::setw(30) << "  -f, --force" << "Overwrite output file.\n";
+    std::cout << std::setw(30) << "  --help [module type]" << "Display this help message. Provide module type (i.e. mod) for module-specific options.\n";
+    std::cout << std::setw(30) << "  -s, --silent" << "Print nothing to console except errors and/or warnings.\n";
 
     return false;
 }
@@ -371,7 +371,7 @@ bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType
 void Status::PrintError()
 {
     if (ErrorOccurred())
-        std::cout << m_ErrorMessage << "\n";
+        std::cerr << m_ErrorMessage << "\n";
 }
 
 void Status::PrintWarnings()

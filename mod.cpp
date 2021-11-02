@@ -127,7 +127,7 @@ bool MODConversionOptions::ParseArgs(std::vector<std::string>& args)
                 Effects = EffectsEnum::Max;
             else
             {
-                std::cout << "ERROR: For the option '--effects=', the acceptable values are: min, max.\n";
+                std::cerr << "ERROR: For the option '--effects=', the acceptable values are: min, max.\n";
                 return true;
             }
             args.erase(args.begin() + i);
@@ -135,7 +135,7 @@ bool MODConversionOptions::ParseArgs(std::vector<std::string>& args)
         }
         else
         {
-            std::cout << "ERROR: Unrecognized option '" << args[i] << "'\n";
+            std::cerr << "ERROR: Unrecognized option '" << args[i] << "'\n";
             return true;
         }
         
@@ -151,8 +151,8 @@ void MODConversionOptions::PrintHelp()
     std::cout << "MOD Options:\n";
 
     std::cout.setf(std::ios_base::left);
-    std::cout << std::setw(25) << "--downsample" << "Allow wavetables to lose information through downsampling if needed.\n";
-    std::cout << std::setw(25) << "--effects=[min,max]" << "The number of ProTracker effects to use. (Default: max)\n";
+    std::cout << std::setw(30) << "  --downsample" << "Allow wavetables to lose information through downsampling if needed.\n";
+    std::cout << std::setw(30) << "  --effects=[min,max]" << "The number of ProTracker effects to use. (Default: max)\n";
 }
 
 MOD::MOD()
@@ -746,11 +746,11 @@ uint16_t MOD::GetProTrackerEffect(int16_t effectCode, int16_t effectValue)
 
         // Game Boy exclusive:
         case DMF_SETWAVE:
-            break; // This is handled in the exportMOD function and WriteProTrackerPatternRow function
+            break; // This is handled in the ConvertFrom and WriteProTrackerPatternRow methods
         case DMF_SETNOISEPOLYCOUNTERMODE:
             break; // This is probably more than I need to worry about
         case DMF_SETDUTYCYCLE:
-            break; // This is handled in the exportMOD function and WriteProTrackerPatternRow function
+            break; // This is handled in the ConvertFrom and WriteProTrackerPatternRow methods
         case DMF_SETSWEEPTIMESHIFT:
             break; // ?
         case DMF_SETSWEEPDIR:
@@ -820,7 +820,7 @@ int MOD::InitSamples(const DMF* dmf, Note **lowestNote, Note **highestNote)
     PatternRow*** const patternValues = dmf->GetPatternValues();
     uint8_t** const patternMatrixValues = dmf->GetPatternMatrixValues();
 
-    // Most of the following nested for loop is copied from the export pattern data loop in exportMOD.
+    // Most of the following nested for loop is copied from the export pattern data loop in ConvertFrom.
     // I didn't want to do this, but I think having two of the same loop is the only simple way.
     // Loop through SQ1, SQ2, and WAVE channels:
     for (int chan = DMF_GAMEBOY_SQW1; chan <= DMF_GAMEBOY_WAVE; chan++)
@@ -1166,12 +1166,12 @@ void MOD::ExportSampleData(const DMF* dmf)
     uint8_t ptSampleNum = 1;
     const uint8_t totalWavetables = dmf->GetTotalWavetables();
 
-    for (uint8_t i = 0; i < 4 + totalWavetables; i++)
+    for (unsigned i = 0; i < 4u + totalWavetables; i++)
     {
         if (sampMap[i] == ptSampleNum)
         {
             ExportSampleDataHelper(dmf, ptSampleNum, i);
-            ptSampleNum++; 
+            ptSampleNum++;
             if (sampMap[i + 4 + totalWavetables] == ptSampleNum)
             {
                 ExportSampleDataHelper(dmf, ptSampleNum, i + 4 + totalWavetables);

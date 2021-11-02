@@ -70,7 +70,7 @@ int main(int argc, char *argv[])
     // Export the converted module to disk:
     if (output->Export(io.OutputFile))
     {
-        std::cout << "ERROR: Failed to export the module to disk.\n";
+        std::cerr << "ERROR: Failed to export the module to disk.\n";
         return 1; // Error occurred while exporting
     }
 

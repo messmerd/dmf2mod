@@ -146,7 +146,7 @@ typedef enum DMF_IMPORT_ERROR
     IMPORT_ERROR_FAIL=1
 } DMF_IMPORT_ERROR;
 
-class DMF : public ModuleBase, public ModuleStatic<DMF>
+class DMF : public ModuleInterface<DMF>
 {
 public:
     static const System SYSTEMS(SYSTEM_TYPE systemType) { return m_Systems[systemType]; }
@@ -170,10 +170,6 @@ public:
     bool Import(const std::string& filename) override;
     bool Export(const std::string& filename) override;
 
-    ModuleType GetType() const override { return _Type; }
-
-    std::string GetFileExtension() const override { return _FileExtension; }
-
     std::string GetName() const override
     {
         if (!m_VisualInfo.songName)
@@ -190,14 +186,14 @@ public:
     const VisualInfo& GetVisualInfo() const { return m_VisualInfo; }
     const ModuleInfo& GetModuleInfo() const { return m_ModuleInfo; }
 
-    uint8_t** const GetPatternMatrixValues() const { return m_PatternMatrixValues; }
+    uint8_t** GetPatternMatrixValues() const { return m_PatternMatrixValues; }
 
     uint8_t GetTotalWavetables() const { return m_TotalWavetables; }
 
-    uint32_t** const GetWavetableValues() const { return m_WavetableValues; }
+    uint32_t** GetWavetableValues() const { return m_WavetableValues; }
     uint32_t GetWavetableValue(unsigned wavetable, unsigned index) const { return m_WavetableValues[wavetable][index]; }
 
-    PatternRow*** const GetPatternValues() const { return m_PatternValues; }
+    PatternRow*** GetPatternValues() const { return m_PatternValues; }
 
 private:
     bool ConvertFrom(const Module* input, ConversionOptionsPtr& options) override
@@ -237,13 +233,12 @@ private:
     static const System m_Systems[];
 };
 
-class DMFConversionOptions : public ConversionOptionsBase, public ConversionOptionsStatic<DMFConversionOptions>
+class DMFConversionOptions : public ConversionOptionsInterface<DMFConversionOptions>
 {
 public:
     DMFConversionOptions() {}
     ~DMFConversionOptions() {}
 
-    ModuleType GetType() const override { return _Type; }
     bool ParseArgs(std::vector<std::string>& args) override { return false; } // DMF files don't have any conversion flags right now
     void PrintHelp() override;
 };

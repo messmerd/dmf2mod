@@ -16,7 +16,7 @@ CC	 = g++
 FLAGS	 = -std=c++17 -Izlib -Izstr -g -c -Wall -Wno-unknown-pragmas
 LFLAGS	 = -lm zlib/libz.a
 
-all: $(OBJS) libz.a
+all: $(OBJS) zlib/libz.a
 	$(CC) -g $(OBJS) -o $(OUT) $(LFLAGS)
 
 dmf2mod.o: dmf2mod.cpp
@@ -31,10 +31,10 @@ modules.o: modules.cpp
 mod.o: mod.cpp
 	$(CC) $(FLAGS) mod.cpp
 
-dmf.o: dmf.cpp libz.a
+dmf.o: dmf.cpp zlib/libz.a
 	$(CC) $(FLAGS) dmf.cpp
 
-zlib libz.a:
+zlib zlib/libz.a:
 	$(ZLIB_MAKE)
 
 .PHONY: clean zlibclean zlib

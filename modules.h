@@ -22,6 +22,16 @@ enum class ModuleType
 // Forward defines
 class DMF;
 class MOD;
+class DMFConversionOptions;
+class MODConversionOptions;
+
+// ModuleStatic explicit specialization
+template class ModuleStatic<DMF>;
+template class ModuleStatic<MOD>;
+
+// ConversionOptionsStatic explicit specialization
+template class ConversionOptionsStatic<DMFConversionOptions>;
+template class ConversionOptionsStatic<MODConversionOptions>;
 
 // Include all supported modules here
 #include "dmf.h"

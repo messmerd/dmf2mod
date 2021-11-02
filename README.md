@@ -38,7 +38,7 @@ Options:
 ```
 -f, --force              Overwrite output file.
 --help [module type]     Displays the help message. Provide module type (i.e. mod) for module-specific options.
--s, --silent             Print nothing to stdout besides errors and/or warnings.
+-s, --silent             Print nothing to console except errors and/or warnings.
 ```
 
 Options when converting to MOD:

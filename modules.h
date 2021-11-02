@@ -33,6 +33,10 @@ template class ModuleStatic<MOD>;
 template class ConversionOptionsStatic<DMFConversionOptions>;
 template class ConversionOptionsStatic<MODConversionOptions>;
 
+// ModuleInterface explicit specialization
+template class ModuleInterface<DMF>;
+template class ModuleInterface<MOD>;
+
 // Include all supported modules here
 #include "dmf.h"
 #include "mod.h"

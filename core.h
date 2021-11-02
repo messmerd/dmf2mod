@@ -177,9 +177,9 @@ protected:
 
     static Module* CreateStatic();
 
-    static ModuleType GetTypeStatic() { return m_Type; }
-    static std::string GetFileExtensionStatic() { return m_FileExtension; }
-    static std::function<ConversionOptionsBase*(void)> GetCreateConversionOptionsStatic() { return m_CreateConversionOptionsStatic; }
+    static ModuleType GetTypeStatic();
+    static std::string GetFileExtensionStatic();
+    static std::function<ConversionOptionsBase*(void)> GetCreateConversionOptionsStatic();
     
 private:
     const static ModuleType m_Type;
@@ -201,7 +201,7 @@ protected:
     ConversionOptionsStatic(ConversionOptionsStatic&&) = default;
 
     // The output module type
-    static ModuleType GetTypeStatic() { return m_Type; }
+    static ModuleType GetTypeStatic();
 
 public:
     // Unfortunately with the way I'm doing things currently, this needs to be public:
@@ -390,10 +390,7 @@ public:
      */
     template <class moduleClass, 
         class = typename std::enable_if<std::is_base_of<ModuleInterface<moduleClass>, moduleClass>{}>::type>
-    static ConversionOptionsPtr Create()
-    {
-        return ConversionOptionsPtr(ModuleStatic<moduleClass>::_CreateConversionOptionsStatic());
-    }
+    static ConversionOptionsPtr Create();
 
     /*
      * Create a new module using the ModuleType enum to specify the desired module type
@@ -447,15 +444,8 @@ template <typename T>
 class ModuleInterface : public ModuleBase, public ModuleStatic<T>
 {
 protected:
-    ModuleType GetType() const override
-    {
-        return ModuleStatic<T>::GetTypeStatic();
-    }
-
-    std::string GetFileExtension() const override
-    {
-        return ModuleStatic<T>::GetFileExtensionStatic();
-    }
+    ModuleType GetType() const override;
+    std::string GetFileExtension() const override;
 };
 
 
@@ -464,10 +454,7 @@ template <typename T>
 class ConversionOptionsInterface : public ConversionOptionsBase, public ConversionOptionsStatic<T>
 {
 protected:
-    ModuleType GetType() const override
-    {
-        return ConversionOptionsStatic<T>::GetTypeStatic();
-    }
+    ModuleType GetType() const override;
 };
 
 

@@ -28,6 +28,8 @@ CommonFlags ModuleUtils::m_CoreOptions = {};
 
 static bool ParseFlags(std::vector<std::string>& args, CommonFlags& flags);
 
+// ModuleUtils class
+
 std::vector<std::string> ModuleUtils::GetAvaliableModules()
 {
     std::vector<std::string> vec;
@@ -368,6 +370,8 @@ bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType
     return false;
 }
 
+// Status class
+
 void Status::PrintError()
 {
     if (ErrorOccurred())
@@ -429,6 +433,8 @@ std::string Status::CommonErrorMessageCreator(Category category, int errorCode, 
     return "";
 }
 
+// ModuleStatic class
+
 template <typename T>
 Module* ModuleStatic<T>::CreateStatic()
 {
@@ -436,13 +442,67 @@ Module* ModuleStatic<T>::CreateStatic()
 }
 
 template <typename T>
+ModuleType ModuleStatic<T>::GetTypeStatic()
+{
+    return m_Type;
+}
+
+template <typename T>
+std::string ModuleStatic<T>::GetFileExtensionStatic()
+{
+    return m_FileExtension;
+}
+
+template <typename T>
+std::function<ConversionOptionsBase*(void)> ModuleStatic<T>::GetCreateConversionOptionsStatic()
+{
+    return m_CreateConversionOptionsStatic;
+}
+
+// ConversionOptionsStatic class
+
+template <typename T>
 ConversionOptionsBase* ConversionOptionsStatic<T>::CreateStatic()
 {
     return new T;
 }
 
+template <typename T>
+ModuleType ConversionOptionsStatic<T>::GetTypeStatic()
+{
+    return m_Type;
+}
+
+// Base classes
+
 template <class T, class>
 ModulePtr ModuleBase::Create()
 {
     return ModulePtr(new T);
+}
+
+template <class moduleClass, class>
+ConversionOptionsPtr ConversionOptionsBase::Create()
+{
+    return ConversionOptionsPtr(ModuleStatic<moduleClass>::m_CreateConversionOptionsStatic());
+}
+
+// Interface classes
+
+template <typename T>
+ModuleType ModuleInterface<T>::GetType() const
+{
+    return ModuleStatic<T>::GetTypeStatic();
+}
+
+template <typename T>
+std::string ModuleInterface<T>::GetFileExtension() const
+{
+    return ModuleStatic<T>::GetFileExtensionStatic();
+}
+
+template <typename T>
+ModuleType ConversionOptionsInterface<T>::GetType() const
+{
+    return ConversionOptionsStatic<T>::GetTypeStatic();
 }

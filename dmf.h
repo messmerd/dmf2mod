@@ -146,6 +146,9 @@ typedef enum DMF_IMPORT_ERROR
     IMPORT_ERROR_FAIL=1
 } DMF_IMPORT_ERROR;
 
+// Begin setup
+REGISTER_MODULE_BEGIN(DMF, DMFConversionOptions)
+
 class DMF : public ModuleInterface<DMF>
 {
 public:
@@ -243,6 +246,9 @@ public:
     void PrintHelp() override;
 };
 
+// End setup
+REGISTER_MODULE_END(DMF, DMFConversionOptions, ModuleType::DMF, "dmf")
+
 // Deflemask Game Boy channels
 typedef enum DMF_GAMEBOY_CHANNEL {
     DMF_GAMEBOY_SQW1=0, DMF_GAMEBOY_SQW2=1, DMF_GAMEBOY_WAVE=2, DMF_GAMEBOY_NOISE=3
@@ -252,4 +258,3 @@ typedef enum DMF_GAMEBOY_CHANNEL {
 int8_t NoteCompare(const Note *n1, const Note *n2);
 
 int8_t NoteCompare(const Note* n1, const Note n2);
-

@@ -37,6 +37,9 @@ typedef enum PT_EFFECT {
 } PT_EFFECT;
 
 
+// Begin setup
+REGISTER_MODULE_BEGIN(MOD, MODConversionOptions)
+
 class MOD : public ModuleInterface<MOD>
 {
 public:
@@ -123,3 +126,6 @@ private:
     bool Downsample;
     EffectsEnum Effects;
 };
+
+// End setup
+REGISTER_MODULE_END(MOD, MODConversionOptions, ModuleType::MOD, "mod")

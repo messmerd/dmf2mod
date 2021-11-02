@@ -35,15 +35,33 @@ typedef std::unique_ptr<Module> ModulePtr;
 typedef ConversionOptionsBase ConversionOptions;
 typedef std::unique_ptr<ConversionOptions> ConversionOptionsPtr;
 
-// Helper macro for explicit template specialization and setting static variables
-#define REGISTER_MODULE(moduleClass, optionsClass, enumType, fileExt) \
+/*
+    Helper macro for explicit template specialization of a module.
+    Must be called in a module's header file BEFORE defining the module's class and its
+    conversion options class.
+*/
+#define REGISTER_MODULE_BEGIN(moduleClass, optionsClass) \
 template class ModuleStatic<moduleClass>; \
 template class ConversionOptionsStatic<optionsClass>; \
-template class ModuleInterface<moduleClass>; \
+template class ModuleInterface<moduleClass>;
+
+/*
+    Helper macro for setting static data members and defining template specializations
+    of a module's methods.
+    Must be called in a module's header file AFTER defining the module's class and its
+    conversion options class.
+*/
+#define REGISTER_MODULE_END(moduleClass, optionsClass, enumType, fileExt) \
 template<> const ModuleType ModuleStatic<moduleClass>::m_Type = enumType; \
 template<> const std::string ModuleStatic<moduleClass>::m_FileExtension = fileExt; \
+template<> ConversionOptionsBase* ConversionOptionsStatic<optionsClass>::CreateStatic() { return new optionsClass; } \
 template<> const std::function<ConversionOptionsBase*(void)> ModuleStatic<moduleClass>::m_CreateConversionOptionsStatic = &ConversionOptionsStatic<optionsClass>::CreateStatic; \
-template<> const ModuleType ConversionOptionsStatic<optionsClass>::m_Type = enumType;
+template<> const ModuleType ConversionOptionsStatic<optionsClass>::m_Type = enumType; \
+template<> Module* ModuleStatic<moduleClass>::CreateStatic() { return new moduleClass; } \
+template<> ModuleType ModuleStatic<moduleClass>::GetTypeStatic() { return m_Type; } \
+template<> std::string ModuleStatic<moduleClass>::GetFileExtensionStatic() { return m_FileExtension; } \
+template<> std::function<ConversionOptionsBase*(void)> ModuleStatic<moduleClass>::GetCreateConversionOptionsStatic() { return m_CreateConversionOptionsStatic; } \
+template<> ModuleType ConversionOptionsStatic<optionsClass>::GetTypeStatic() { return m_Type; }
 
 // Command-line options that are supported regardless of which modules are supported
 struct CommonFlags

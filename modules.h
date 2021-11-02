@@ -25,10 +25,6 @@ class MOD;
 class DMFConversionOptions;
 class MODConversionOptions;
 
-// Explicit specialization and setting static variables
-REGISTER_MODULE(DMF, DMFConversionOptions, ModuleType::DMF, "dmf")
-REGISTER_MODULE(MOD, MODConversionOptions, ModuleType::MOD, "mod")
-
 // Include all supported modules here
 #include "dmf.h"
 #include "mod.h"

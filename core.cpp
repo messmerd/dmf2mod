@@ -428,3 +428,21 @@ std::string Status::CommonErrorMessageCreator(Category category, int errorCode, 
     }
     return "";
 }
+
+template <typename T>
+Module* ModuleStatic<T>::CreateStatic()
+{
+    return new T;
+}
+
+template <typename T>
+ConversionOptionsBase* ConversionOptionsStatic<T>::CreateStatic()
+{
+    return new T;
+}
+
+template <class T, class>
+ModulePtr ModuleBase::Create()
+{
+    return ModulePtr(new T);
+}

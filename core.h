@@ -37,10 +37,10 @@ typedef std::unique_ptr<ConversionOptions> ConversionOptionsPtr;
 
 // Helper macro for setting a module class's info
 #define REGISTER_MODULE(moduleClass, optionsClass, enumType, fileExt) \
-template<> const ModuleType ModuleStatic<moduleClass>::_Type = enumType; \
-template<> const std::string ModuleStatic<moduleClass>::_FileExtension = fileExt; \
-template<> const std::function<ConversionOptionsBase*(void)> ModuleStatic<moduleClass>::_CreateConversionOptionsStatic = &ConversionOptionsStatic<optionsClass>::CreateStatic; \
-template<> const ModuleType ConversionOptionsStatic<optionsClass>::_Type = enumType;
+template<> const ModuleType ModuleStatic<moduleClass>::m_Type = enumType; \
+template<> const std::string ModuleStatic<moduleClass>::m_FileExtension = fileExt; \
+template<> const std::function<ConversionOptionsBase*(void)> ModuleStatic<moduleClass>::m_CreateConversionOptionsStatic = &ConversionOptionsStatic<optionsClass>::CreateStatic; \
+template<> const ModuleType ConversionOptionsStatic<optionsClass>::m_Type = enumType;
 
 // Command-line options that are supported regardless of which modules are supported
 struct CommonFlags
@@ -167,31 +167,24 @@ private:
 template<typename T>
 class ModuleStatic
 {
-public:
-    friend class ModuleUtils;
-    friend class ModuleBase;
-    friend class ConversionOptionsBase;
-
-    /*
-     * Returns the ModuleType enum value
-     */
-    static ModuleType Type() { return _Type; }
-
-    /*
-     * Returns the file name extension (not including the dot)
-     */
-    static std::string FileExtension() { return _FileExtension; }
-
 protected:
-   // This class needs to be inherited
-   ModuleStatic() = default;
-   ModuleStatic(const ModuleStatic&) = default;
-   ModuleStatic(ModuleStatic&&) = default;
+    friend class ModuleUtils;
+
+    // This class needs to be inherited
+    ModuleStatic() = default;
+    ModuleStatic(const ModuleStatic&) = default;
+    ModuleStatic(ModuleStatic&&) = default;
+
+    static Module* CreateStatic();
+
+    static ModuleType GetTypeStatic() { return m_Type; }
+    static std::string GetFileExtensionStatic() { return m_FileExtension; }
+    static std::function<ConversionOptionsBase*(void)> GetCreateConversionOptionsStatic() { return m_CreateConversionOptionsStatic; }
     
-    const static ModuleType _Type;
-    static Module* CreateStatic() { return new T; }
-    const static std::function<ConversionOptionsBase*(void)> _CreateConversionOptionsStatic;
-    const static std::string _FileExtension; // Without dot
+private:
+    const static ModuleType m_Type;
+    const static std::string m_FileExtension; // Without dot
+    const static std::function<ConversionOptionsBase*(void)> m_CreateConversionOptionsStatic;
 };
 
 
@@ -199,20 +192,23 @@ protected:
 template <typename T>
 class ConversionOptionsStatic
 {
-public:
-    friend class ModuleUtils;
-    friend class ModuleBase;
-
-    static ConversionOptionsBase* CreateStatic() { return new T; }
-
 protected:
+    friend class ModuleUtils;
+
     // This class needs to be inherited
-   ConversionOptionsStatic() = default;
-   ConversionOptionsStatic(const ConversionOptionsStatic&) = default;
-   ConversionOptionsStatic(ConversionOptionsStatic&&) = default;
-    
-    const static ModuleType _Type;
-    static ModuleType GetOutputType() { return _Type; }
+    ConversionOptionsStatic() = default;
+    ConversionOptionsStatic(const ConversionOptionsStatic&) = default;
+    ConversionOptionsStatic(ConversionOptionsStatic&&) = default;
+
+    // The output module type
+    static ModuleType GetTypeStatic() { return m_Type; }
+
+public:
+    // Unfortunately with the way I'm doing things currently, this needs to be public:
+    static ConversionOptionsBase* CreateStatic();
+
+private:
+    const static ModuleType m_Type;
 };
 
 
@@ -251,10 +247,10 @@ private:
         // TODO: Check for file extension clashes here.
         // In order to make modules fully dynamically loaded, would need to make ModuleType an int and 
         // assign it to the module here rather than let them choose their own ModuleType.
-        RegistrationMap[T::_Type] = &T::CreateStatic;
-        FileExtensionMap[T::_FileExtension] = T::_Type;
+        RegistrationMap[T::GetTypeStatic()] = &T::CreateStatic;
+        FileExtensionMap[T::GetFileExtensionStatic()] = T::GetTypeStatic();
 
-        ConversionOptionsRegistrationMap[T::_Type] = T::_CreateConversionOptionsStatic;
+        ConversionOptionsRegistrationMap[T::GetTypeStatic()] = T::GetCreateConversionOptionsStatic();
     }
 
     // Map which registers a module type enum value with the static create function associated with that module
@@ -298,11 +294,7 @@ public:
      */
     template <class T, 
         class = typename std::enable_if<std::is_base_of<ModuleInterface<T>, T>{}>::type>
-    static ModulePtr Create()
-    {
-        // Create<T>() is only enabled if T is a derived class of both Module and ModuleStatic<T>
-        return ModulePtr(new T);
-    }
+    static ModulePtr Create();
 
     /*
      * Create and import a new module given a filename. Module type is inferred from the file extension.
@@ -361,8 +353,7 @@ public:
         class = typename std::enable_if<std::is_base_of<ModuleInterface<T>, T>{}>::type>
     const T* Cast() const
     {
-        const T* ptr = reinterpret_cast<const T*>(this);
-        return ptr;
+        return reinterpret_cast<const T*>(this);
     }
     
     /*
@@ -427,8 +418,7 @@ public:
         class = typename std::enable_if<std::is_base_of<ConversionOptionsInterface<optionsClass>, optionsClass>{}>::type>
     const optionsClass* Cast() const
     {
-        const optionsClass* ptr = reinterpret_cast<const optionsClass*>(this);
-        return ptr;
+        return reinterpret_cast<const optionsClass*>(this);
     }
 
     /*
@@ -459,12 +449,12 @@ class ModuleInterface : public ModuleBase, public ModuleStatic<T>
 protected:
     ModuleType GetType() const override
     {
-        return ModuleStatic<T>::_Type;
+        return ModuleStatic<T>::GetTypeStatic();
     }
 
     std::string GetFileExtension() const override
     {
-        return ModuleStatic<T>::_FileExtension;
+        return ModuleStatic<T>::GetFileExtensionStatic();
     }
 };
 
@@ -476,7 +466,7 @@ class ConversionOptionsInterface : public ConversionOptionsBase, public Conversi
 protected:
     ModuleType GetType() const override
     {
-        return ConversionOptionsStatic<T>::_Type;
+        return ConversionOptionsStatic<T>::GetTypeStatic();
     }
 };
 

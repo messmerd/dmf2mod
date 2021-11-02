@@ -12,15 +12,18 @@
 
 #pragma once
 
+#include "modules.h"
+
 #include <string>
 #include <sstream>
+
+// Begin setup
+REGISTER_MODULE_HEADER(MOD, MODConversionOptions)
 
 // Forward defines
 struct Note;
 struct PatternRow;
 struct MODChannelState;
-
-#include "dmf.h"
 
 // ProTracker effects
 // An effect is represented with 12 bits, which is 3 groups of 4 bits: [e][x][y]. 
@@ -35,10 +38,6 @@ typedef enum PT_EFFECT {
     PT_FINEVOLSLIDEDOWN=0xEB, PT_CUTSAMPLE=0xEC, PT_DELAYSAMPLE=0xED, PT_DELAYPATTERN=0xEE, PT_INVERTLOOP=0xEF,
     PT_SETSPEED=0xF0
 } PT_EFFECT;
-
-
-// Begin setup
-REGISTER_MODULE_BEGIN(MOD, MODConversionOptions)
 
 class MOD : public ModuleInterface<MOD>
 {
@@ -126,6 +125,3 @@ private:
     bool Downsample;
     EffectsEnum Effects;
 };
-
-// End setup
-REGISTER_MODULE_END(MOD, MODConversionOptions, ModuleType::MOD, "mod")

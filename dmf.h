@@ -15,6 +15,9 @@
 #include "modules.h"
 #include "zstr/zstr.hpp"
 
+// Begin setup
+REGISTER_MODULE_HEADER(DMF, DMFConversionOptions)
+
 // Deflemask allows four effects columns per channel regardless of the system 
 #define MAX_EFFECTS_COLUMN_COUNT 4 
 
@@ -146,9 +149,6 @@ typedef enum DMF_IMPORT_ERROR
     IMPORT_ERROR_FAIL=1
 } DMF_IMPORT_ERROR;
 
-// Begin setup
-REGISTER_MODULE_BEGIN(DMF, DMFConversionOptions)
-
 class DMF : public ModuleInterface<DMF>
 {
 public:
@@ -245,9 +245,6 @@ public:
     bool ParseArgs(std::vector<std::string>& args) override { return false; } // DMF files don't have any conversion flags right now
     void PrintHelp() override;
 };
-
-// End setup
-REGISTER_MODULE_END(DMF, DMFConversionOptions, ModuleType::DMF, "dmf")
 
 // Deflemask Game Boy channels
 typedef enum DMF_GAMEBOY_CHANNEL {

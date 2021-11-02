@@ -21,6 +21,9 @@
 #include <string>
 #include <fstream>
 
+// Finish setup
+REGISTER_MODULE_CPP(DMF, DMFConversionOptions, ModuleType::DMF, "dmf")
+
 #define DMF_FILE_VERSION 24 // 0x18 - Only DefleMask v0.12.0 files are supported
 
 // Information about all the systems Deflemask supports

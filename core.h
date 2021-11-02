@@ -40,18 +40,27 @@ typedef std::unique_ptr<ConversionOptions> ConversionOptionsPtr;
     Must be called in a module's header file BEFORE defining the module's class and its
     conversion options class.
 */
-#define REGISTER_MODULE_BEGIN(moduleClass, optionsClass) \
+#define REGISTER_MODULE_HEADER(moduleClass, optionsClass) \
 template class ModuleStatic<moduleClass>; \
 template class ConversionOptionsStatic<optionsClass>; \
-template class ModuleInterface<moduleClass>;
+template class ModuleInterface<moduleClass>; \
+template<> ConversionOptionsBase* ConversionOptionsStatic<optionsClass>::CreateStatic(); \
+template<> Module* ModuleStatic<moduleClass>::CreateStatic(); \
+template<> ModuleType ModuleStatic<moduleClass>::GetTypeStatic(); \
+template<> std::string ModuleStatic<moduleClass>::GetFileExtensionStatic(); \
+template<> std::function<ConversionOptionsBase*(void)> ModuleStatic<moduleClass>::GetCreateConversionOptionsStatic(); \
+template<> ModuleType ConversionOptionsStatic<optionsClass>::GetTypeStatic(); \
+template<> ModuleType ModuleInterface<moduleClass>::GetType() const; \
+template<> std::string ModuleInterface<moduleClass>::GetFileExtension() const; \
+template<> ModuleType ConversionOptionsInterface<optionsClass>::GetType() const;
 
 /*
     Helper macro for setting static data members and defining template specializations
     of a module's methods.
-    Must be called in a module's header file AFTER defining the module's class and its
-    conversion options class.
+    Must be called in a module's cpp file AFTER the module's class and its
+    conversion options class are defined in the header.
 */
-#define REGISTER_MODULE_END(moduleClass, optionsClass, enumType, fileExt) \
+#define REGISTER_MODULE_CPP(moduleClass, optionsClass, enumType, fileExt) \
 template<> const ModuleType ModuleStatic<moduleClass>::m_Type = enumType; \
 template<> const std::string ModuleStatic<moduleClass>::m_FileExtension = fileExt; \
 template<> ConversionOptionsBase* ConversionOptionsStatic<optionsClass>::CreateStatic() { return new optionsClass; } \
@@ -61,7 +70,10 @@ template<> Module* ModuleStatic<moduleClass>::CreateStatic() { return new module
 template<> ModuleType ModuleStatic<moduleClass>::GetTypeStatic() { return m_Type; } \
 template<> std::string ModuleStatic<moduleClass>::GetFileExtensionStatic() { return m_FileExtension; } \
 template<> std::function<ConversionOptionsBase*(void)> ModuleStatic<moduleClass>::GetCreateConversionOptionsStatic() { return m_CreateConversionOptionsStatic; } \
-template<> ModuleType ConversionOptionsStatic<optionsClass>::GetTypeStatic() { return m_Type; }
+template<> ModuleType ConversionOptionsStatic<optionsClass>::GetTypeStatic() { return m_Type; } \
+template<> ModuleType ModuleInterface<moduleClass>::GetType() const { return ModuleStatic<moduleClass>::GetTypeStatic(); } \
+template<> std::string ModuleInterface<moduleClass>::GetFileExtension() const { return ModuleStatic<moduleClass>::GetFileExtensionStatic(); } \
+template<> ModuleType ConversionOptionsInterface<optionsClass>::GetType() const { return ConversionOptionsStatic<optionsClass>::GetTypeStatic(); }
 
 // Command-line options that are supported regardless of which modules are supported
 struct CommonFlags

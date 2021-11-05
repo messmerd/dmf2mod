@@ -1,0 +1,61 @@
+<html>
+<head>
+    <title>dmf2mod</title>
+    <meta http-equiv="content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body { background-color: aquamarine; }
+        p { font-family: Arial; }
+    </style>
+</head>
+<script></script>
+<body>
+    <div id="container">
+        <header>
+            <h1>dmf2mod</h1>
+            <h2>Deflemask module converter</h2>
+            <h4 id="status">Status: Loading web app...</h4>
+        </header>
+        <section>
+    
+        <form action="" method="post" enctype="multipart/form-data">
+            
+            <div>
+                <label>Select a file to convert...</label><br>
+                <input type="file" name="file" required>
+            </div>
+            <br>
+            <div>
+                <label>Output type:</label>
+
+                <input type="radio" id="dmf" name="output_type" value="dmf">
+                <label for="dmf">dmf</label>
+                <input type="radio" id="mod" name="output_type" value="mod" checked>
+                <label for="mod">mod</label>
+            </div>
+            <br>
+            <div>
+                <input type="submit" value="Convert" name="convert">
+            </div>
+        </form>
+
+        <div>
+            <button id="test_button" onclick="onClickTest(event)">Get available modules</button>
+        </div>
+        <div>
+            <h4>Available modules:</h4>
+            <p id="output"></p>
+        </div>
+    
+        </section>
+        <footer>
+            <ul>
+                <li><a href="https://github.com/messmerd/dmf2mod">GitHub</a></li>
+            </ul>
+        </footer>
+    </div>
+
+    <script src="dmf2mod.js"></script>
+    <script src="webapp.js"></script>
+</body>
+</html>

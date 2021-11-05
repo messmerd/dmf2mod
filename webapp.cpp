@@ -2,39 +2,46 @@
 #include <emscripten/emscripten.h>
 #include <emscripten/bind.h>
 
-#define EXPORT __attribute__((visibility("default")))
+// NOTE: When using std::cout, make sure you end it with a newline to flush output. Otherwise nothing will appear.
 
 static ModulePtr G_Module;
 static std::string G_InputFilename;
+static CommonFlags G_CoreOptions;
 
-/*
- * Initialize modules
- * Must be called before any other function
- */
-EXPORT void Init()
+int main()
 {
     ModuleUtils::RegisterModules();
 
-    CommonFlags coreOptions;
-    coreOptions.force = true;
-    coreOptions.silent = false;
-    ModuleUtils::SetCoreOptions(coreOptions);
+    // Initialize core options (for web app, user won't provide them)
+    G_CoreOptions.force = true;
+    G_CoreOptions.silent = false;
+    ModuleUtils::SetCoreOptions(G_CoreOptions);
+
+    return 0;
 }
 
 /*
- * Returns a list of strings representing the file 
- * extensions of the registered modules
+ * Returns a comma-delimited string representing 
+ * the file extensions of the registered modules
  */
-EXPORT std::vector<std::string> GetAvailableModules()
+std::string GetAvailableModules()
 {
-    return ModuleUtils::GetAvaliableModules();
+    auto modules = ModuleUtils::GetAvaliableModules();
+    std::string modulesString;
+    for (unsigned i = 0; i < modules.size(); i++)
+    {
+        modulesString += modules[i];
+        if (i != modules.size() - 1)
+            modulesString += ",";
+    }
+    return modulesString;
 }
 
 /*
  * Imports and stores module from specified filename
  * Returns true upon failure
  */
-EXPORT bool ModuleImport(std::string filename)
+bool ModuleImport(std::string filename)
 {
     G_InputFilename = filename;
     G_Module = Module::CreateAndImport(filename);
@@ -46,7 +53,7 @@ EXPORT bool ModuleImport(std::string filename)
  * given file extension.
  * Returns the filename of the converted file, or an empty string if an error occurred
  */
-EXPORT std::string ModuleConvert(std::string moduleType)
+std::string ModuleConvert(std::string moduleType)
 {
     if (!G_Module)
         return ""; // Need to import the module first
@@ -78,9 +85,7 @@ EXPORT std::string ModuleConvert(std::string moduleType)
 
 EMSCRIPTEN_BINDINGS(dmf2mod)
 {
-    emscripten::function("init", &Init);
     emscripten::function("getAvailableModules", &GetAvailableModules);
     emscripten::function("moduleImport", &ModuleImport);
     emscripten::function("moduleConvert", &ModuleConvert);
 }
-

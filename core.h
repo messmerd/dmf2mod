@@ -6,8 +6,8 @@
 
     Everything in core.h/core.cpp is written to be 
     module-independent. All supported modules must 
-    implement and register the Module abstract class 
-    found here.
+    implement and register the ModuleInterface abstract 
+    class found here.
 */
 
 #pragma once

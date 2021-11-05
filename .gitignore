@@ -11,6 +11,7 @@
 !/*.h
 
 # Un-ignore webapp source
+!/webapp/
 !/webapp/*
 
 # TODO: Move source code to "src" directory, documents to "doc", and sample file and tests to "testing"

@@ -519,10 +519,15 @@ public:
      */
     std::string GetOutputFilename() const { return m_OutputFile; }
 
+    /*
+     * Fills in this object's command-line arguments from a list of arguments.
+     * Arguments are removed from the list if they are successfully parsed.
+     */
+    virtual bool ParseArgs(std::vector<std::string>& args) = 0;
+
 protected:
     friend class ModuleUtils;
 
-    virtual bool ParseArgs(std::vector<std::string>& args) = 0;
     virtual void PrintHelp() = 0;
 
 protected:

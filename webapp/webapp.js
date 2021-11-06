@@ -1,13 +1,13 @@
 var appInitialised = false;
 var dmf2mod_app = document.getElementById('dmf2mod_app');
 
-var onSubmit = function() {
-    var inputFile = document.getElementById('inputFile').files.item(0);
-    return processFile(inputFile, 'temp.dmf', 'temp.mod', 'mod');
-}
-
 Module['print'] = function (e) {
     //std::cout redirects to here
+    console.log(e);
+}
+
+Module['printErr'] = function (e) {
+    //std::cerr redirects to here
     console.log(e);
 }
 
@@ -117,22 +117,22 @@ var loadOptions = function() {
 
             if (flagNameLong) {
                 if (!hasValues) { // The flag isn't set to anything. Its existence/non-existence represents a boolean.
-                    optionsHTML += '--' + flagNameLong + ' ' + getSliderHTML(m + '_' + flagNameLong, false);
+                    optionsHTML += '--' + flagNameLong + ' ' + getSliderHTML(m, flagNameLong, false);
                 }
                 else if (!isAnything) { // The flag has a few pre-defined options to set it to
-                    optionsHTML += '--' + flagNameLong + '=' + getDropdownHTML(m + '_' + flagNameLong, values);
+                    optionsHTML += '--' + flagNameLong + '=' + getDropdownHTML(m, flagNameLong, values);
                 } else { // The flag can be set to any string
-                    optionsHTML += '--' + flagNameLong + '=' + getTextboxHTML(m + '_' + flagNameLong);
+                    optionsHTML += '--' + flagNameLong + '=' + getTextboxHTML(m, flagNameLong);
                 }
                 optionsHTML += '<br>';
             } else if (flagNameShort) {
                 if (!hasValues) { // The flag isn't set to anything. Its existence/non-existence represents a boolean.
-                    optionsHTML += '-' + flagNameShort + ' ' + getSliderHTML(m + '_' + flagNameShort, false);
+                    optionsHTML += '-' + flagNameShort + ' ' + getSliderHTML(m, flagNameShort, false);
                 }
                 else if (!isAnything) { // The flag has a few pre-defined options to set it to
-                    optionsHTML += '-' + flagNameShort + '=' + getDropdownHTML(m + '_' + flagNameShort, values);
+                    optionsHTML += '-' + flagNameShort + '=' + getDropdownHTML(m, flagNameShort, values);
                 } else { // The flag can be set to any string
-                    optionsHTML += '-' + flagNameShort + '=' + getTextboxHTML(m + '_' + flagNameShort);
+                    optionsHTML += '-' + flagNameShort + '=' + getTextboxHTML(m, flagNameShort);
                 }
                 optionsHTML += '<br>';
             }
@@ -141,16 +141,16 @@ var loadOptions = function() {
     }
 }
 
-var getSliderHTML = function(id, checked) {
-    var html = '<label class="switch" id="' + id + '"><input type="checkbox"';
+var getSliderHTML = function(id, flagName, checked) {
+    var html = '<input type="checkbox" id="' + id + '_' + flagName + '" class="' + id + '_' + 'option" name="' + flagName + '"';
     if (checked)
         html += ' checked';
-    html += '><span class="slider round"></span></label>';
+    html += '>';
     return html;
 }
 
-var getDropdownHTML = function(id, dropdownOptions) {
-    var html = '<select id="' + id + '">';
+var getDropdownHTML = function(id, flagName, dropdownOptions) {
+    var html = '<select id="' + id + '_' + flagName + '" class="' + id + '_' + 'option" name="' + flagName + '">';
     for (let i in dropdownOptions) {
         const option = dropdownOptions[i];
         html += '<option value="' + option + '">' + option + '</option>';
@@ -159,8 +159,8 @@ var getDropdownHTML = function(id, dropdownOptions) {
     return html;
 }
 
-var getTextboxHTML = function(id) {
-    return '<input type="text" id="' + id + '">';
+var getTextboxHTML = function(id, flagName) {
+    return '<input type="text" id="' + id + '_' + flagName + '" class="' + id + '_' + 'option" name="' + flagName + '">';
 }
 
 var onOutputTypeChange = function(elem) {
@@ -173,6 +173,45 @@ var onOutputTypeChange = function(elem) {
     // Show command-line options for the current module
     const optionsId = 'div_' + elem.value;
     document.getElementById(optionsId).style.display = 'block';
+}
+
+var getOutputType = function() {
+    return document.querySelector('input[name="output_type"]:checked').value;
+}
+
+var getCommandLineArgs = function() {
+    const currentOutputModule = getOutputType();
+    const optionsForCurrentModule = document.getElementsByClassName(currentOutputModule  + '_option');
+    
+    var arguments = '';
+    const len = optionsForCurrentModule.length;
+    for (let i = 0; i < len; i++) {
+        const option = optionsForCurrentModule[i];
+        var flagName = '';
+        if (option.name.length == 1)
+            flagName = '-' + option.name;
+        else
+            flagName = '--' + option.name;
+
+        if (option.nodeName.toLowerCase() == 'select') { // dropdown
+            arguments += flagName + '=' + option.value;
+            if (i != len - 1)
+                arguments += '\n'; // Using newline delimiter b/c text box value can contain spaces
+        } else if (option.nodeName.toLowerCase() == 'input') {
+            if (option.type == 'checkbox') { // checkbox
+                if (option.checked) {
+                    arguments += flagName;
+                    if (i != len - 1)
+                        arguments += '\n'; // Using newline delimiter b/c text box value can contain spaces
+                } 
+            } else if (option.type == 'text') { // text box
+                arguments += flagName + '="' + option.value + '"';
+                if (i != len - 1)
+                    arguments += '\n'; // Using newline delimiter b/c text box value can contain spaces
+            }
+        }
+    }
+    return arguments;
 }
 
 var importFileLocal = async function(externalFile, internalFilename) {
@@ -228,14 +267,26 @@ var importFileOnline = async function(url, internalFilename) {
     return false;
 }
 
-var convertFile = function(internalFilenameOutput, outputType) {
-    let stream = FS.open(internalFilenameOutput, 'w+');
-    FS.close(stream);
+var convertFile = async function() {
+    // Check if input file was provided
+    const inputFileElem = document.getElementById('inputFile');
+    if (inputFileElem.value.length == 0)
+        return true;
 
-    return Module.moduleConvert(outputType);
-}
+    // Get input file and input filename to be used internally
+    const externalFile = inputFileElem.files.item(0);
+    const internalFilenameInput = externalFile.name;
 
-var processFile = async function(externalFile, internalFilenameInput, internalFilenameOutput, outputType) {
+    // Change file extension to get internal filename for output from dmf2mod
+    const outputType = getOutputType();
+    var internalFilenameOutput = internalFilenameInput;
+    internalFilenameOutput = internalFilenameOutput.replace(/\.[^/.]+$/, '') + '.' + outputType;
+    
+    if (internalFilenameInput == internalFilenameOutput) {
+        // No conversion needed: Converting to same type
+        return true;
+    }
+
     var resp = await importFileLocal(externalFile, internalFilenameInput);
     if (resp === true)
         return true;
@@ -244,8 +295,20 @@ var processFile = async function(externalFile, internalFilenameInput, internalFi
     if (resp === true)
         return true;
     
-    resp = convertFile(internalFilenameOutput, outputType);
-    if (resp === true)
+    let stream = FS.open(internalFilenameOutput, 'w+');
+    FS.close(stream);
+
+    const commandLineArgs = getCommandLineArgs();
+    console.log('commandLineArgs=' + commandLineArgs + ';');
+    const result = Module.moduleConvert(internalFilenameOutput, commandLineArgs);
+    if (result != internalFilenameOutput)
         return true;
-    return false;
+    
+    const byteArray = FS.readFile(internalFilenameOutput);
+    const blob = new Blob([byteArray]);
+    
+    var a = document.createElement('a');
+    a.download = internalFilenameOutput;
+    a.href = window.URL.createObjectURL(blob);
+    a.click();
 }

@@ -2,6 +2,9 @@
 #include <emscripten/emscripten.h>
 #include <emscripten/bind.h>
 
+#include <string>
+#include <sstream>
+
 // NOTE: When using std::cout, make sure you end it with a newline to flush output. Otherwise nothing will appear.
 
 static ModulePtr G_Module;
@@ -73,26 +76,39 @@ bool ModuleImport(std::string filename)
  * given file extension.
  * Returns the filename of the converted file, or an empty string if an error occurred
  */
-std::string ModuleConvert(std::string moduleType)
+std::string ModuleConvert(std::string outputFilename, std::string commandLineArgs)
 {
     if (!G_Module)
         return ""; // Need to import the module first
-
-    const std::string outputFilename = ModuleUtils::ReplaceFileExtension(G_InputFilename, moduleType);
-    if (outputFilename.empty())
-        return "";
     
+    if (outputFilename == "")
+        return ""; // Invalid argument
+
     if (outputFilename == G_InputFilename)
-        return outputFilename; // Same type; No conversion necessary
+        return ""; // Same type; No conversion necessary
 
-    auto moduleTypeEnum = ModuleUtils::GetTypeFromFileExtension(moduleType);
+    const auto moduleType = ModuleUtils::GetTypeFromFilename(outputFilename);
 
-    // Not passing options yet; Use default options:
-    ConversionOptionsPtr options = ConversionOptions::Create(moduleTypeEnum);
+    // Create conversion options object
+    ConversionOptionsPtr options = ConversionOptions::Create(moduleType);
     if (!options)
         return ""; // Registration issue
+    
+    // Convert newline delimited string into vector of strings:
+    std::string temp;
+    std::stringstream ss(commandLineArgs);
+    std::vector<std::string> args;
 
-    ModulePtr output = G_Module->Convert(moduleTypeEnum, options);
+    while (getline(ss, temp, '\n'))
+    {
+        args.push_back(temp);
+    }
+
+    // Parse the command-line arguments
+    if (options->ParseArgs(args))
+        return ""; // Failed to parse args
+
+    ModulePtr output = G_Module->Convert(moduleType, options);
     if (!output || output->GetStatus().Failed())
         return "";
 

@@ -62,8 +62,6 @@ var loadOptions = function() {
         optionsElement.innerHTML += typesHTML;
     }
 
-    optionsElement.innerHTML += '<br><br>Options:<br>';
-
     // Add module-specific command-line options
     for (let i in availMods) {
         const m = availMods[i];
@@ -72,13 +70,23 @@ var loadOptions = function() {
             optionsHTML += ' block;">';
         else
             optionsHTML += ' none;">';
+        
         var options = Module.getAvailableOptions(m);
+        if (!options || options.length == 0) {
+            optionsElement.innerHTML += optionsHTML + '<br>(No options)</div>';
+            continue;
+        }
+
+        optionsHTML += '<br>Options:<br>';
         var optionsArray = options.split(';');
         for (let j in optionsArray) {
             const o = optionsArray[j];
             const found = re.exec(o);
-            if (!found || arrayIsEmpty(found))
+            if (!found || arrayIsEmpty(found)) {
+                optionsElement.innerHTML += optionsHTML + 'Error loading options</div>';
                 continue;
+            }
+
             const flagNameShort = found[1];
             const flagShortValues = found[3];
             const flagNameLong = found[4];
@@ -129,7 +137,7 @@ var loadOptions = function() {
                 optionsHTML += '<br>';
             }
         }
-        optionsElement.innerHTML += optionsHTML;
+        optionsElement.innerHTML += optionsHTML + '</div>';
     }
 }
 

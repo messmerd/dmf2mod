@@ -39,7 +39,34 @@ typedef enum PT_EFFECT {
     PT_SETSPEED=0xF0
 } PT_EFFECT;
 
-class MOD : public ModuleInterface<MOD>
+class MODConversionOptions : public ConversionOptionsInterface<MODConversionOptions>
+{
+public:
+    MODConversionOptions()
+    {
+        Downsample = false;
+        Effects = EffectsEnum::Max;
+    }
+
+    ~MODConversionOptions() {}
+
+    enum class EffectsEnum
+    {
+        Min, Max
+    };
+
+    EffectsEnum GetEffects() const { return Effects; }
+    bool GetDownsample() const { return Downsample; }
+
+private:
+    bool ParseArgs(std::vector<std::string>& args) override;
+    void PrintHelp() override;
+
+    bool Downsample;
+    EffectsEnum Effects;
+};
+
+class MOD : public ModuleInterface<MOD, MODConversionOptions>
 {
 public:
     MOD();
@@ -97,31 +124,4 @@ private:
     uint8_t GetPTTempo(double bpm);
 
     std::stringstream m_Stream;
-};
-
-class MODConversionOptions : public ConversionOptionsInterface<MODConversionOptions>
-{
-public:
-    MODConversionOptions()
-    {
-        Downsample = false;
-        Effects = EffectsEnum::Max;
-    }
-
-    ~MODConversionOptions() {}
-
-    enum class EffectsEnum
-    {
-        Min, Max
-    };
-
-    EffectsEnum GetEffects() const { return Effects; }
-    bool GetDownsample() const { return Downsample; }
-
-private:
-    bool ParseArgs(std::vector<std::string>& args) override;
-    void PrintHelp() override;
-
-    bool Downsample;
-    EffectsEnum Effects;
 };

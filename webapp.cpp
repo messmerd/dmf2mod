@@ -26,7 +26,7 @@ int main()
  */
 std::string GetAvailableModules()
 {
-    auto modules = ModuleUtils::GetAvaliableModules();
+    auto modules = ModuleUtils::GetAvailableModules();
     std::string modulesString;
     for (unsigned i = 0; i < modules.size(); i++)
     {
@@ -35,6 +35,26 @@ std::string GetAvailableModules()
             modulesString += ",";
     }
     return modulesString;
+}
+
+/*
+ * Returns a semi-colon delimited string representing 
+ * the command-line options available for the given
+ * module type
+ */
+std::string GetAvailableOptions(std::string moduleType)
+{
+    ModuleType moduleTypeEnum = ModuleUtils::GetTypeFromFileExtension(moduleType);
+    auto options = Module::GetAvailableOptions(moduleTypeEnum);
+    //std::vector<std::string> options;
+    std::string optionsString;
+    for (unsigned i = 0; i < options.size(); i++)
+    {
+        optionsString += options[i];
+        if (i != options.size() - 1)
+            optionsString += ";";
+    }
+    return optionsString;
 }
 
 /*
@@ -86,6 +106,7 @@ std::string ModuleConvert(std::string moduleType)
 EMSCRIPTEN_BINDINGS(dmf2mod)
 {
     emscripten::function("getAvailableModules", &GetAvailableModules);
+    emscripten::function("getAvailableOptions", &GetAvailableOptions);
     emscripten::function("moduleImport", &ModuleImport);
     emscripten::function("moduleConvert", &ModuleConvert);
 }

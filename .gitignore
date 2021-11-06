@@ -10,8 +10,10 @@
 !/*.cpp
 !/*.h
 
-# Un-ignore webapp source
+# Un-ignore web app source files
 !/webapp/
-!/webapp/*
+!/webapp/*.js
+!/webapp/*.html
+/webapp/dmf2mod.js
 
 # TODO: Move source code to "src" directory, documents to "doc", and sample file and tests to "testing"

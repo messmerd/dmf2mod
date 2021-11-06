@@ -1,5 +1,5 @@
 CORE_OBJS	= core.o modules.o mod.o dmf.o
-WASM_CORE_OBJS	= core.wasmo modules.wasmo mod.wasmo dmf.wasmo
+WASM_CORE_OBJS	= webapp/core.o webapp/modules.o webapp/mod.o webapp/dmf.o
 
 ifeq ($(OS),Windows_NT)
 OUT	= dmf2mod.exe
@@ -42,7 +42,7 @@ dmf2mod.o: dmf2mod.cpp
 
 # Web App:
 webapp: core_wasm webapp.cpp
-	$(WASM_CC) webapp.cpp -s WASM=1 $(WASM_LFLAGS) $(WASM_CORE_OBJS) --pre-js webapp/setup.js -o webapp/dmf2mod.js
+	$(WASM_CC) webapp.cpp -s WASM=1 $(WASM_LFLAGS) $(WASM_CORE_OBJS) --pre-js webapp/pre.js -o webapp/dmf2mod.js
 	@echo "Done building web app"
 
 # Non-WASM version:
@@ -59,7 +59,7 @@ core: zlib $(CORE_OBJS)
 core_wasm: $(WASM_CORE_OBJS)
 	@echo "Done building WebAssembly core"
 
-%.wasmo: %.cpp
+webapp/%.o: %.cpp
 	$(WASM_CC) -c $(WASM_FLAGS) $< -o $@
 
 # 3rd Party:

@@ -25,7 +25,7 @@ enum class ModuleType;
 class ModuleUtils;
 class ModuleBase;
 class ConversionOptionsBase;
-template <typename T> class ModuleInterface;
+template <typename T, typename O> class ModuleInterface;
 template <typename T> class ConversionOptionsInterface;
 struct InputOutput;
 
@@ -43,15 +43,16 @@ typedef std::unique_ptr<ConversionOptions> ConversionOptionsPtr;
 #define REGISTER_MODULE_HEADER(moduleClass, optionsClass) \
 template class ModuleStatic<moduleClass>; \
 template class ConversionOptionsStatic<optionsClass>; \
-template class ModuleInterface<moduleClass>; \
+template class ModuleInterface<moduleClass, optionsClass>; \
 template<> ConversionOptionsBase* ConversionOptionsStatic<optionsClass>::CreateStatic(); \
 template<> Module* ModuleStatic<moduleClass>::CreateStatic(); \
 template<> ModuleType ModuleStatic<moduleClass>::GetTypeStatic(); \
 template<> std::string ModuleStatic<moduleClass>::GetFileExtensionStatic(); \
 template<> std::function<ConversionOptionsBase*(void)> ModuleStatic<moduleClass>::GetCreateConversionOptionsStatic(); \
 template<> ModuleType ConversionOptionsStatic<optionsClass>::GetTypeStatic(); \
-template<> ModuleType ModuleInterface<moduleClass>::GetType() const; \
-template<> std::string ModuleInterface<moduleClass>::GetFileExtension() const; \
+template<> std::vector<std::string> ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic(); \
+template<> ModuleType ModuleInterface<moduleClass, optionsClass>::GetType() const; \
+template<> std::string ModuleInterface<moduleClass, optionsClass>::GetFileExtension() const; \
 template<> ModuleType ConversionOptionsInterface<optionsClass>::GetType() const;
 
 /*
@@ -60,20 +61,26 @@ template<> ModuleType ConversionOptionsInterface<optionsClass>::GetType() const;
     Must be called in a module's cpp file AFTER the module's class and its
     conversion options class are defined in the header.
 */
-#define REGISTER_MODULE_CPP(moduleClass, optionsClass, enumType, fileExt) \
+#define REGISTER_MODULE_CPP(moduleClass, optionsClass, enumType, fileExt, availOptions) \
 template<> const ModuleType ModuleStatic<moduleClass>::m_Type = enumType; \
 template<> const std::string ModuleStatic<moduleClass>::m_FileExtension = fileExt; \
 template<> ConversionOptionsBase* ConversionOptionsStatic<optionsClass>::CreateStatic() { return new optionsClass; } \
 template<> const std::function<ConversionOptionsBase*(void)> ModuleStatic<moduleClass>::m_CreateConversionOptionsStatic = &ConversionOptionsStatic<optionsClass>::CreateStatic; \
 template<> const ModuleType ConversionOptionsStatic<optionsClass>::m_Type = enumType; \
+template<> const std::vector<std::string> ConversionOptionsStatic<optionsClass>::m_AvailableOptions = availOptions; \
 template<> Module* ModuleStatic<moduleClass>::CreateStatic() { return new moduleClass; } \
 template<> ModuleType ModuleStatic<moduleClass>::GetTypeStatic() { return m_Type; } \
 template<> std::string ModuleStatic<moduleClass>::GetFileExtensionStatic() { return m_FileExtension; } \
 template<> std::function<ConversionOptionsBase*(void)> ModuleStatic<moduleClass>::GetCreateConversionOptionsStatic() { return m_CreateConversionOptionsStatic; } \
 template<> ModuleType ConversionOptionsStatic<optionsClass>::GetTypeStatic() { return m_Type; } \
-template<> ModuleType ModuleInterface<moduleClass>::GetType() const { return ModuleStatic<moduleClass>::GetTypeStatic(); } \
-template<> std::string ModuleInterface<moduleClass>::GetFileExtension() const { return ModuleStatic<moduleClass>::GetFileExtensionStatic(); } \
-template<> ModuleType ConversionOptionsInterface<optionsClass>::GetType() const { return ConversionOptionsStatic<optionsClass>::GetTypeStatic(); }
+template<> std::vector<std::string> ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic() { return m_AvailableOptions; } \
+template<> ModuleType ModuleInterface<moduleClass, optionsClass>::GetType() const { return ModuleStatic<moduleClass>::GetTypeStatic(); } \
+template<> std::string ModuleInterface<moduleClass, optionsClass>::GetFileExtension() const { return ModuleStatic<moduleClass>::GetFileExtensionStatic(); } \
+template<> std::vector<std::string> ConversionOptionsInterface<optionsClass>::GetAvailableOptions() const { return ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic(); } \
+template<> ModuleType ConversionOptionsInterface<optionsClass>::GetType() const { return ConversionOptionsStatic<optionsClass>::GetTypeStatic(); } \
+
+//template<> typename ModuleInterface<moduleClass, optionsClass>::OptionsType = optionsClass;
+
 
 // Command-line options that are supported regardless of which modules are supported
 struct CommonFlags
@@ -225,6 +232,12 @@ private:
 template <typename T>
 class ConversionOptionsStatic
 {
+public:
+    // TODO: Figure out how to make this protected or private
+    // Returns a list of strings of the format: "-o, --option=[min,max]" or "-a" or "--flag" or "--flag=[]" etc.
+    //  representing the command-line options for this module and their acceptable values
+    static std::vector<std::string> GetAvailableOptionsStatic();
+
 protected:
     friend class ModuleUtils;
 
@@ -242,6 +255,7 @@ public:
 
 private:
     const static ModuleType m_Type;
+    const static std::vector<std::string> m_AvailableOptions;
 };
 
 
@@ -250,14 +264,13 @@ class ModuleUtils
 {
 public:
     static void RegisterModules();
-    static std::vector<std::string> GetAvaliableModules();
+    static std::vector<std::string> GetAvailableModules();
     static bool ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo, ConversionOptionsPtr& options);
     static CommonFlags GetCoreOptions() { return m_CoreOptions; }
     static void SetCoreOptions(CommonFlags& options) { m_CoreOptions = options; };
 
     static ModuleType GetTypeFromFilename(const std::string& filename);
     static ModuleType GetTypeFromFileExtension(const std::string& extension);
-    static std::string GetExtensionFromType(ModuleType moduleType);
     static std::string GetBaseNameFromFilename(const std::string& filename);
     static std::string ReplaceFileExtension(const std::string& filename, const std::string& newFileExtension);
     static std::string GetFileExtension(const std::string& filename);
@@ -267,6 +280,9 @@ private:
     friend class ModuleBase;
     friend class ConversionOptionsBase;
 
+    static std::string GetExtensionFromType(ModuleType moduleType);
+    static std::vector<std::string> GetAvailableOptions(ModuleType moduleType);
+    
     static bool PrintHelp(const std::string& executable, ModuleType moduleType);
 
     /*
@@ -274,7 +290,7 @@ private:
      * TODO: Need to also check whether the ConversionOptionsStatic<T> specialization exists?
      */
     template <class T, 
-        class = typename std::enable_if<std::is_base_of<ModuleInterface<T>, T>{}>::type>
+        class = typename std::enable_if<std::is_base_of<ModuleInterface<T, typename T::OptionsType>, T>{}>::type>
     static void Register()
     {
         // TODO: Check for file extension clashes here.
@@ -284,6 +300,9 @@ private:
         FileExtensionMap[T::GetFileExtensionStatic()] = T::GetTypeStatic();
 
         ConversionOptionsRegistrationMap[T::GetTypeStatic()] = T::GetCreateConversionOptionsStatic();
+        
+        //typedef typename T::OptionsType OPT;
+        AvailableOptionsMap[T::GetTypeStatic()] = T::OptionsType::GetAvailableOptionsStatic();
     }
 
     // Map which registers a module type enum value with the static create function associated with that module
@@ -294,6 +313,9 @@ private:
 
     // Map which registers a module type enum value with the static conversion option create function associated with that module
     static std::map<ModuleType, std::function<ConversionOptionsBase*(void)>> ConversionOptionsRegistrationMap;
+
+    // Map which maps a module type to the available command-line options for that module type
+    static std::map<ModuleType, std::vector<std::string>> AvailableOptionsMap;
 
     // Core conversion options
     static CommonFlags m_CoreOptions;
@@ -326,7 +348,7 @@ public:
      * Create a new module of the desired module type
      */
     template <class T, 
-        class = typename std::enable_if<std::is_base_of<ModuleInterface<T>, T>{}>::type>
+        class = typename std::enable_if<std::is_base_of<ModuleInterface<T, typename T::OptionsType>, T>{}>::type>
     static ModulePtr Create();
 
     /*
@@ -383,7 +405,7 @@ public:
      * Cast a Module pointer to a pointer of a derived type
      */
     template <class T, 
-        class = typename std::enable_if<std::is_base_of<ModuleInterface<T>, T>{}>::type>
+        class = typename std::enable_if<std::is_base_of<ModuleInterface<T, typename T::OptionsType>, T>{}>::type>
     const T* Cast() const
     {
         return reinterpret_cast<const T*>(this);
@@ -398,6 +420,27 @@ public:
      * Get the file extension of the module (does not include dot)
      */
     virtual std::string GetFileExtension() const = 0;
+
+    /*
+     * Get the file extension of the module of the given type (does not include dot)
+     */
+    static std::string GetFileExtension(ModuleType moduleType)
+    {
+        return ModuleUtils::GetExtensionFromType(moduleType);
+    }
+
+    /*
+     * Get the available command-line options for this module
+     */
+    virtual std::vector<std::string> GetAvailableOptions() const = 0;
+
+    /*
+     * Get the available command-line options for the given module type
+     */
+    static std::vector<std::string> GetAvailableOptions(ModuleType moduleType)
+    {
+        return ModuleUtils::GetAvailableOptions(moduleType);
+    }
 
     /*
      * Get the name of the module
@@ -422,7 +465,7 @@ public:
      * Create a new ConversionOptions object for the desired module type
      */
     template <class moduleClass, 
-        class = typename std::enable_if<std::is_base_of<ModuleInterface<moduleClass>, moduleClass>{}>::type>
+        class = typename std::enable_if<std::is_base_of<ModuleInterface<moduleClass, typename moduleClass::OptionsType>, moduleClass>{}>::type>
     static ConversionOptionsPtr Create();
 
     /*
@@ -457,6 +500,21 @@ public:
     virtual ModuleType GetType() const = 0;
 
     /*
+     * Returns a list of strings of the format: "-o, --option=[min,max]" or "-a" or "--flag" or "--flag=[]" etc.
+     *  representing the command-line options for this module and their acceptable values
+     */
+    virtual std::vector<std::string> GetAvailableOptions() const = 0;
+
+    /*
+     * Returns a list of strings of the format: "-o, --option=[min,max]" or "-a" or "--flag" or "--flag=[]" etc.
+     *  representing the command-line options and their acceptable values for the given module type
+     */
+    static std::vector<std::string> GetAvailableOptions(ModuleType moduleType)
+    {
+        return ModuleUtils::GetAvailableOptions(moduleType);
+    }
+
+    /*
      * Get the filename of the output file. Returns empty string if error occurred.
      */
     std::string GetOutputFilename() const { return m_OutputFile; }
@@ -473,14 +531,17 @@ protected:
 
 
 // All module classes must inherit this
-template <typename T>
+template <typename T, typename O>
 class ModuleInterface : public ModuleBase, public ModuleStatic<T>
 {
+public:
+    using OptionsType = O;
+
 protected:
     ModuleType GetType() const override;
     std::string GetFileExtension() const override;
+    std::vector<std::string> GetAvailableOptions() const override;
 };
-
 
 // All conversion options classes must inherit this
 template <typename T>
@@ -488,6 +549,7 @@ class ConversionOptionsInterface : public ConversionOptionsBase, public Conversi
 {
 protected:
     ModuleType GetType() const override;
+    std::vector<std::string> GetAvailableOptions() const override;
 };
 
 

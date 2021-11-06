@@ -28,7 +28,8 @@
 #include <set>
 
 // Finish setup
-REGISTER_MODULE_CPP(MOD, MODConversionOptions, ModuleType::MOD, "mod")
+const std::vector<std::string> MODOptions = {"--downsample", "--effects=[min,max]"};
+REGISTER_MODULE_CPP(MOD, MODConversionOptions, ModuleType::MOD, "mod", MODOptions)
 
 #define PT_NOTE_VOLUMEMAX 64
 #define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
@@ -820,7 +821,7 @@ int MOD::InitSamples(const DMF* dmf, Note **lowestNote, Note **highestNote)
     const ModuleInfo& moduleInfo = dmf->GetModuleInfo();
     PatternRow*** const patternValues = dmf->GetPatternValues();
     uint8_t** const patternMatrixValues = dmf->GetPatternMatrixValues();
-
+    
     // Most of the following nested for loop is copied from the export pattern data loop in ConvertFrom.
     // I didn't want to do this, but I think having two of the same loop is the only simple way.
     // Loop through SQ1, SQ2, and WAVE channels:

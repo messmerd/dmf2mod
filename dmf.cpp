@@ -22,7 +22,8 @@
 #include <fstream>
 
 // Finish setup
-REGISTER_MODULE_CPP(DMF, DMFConversionOptions, ModuleType::DMF, "dmf")
+const std::vector<std::string> DMFOptions = {};
+REGISTER_MODULE_CPP(DMF, DMFConversionOptions, ModuleType::DMF, "dmf", DMFOptions)
 
 #define DMF_FILE_VERSION 24 // 0x18 - Only DefleMask v0.12.0 files are supported
 

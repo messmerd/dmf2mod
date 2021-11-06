@@ -23,6 +23,7 @@
 std::map<ModuleType, std::function<ModuleBase*(void)>> ModuleUtils::RegistrationMap = {};
 std::map<std::string, ModuleType> ModuleUtils::FileExtensionMap = {};
 std::map<ModuleType, std::function<ConversionOptionsBase*(void)>> ModuleUtils::ConversionOptionsRegistrationMap = {};
+std::map<ModuleType, std::vector<std::string>> ModuleUtils::AvailableOptionsMap = {};
 
 CommonFlags ModuleUtils::m_CoreOptions = {};
 
@@ -30,7 +31,7 @@ static bool ParseFlags(std::vector<std::string>& args, CommonFlags& flags);
 
 // ModuleUtils class
 
-std::vector<std::string> ModuleUtils::GetAvaliableModules()
+std::vector<std::string> ModuleUtils::GetAvailableModules()
 {
     std::vector<std::string> vec;
     for (const auto& mapPair : FileExtensionMap)
@@ -262,16 +263,6 @@ ModuleType ModuleUtils::GetTypeFromFileExtension(const std::string& extension)
     return ModuleType::NONE;
 }
 
-std::string ModuleUtils::GetExtensionFromType(ModuleType moduleType)
-{
-    for (const auto& mapPair : FileExtensionMap)
-    {
-        if (mapPair.second == moduleType)
-            return mapPair.first;
-    }
-    return "";
-}
-
 std::string ModuleUtils::GetBaseNameFromFilename(const std::string& filename)
 {
     // Filename must contain base name, a dot, then the extension
@@ -324,6 +315,23 @@ bool ModuleUtils::FileExists(const std::string& filename)
 {
     std::ifstream file(filename);
     return file.is_open();
+}
+
+std::string ModuleUtils::GetExtensionFromType(ModuleType moduleType)
+{
+    for (const auto& mapPair : FileExtensionMap)
+    {
+        if (mapPair.second == moduleType)
+            return mapPair.first;
+    }
+    return "";
+}
+
+std::vector<std::string> ModuleUtils::GetAvailableOptions(ModuleType moduleType)
+{
+    if (AvailableOptionsMap.count(moduleType) > 0)
+        return AvailableOptionsMap[moduleType];
+    return {};
 }
 
 bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType)
@@ -489,20 +497,32 @@ ConversionOptionsPtr ConversionOptionsBase::Create()
 
 // Interface classes
 
-template <typename T>
-ModuleType ModuleInterface<T>::GetType() const
+template <typename T, typename O>
+ModuleType ModuleInterface<T, O>::GetType() const
 {
     return ModuleStatic<T>::GetTypeStatic();
 }
 
-template <typename T>
-std::string ModuleInterface<T>::GetFileExtension() const
+template <typename T, typename O>
+std::string ModuleInterface<T, O>::GetFileExtension() const
 {
     return ModuleStatic<T>::GetFileExtensionStatic();
+}
+
+template <typename T, typename O>
+std::vector<std::string> ModuleInterface<T, O>::GetAvailableOptions() const
+{
+    return ConversionOptionsStatic<O>::GetAvailableOptionsStatic();
 }
 
 template <typename T>
 ModuleType ConversionOptionsInterface<T>::GetType() const
 {
     return ConversionOptionsStatic<T>::GetTypeStatic();
+}
+
+template <typename T>
+std::vector<std::string> ConversionOptionsInterface<T>::GetAvailableOptions() const
+{
+    return ConversionOptionsStatic<T>::GetAvailableOptionsStatic();
 }

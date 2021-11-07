@@ -299,7 +299,6 @@ var convertFile = async function() {
     FS.close(stream);
 
     const commandLineArgs = getCommandLineArgs();
-    console.log('commandLineArgs=' + commandLineArgs + ';');
     const result = Module.moduleConvert(internalFilenameOutput, commandLineArgs);
     if (result != internalFilenameOutput)
         return true;

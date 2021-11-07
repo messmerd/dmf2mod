@@ -383,7 +383,7 @@ bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType
 void Status::PrintError()
 {
     if (ErrorOccurred())
-        std::cerr << m_ErrorMessage << "\n";
+        std::cerr << m_ErrorMessage << "\n\n";
 }
 
 void Status::PrintWarnings()
@@ -392,6 +392,7 @@ void Status::PrintWarnings()
     {
         std::cout << message << "\n";
     }
+    std::cout << "\n";
 }
 
 void Status::PrintAll()

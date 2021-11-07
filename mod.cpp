@@ -31,7 +31,7 @@
 const std::vector<std::string> MODOptions = {"--downsample", "--effects=[min,max]"};
 REGISTER_MODULE_CPP(MOD, MODConversionOptions, ModuleType::MOD, "mod", MODOptions)
 
-#define PT_NOTE_VOLUMEMAX 64
+static const unsigned int PT_NOTE_VOLUMEMAX = 64u; // Yes, there are 65 different values for the volume
 #define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 
 static std::string ErrorMessageCreator(Status::Category category, int errorCode, const std::string& arg);
@@ -42,7 +42,7 @@ static std::string GetWarningMessage(MOD::ConvertWarning warning);
 typedef struct MODChannelState
 {
     DMF_GAMEBOY_CHANNEL channel;
-    uint8_t dutyCycle; 
+    uint8_t dutyCycle;
     uint8_t wavetable;
     bool sampleChanged; // True if dutyCycle or wavetable just changed
     int16_t volume;
@@ -358,7 +358,7 @@ bool MOD::ConvertFrom(const Module* input, ConversionOptionsPtr& options)
         state[i].dutyCycle = 0; // Default is 0 or a 12.5% duty cycle square wave.
         state[i].wavetable = 0; // Default is wavetable #0.
         state[i].sampleChanged = true; // Whether dutyCycle or wavetable recently changed
-        state[i].volume = PT_NOTE_VOLUMEMAX; // The max volume for a channel in PT
+        state[i].volume = DMF_NOTE_VOLUMEMAX; // The max volume for a channel in PT
         state[i].notePlaying = false; // Whether a note is currently playing on a channel
         state[i].onHighNoteRange = false; // Whether a note is using the PT sample for the high note range.
         state[i].needToSetVolume = false; // Whether the volume needs to be set (can happen after sample changes).
@@ -560,8 +560,10 @@ int MOD::WriteProTrackerPatternRow(const DMF* dmf, PatternRow *pat, MODChannelSt
                 // When you change PT samples, the channel volume resets, so 
                 //  if there are still no effects are being used on this pattern row, 
                 //  use a volume change effect to set the volume to where it needs to be.
-                uint8_t newVolume = std::round(state->volume / 15.0 * 65.0); // Convert DMF volume to PT volume
-                effect = ((uint16_t)PT_SETVOLUME << 4) | newVolume;
+                uint8_t newVolume = (uint8_t)std::round(state->volume / (double)DMF_NOTE_VOLUMEMAX * (double)PT_NOTE_VOLUMEMAX); // Convert DMF volume to PT volume
+                effect = ((uint16_t)PT_SETVOLUME << 4u) + newVolume;
+                // NOTE: The WASM version does not truncate 16 bit values to 8 bit even if you 
+                //  store it in a uint8_t type or mask it with (sixteen & 0x00FFu).
             }
         }
         else // Noise channel
@@ -600,9 +602,8 @@ int MOD::CheckEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
             }
             else // Only the volume changed
             {
-                uint8_t newVolume = std::round(pat->volume / 15.0 * 65.0); // Convert DMF volume to PT volume
-                *effect = ((uint16_t)PT_SETVOLUME << 4) | newVolume; // ???
-                //printf("Vol effect = %x, effect code = %d, effect val = %d, dmf vol = %d\n", effect, PT_SETVOLUME, newVolume, pat->volume);
+                uint8_t newVolume = std::round(pat->volume / (double)DMF_NOTE_VOLUMEMAX * (double)PT_NOTE_VOLUMEMAX); // Convert DMF volume to PT volume
+                *effect = ((uint16_t)PT_SETVOLUME << 4) + newVolume; // ???
                 state->volume = pat->volume; // Update the state
             }
         } 
@@ -632,8 +633,8 @@ int MOD::CheckEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect)
         int16_t volumeCopy = state->volume; // Save copy in case the volume change is canceled later 
         if (pat->volume != state->volume && pat->volume != DMF_NOTE_NOVOLUME && (pat->note.pitch >= 1 && pat->note.pitch <= 12)) // If the volume changed, we still want to handle that. Volume must be connected to a note.  
         {
-            uint8_t newVolume = round(pat->volume / 15.0 * 65.0); // Convert DMF volume to PT volume
-            *effect = ((uint16_t)PT_SETVOLUME << 4) | newVolume; // ???
+            uint8_t newVolume = round(pat->volume / (double)DMF_NOTE_VOLUMEMAX * (double)PT_NOTE_VOLUMEMAX); // Convert DMF volume to PT volume
+            *effect = ((uint16_t)PT_SETVOLUME << 4) + newVolume; // ???
             state->volume = pat->volume; // Update the state
             total_effects++;
         }
@@ -709,7 +710,7 @@ uint16_t MOD::GetProTrackerEffect(int16_t effectCode, int16_t effectValue)
             ptEff = PT_PANNING; break;
         case DMF_SETSPEEDVAL1:
             break; // ?
-        case DMF_VOLSLIDE: 
+        case DMF_VOLSLIDE:
             ptEff = PT_VOLSLIDE; break;
         case DMF_POSJUMP:
             ptEff = PT_POSJUMP;
@@ -785,7 +786,7 @@ int MOD::InitSamples(const DMF* dmf, Note **lowestNote, Note **highestNote)
         state[i].dutyCycle = 0; // Default is 0 or a 12.5% duty cycle square wave.
         state[i].wavetable = 0; // Default is wavetable #0.
         state[i].sampleChanged = true; // Whether dutyCycle or wavetable recently changed
-        state[i].volume = PT_NOTE_VOLUMEMAX; // The max volume for a channel in PT
+        state[i].volume = DMF_NOTE_VOLUMEMAX; // The max volume for a channel in PT
         state[i].notePlaying = false; // Whether a note is currently playing on a channel
         state[i].onHighNoteRange = false; // Whether a note is using the PT sample for the high note range.
         state[i].needToSetVolume = false; // Whether the volume needs to be set (can happen after sample changes).
@@ -1279,10 +1280,10 @@ static std::string GetWarningMessage(MOD::ConvertWarning warning)
         case MOD::ConvertWarning::PitchHigh:
             return "Cannot use the highest Deflemask note (C-8) on some MOD players including ProTracker.";
         case MOD::ConvertWarning::TempoLow:
-            return std::string("Tempo is too low for ProTracker. Using 16 bpm instead.")
+            return std::string("Tempo is too low for ProTracker. Using 16 bpm instead.\n")
                     + std::string("         ProTracker only supports tempos between 16 and 127.5 bpm.");
         case MOD::ConvertWarning::TempoHigh:
-            return std::string("Tempo is too high for ProTracker. Using 127.5 bpm instead.")
+            return std::string("Tempo is too high for ProTracker. Using 127.5 bpm instead.\n")
                     + std::string("         ProTracker only supports tempos between 16 and 127.5 bpm.");
         case MOD::ConvertWarning::EffectIgnored:
             return "A Deflemask effect was ignored due to limitations of the MOD format.";

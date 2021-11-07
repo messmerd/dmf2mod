@@ -388,11 +388,14 @@ void Status::PrintError()
 
 void Status::PrintWarnings()
 {
-    for (const auto& message : m_WarningMessages)
+    if (!m_WarningMessages.empty())
     {
-        std::cout << message << "\n";
+        for (const auto& message : m_WarningMessages)
+        {
+            std::cout << message << "\n";
+        }
+        std::cout << "\n";
     }
-    std::cout << "\n";
 }
 
 void Status::PrintAll()

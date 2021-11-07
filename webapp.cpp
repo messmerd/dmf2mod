@@ -17,7 +17,7 @@ int main()
 
     // Initialize core options (for web app, user won't provide them)
     G_CoreOptions.force = true;
-    G_CoreOptions.silent = false;
+    G_CoreOptions.silent = true;
     ModuleUtils::SetCoreOptions(G_CoreOptions);
 
     return 0;
@@ -49,7 +49,7 @@ std::string GetAvailableOptions(std::string moduleType)
 {
     ModuleType moduleTypeEnum = ModuleUtils::GetTypeFromFileExtension(moduleType);
     auto options = Module::GetAvailableOptions(moduleTypeEnum);
-    //std::vector<std::string> options;
+    
     std::string optionsString;
     for (unsigned i = 0; i < options.size(); i++)
     {
@@ -68,7 +68,21 @@ bool ModuleImport(std::string filename)
 {
     G_InputFilename = filename;
     G_Module = Module::CreateAndImport(filename);
-    return !G_Module;
+    if (!G_Module)
+    {
+        std::cerr << "Error during import:\n";
+        std::cerr << "ERROR: The module type may not be registered.\n\n";
+        return true;
+    }
+
+    if (G_Module->ErrorOccurred())
+    {
+        std::cerr << "Error during import:\n";
+        G_Module->GetStatus().PrintError();
+        return true;
+    }
+
+    return false;
 }
 
 /*
@@ -92,8 +106,11 @@ std::string ModuleConvert(std::string outputFilename, std::string commandLineArg
     // Create conversion options object
     ConversionOptionsPtr options = ConversionOptions::Create(moduleType);
     if (!options)
+    {
+        std::cerr << "Error occurred when creating ConversionOptions object. Likely a registration issue.\n\n";
         return ""; // Registration issue
-    
+    }
+
     // Convert newline delimited string into vector of strings:
     std::string temp;
     std::stringstream ss(commandLineArgs);
@@ -106,14 +123,28 @@ std::string ModuleConvert(std::string outputFilename, std::string commandLineArg
 
     // Parse the command-line arguments
     if (options->ParseArgs(args))
+    {
+        // ParseArgs will print error to stderr if one occurs.
         return ""; // Failed to parse args
+    }
 
     ModulePtr output = G_Module->Convert(moduleType, options);
-    if (!output || output->GetStatus().Failed())
+    if (!output)
         return "";
 
-    if (output->Export(outputFilename))
+    if (output->GetStatus().Failed())
+    {
+        std::cerr << "Error during conversion:\n";
+        output->GetStatus().PrintError();
         return "";
+    }
+
+    if (output->Export(outputFilename))
+    {
+        std::cerr << "Error during export:\n";
+        output->GetStatus().PrintError();
+        return "";
+    }
     
     return outputFilename;
 }

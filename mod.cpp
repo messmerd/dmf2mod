@@ -358,7 +358,7 @@ bool MOD::ConvertFrom(const Module* input, ConversionOptionsPtr& options)
         state[i].dutyCycle = 0; // Default is 0 or a 12.5% duty cycle square wave.
         state[i].wavetable = 0; // Default is wavetable #0.
         state[i].sampleChanged = true; // Whether dutyCycle or wavetable recently changed
-        state[i].volume = DMF_NOTE_VOLUMEMAX; // The max volume for a channel in PT
+        state[i].volume = DMF_NOTE_VOLUMEMAX; // The max volume for a channel (in DMF units)
         state[i].notePlaying = false; // Whether a note is currently playing on a channel
         state[i].onHighNoteRange = false; // Whether a note is using the PT sample for the high note range.
         state[i].needToSetVolume = false; // Whether the volume needs to be set (can happen after sample changes).
@@ -560,7 +560,7 @@ int MOD::WriteProTrackerPatternRow(const DMF* dmf, PatternRow *pat, MODChannelSt
                 // When you change PT samples, the channel volume resets, so 
                 //  if there are still no effects are being used on this pattern row, 
                 //  use a volume change effect to set the volume to where it needs to be.
-                uint8_t newVolume = (uint8_t)std::round(state->volume / (double)DMF_NOTE_VOLUMEMAX * (double)PT_NOTE_VOLUMEMAX); // Convert DMF volume to PT volume
+                uint8_t newVolume = std::round(state->volume / (double)DMF_NOTE_VOLUMEMAX * (double)PT_NOTE_VOLUMEMAX); // Convert DMF volume to PT volume
                 effect = ((uint16_t)PT_SETVOLUME << 4u) + newVolume;
                 // NOTE: The WASM version does not truncate 16 bit values to 8 bit even if you 
                 //  store it in a uint8_t type or mask it with (sixteen & 0x00FFu).
@@ -786,7 +786,7 @@ int MOD::InitSamples(const DMF* dmf, Note **lowestNote, Note **highestNote)
         state[i].dutyCycle = 0; // Default is 0 or a 12.5% duty cycle square wave.
         state[i].wavetable = 0; // Default is wavetable #0.
         state[i].sampleChanged = true; // Whether dutyCycle or wavetable recently changed
-        state[i].volume = DMF_NOTE_VOLUMEMAX; // The max volume for a channel in PT
+        state[i].volume = DMF_NOTE_VOLUMEMAX; // The max volume for a channel (in DMF units)
         state[i].notePlaying = false; // Whether a note is currently playing on a channel
         state[i].onHighNoteRange = false; // Whether a note is using the PT sample for the high note range.
         state[i].needToSetVolume = false; // Whether the volume needs to be set (can happen after sample changes).

@@ -35,7 +35,13 @@
             </div>
         </form>
     </div>
+    <div id="status_area" style="color: red;"></div>
 
+    <script>
+        if (typeof WebAssembly !== 'object') {
+            document.getElementById('status_area').innerText = 'ERROR: WebAssembly is not supported on your browser.';
+        }
+    </script>
     <script src="dmf2mod.js"></script>
     <script src="webapp.js"></script>
 </body>

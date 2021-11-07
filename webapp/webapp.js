@@ -1,15 +1,8 @@
 var appInitialised = false;
-var dmf2mod_app = document.getElementById('dmf2mod_app');
+const dmf2modApp = document.getElementById('dmf2mod_app');
+const statusArea = document.getElementById('status_area');
+var statusMessage = '';
 
-Module['print'] = function (e) {
-    //std::cout redirects to here
-    console.log(e);
-}
-
-Module['printErr'] = function (e) {
-    //std::cerr redirects to here
-    console.log(e);
-}
 
 Module['onRuntimeInitialized'] = function () {
     console.log("Loaded dmf2mod");
@@ -18,13 +11,16 @@ Module['onRuntimeInitialized'] = function () {
 Module['postRun'] =  function () {
     console.log("Initialized dmf2mod");
     loadOptions();
-    dmf2mod_app.style.display = 'block';
+    dmf2modApp.style.display = 'block';
     document.getElementById('loading').style.display = 'none';
     appInitialised = true;
 }
 
-var isWebAssemblySupported = function() {
-    return typeof WebAssembly === 'object' ? true : false;
+var setStatusMessage = function() {
+    statusArea.style.color = 'red';
+    statusMessage = statusMessage.replace('\n', '<br>');
+    statusArea.innerHTML = statusMessage;
+    statusMessage = '';
 }
 
 var arrayIsEmpty = function(a) {
@@ -268,6 +264,9 @@ var importFileOnline = async function(url, internalFilename) {
 }
 
 var convertFile = async function() {
+    statusMessage = '';
+    statusArea.innerHTML = '';
+    
     // Check if input file was provided
     const inputFileElem = document.getElementById('inputFile');
     if (inputFileElem.value.length == 0)
@@ -284,24 +283,31 @@ var convertFile = async function() {
     
     if (internalFilenameInput == internalFilenameOutput) {
         // No conversion needed: Converting to same type
+        statusMessage = 'Same module type; No conversion needed';
+        setStatusMessage();
+        statusArea.style.color = 'black';
         return true;
     }
 
     var resp = await importFileLocal(externalFile, internalFilenameInput);
-    if (resp === true)
+    if (resp)
         return true;
 
     resp = Module.moduleImport(internalFilenameInput);
-    if (resp === true)
+    if (resp) {
+        setStatusMessage();
         return true;
+    }
     
     let stream = FS.open(internalFilenameOutput, 'w+');
     FS.close(stream);
 
     const commandLineArgs = getCommandLineArgs();
     const result = Module.moduleConvert(internalFilenameOutput, commandLineArgs);
-    if (result != internalFilenameOutput)
+    if (result != internalFilenameOutput) {
+        setStatusMessage();
         return true;
+    }
     
     const byteArray = FS.readFile(internalFilenameOutput);
     const blob = new Blob([byteArray]);

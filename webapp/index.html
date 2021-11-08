@@ -6,6 +6,28 @@
     <style>
         body { background-color: aquamarine; }
         p { font-family: Arial; }
+        #convert_button {
+            background-color: #4CAF50; /* Green */
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            -webkit-transition-duration: 0.4s; /* Safari */
+            transition-duration: 0.4s;
+            pointer-events: auto;
+        }
+        #convert_button:hover {
+            box-shadow: 0 12px 16px 0 rgba(0,0,0,0.24),0 17px 50px 0 rgba(0,0,0,0.19);
+        }
+        #convert_button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <script></script>
@@ -21,21 +43,22 @@
         </header>
         <section>
     
-        <form id="dmf2mod_app" style="display: none;" action="javascript:convertFile();" onKeyPress="if (event.which == 13) return false;" method="post" enctype="multipart/form-data">
-            
-            <div>
-                <label>Select a file to convert...</label><br>
-                <input type="file" id="inputFile" name="file" required>
-            </div>
-            <br>
-            <div id="options"></div>
-            <br>
-            <div>
-                <input type="submit" value="Convert" name="convert">
-            </div>
-        </form>
+        <fieldset id="dmf2mod_app_fieldset" style="border-style: hidden;">
+            <form id="dmf2mod_app" style="display: none;" action="javascript:void(0);" method="post" enctype="multipart/form-data">
+                <div>
+                    <label>Select a file to convert</label><br>
+                    <input type="file" id="input_file" name="file" required>
+                </div>
+                <br>
+                <div id="options"></div>
+                <br>
+                <div>
+                    <input type="submit" value="Convert" name="convert" id="convert_button" ondblclick="void(0);">
+                </div>
+            </form>
+        </fieldset>
     </div>
-    <div id="status_area" style="color: red;"></div>
+    <div id="status_area"></div>
 
     <script>
         if (typeof WebAssembly !== 'object') {

@@ -1,8 +1,11 @@
 var appInitialised = false;
-const dmf2modApp = document.getElementById('dmf2mod_app');
+const appFieldset = document.getElementById('dmf2mod_app_fieldset');
+const app = document.getElementById('dmf2mod_app');
 const statusArea = document.getElementById('status_area');
-var statusMessage = '';
-
+const convertButton = document.getElementById('convert_button');
+var errorMessage = '';
+var warningMessage = '';
+var statusMessageIsError = true;
 
 Module['onRuntimeInitialized'] = function () {
     console.log("Loaded dmf2mod");
@@ -11,16 +14,31 @@ Module['onRuntimeInitialized'] = function () {
 Module['postRun'] =  function () {
     console.log("Initialized dmf2mod");
     loadOptions();
-    dmf2modApp.style.display = 'block';
+    app.style.display = 'block';
     document.getElementById('loading').style.display = 'none';
     appInitialised = true;
 }
 
 var setStatusMessage = function() {
-    statusArea.style.color = 'red';
-    statusMessage = statusMessage.replace('\n', '<br>');
-    statusArea.innerHTML = statusMessage;
-    statusMessage = '';
+    statusArea.innerHTML = '';
+    if (errorMessage.length > 0) {
+        errorMessage = errorMessage.replace('\n', '<br>');
+        statusArea.innerHTML += '<div style="color: red;">' + errorMessage + '</div>';
+        errorMessage = '';
+    }
+    if (warningMessage.length > 0) {
+        warningMessage = warningMessage.replace('\n', '<br>');
+        statusArea.innerHTML += '<div style="color: black;">' + warningMessage + '</div>';
+        warningMessage = '';
+    }
+}
+
+var disableControls = function(disable) {
+    // TODO: This makes everything appear disabled/enabled, but clicking the Convert button
+    //  multiple times before the convertFile function returns will still make it convert the
+    //  file multiple times. It's as if the button is never disabled. I've tried for hours to 
+    //  fix it and cannot do so.
+    appFieldset.disabled = disable;
 }
 
 var arrayIsEmpty = function(a) {
@@ -225,10 +243,7 @@ var importFileLocal = async function(externalFile, internalFilename) {
     return false;
 }
 
-// From: https://stackoverflow.com/questions/63959571/how-do-i-pass-a-file-blob-from-javascript-to-emscripten-webassembly-c 
-// Imports file into WASM file system so that it can be accessed by WASM program.
-// url is the url of the file to import. This can also be a local file. internalFilename is the name to use.
-// Returns true if it failed.
+// From: https://stackoverflow.com/questions/63959571/how-do-i-pass-a-file-blob-from-javascript-to-emscripten-webassembly-c
 var importFileOnline = async function(url, internalFilename) {
     if (!appInitialised)
         return true;
@@ -263,14 +278,19 @@ var importFileOnline = async function(url, internalFilename) {
     return false;
 }
 
-var convertFile = async function() {
-    statusMessage = '';
-    statusArea.innerHTML = '';
+var convertFile = async function(event) {
+    disableControls(true);
     
+    errorMessage = '';
+    warningMessage = '';
+    setStatusMessage();
+
     // Check if input file was provided
-    const inputFileElem = document.getElementById('inputFile');
-    if (inputFileElem.value.length == 0)
+    const inputFileElem = document.getElementById('input_file');
+    if (inputFileElem.value.length == 0) {
+        disableControls(false);
         return true;
+    }
 
     // Get input file and input filename to be used internally
     const externalFile = inputFileElem.files.item(0);
@@ -278,34 +298,38 @@ var convertFile = async function() {
 
     // Change file extension to get internal filename for output from dmf2mod
     const outputType = getOutputType();
+    const commandLineArgs = getCommandLineArgs();
     var internalFilenameOutput = internalFilenameInput;
     internalFilenameOutput = internalFilenameOutput.replace(/\.[^/.]+$/, '') + '.' + outputType;
     
     if (internalFilenameInput == internalFilenameOutput) {
         // No conversion needed: Converting to same type
-        statusMessage = 'Same module type; No conversion needed';
+        warningMessage = 'Same module type; No conversion needed';
         setStatusMessage();
-        statusArea.style.color = 'black';
+        disableControls(false);
         return true;
     }
 
     var resp = await importFileLocal(externalFile, internalFilenameInput);
-    if (resp)
+    if (resp) {
+        disableControls(false);
         return true;
+    }
 
     resp = Module.moduleImport(internalFilenameInput);
+    setStatusMessage();
     if (resp) {
-        setStatusMessage();
+        disableControls(false);
         return true;
     }
     
     let stream = FS.open(internalFilenameOutput, 'w+');
     FS.close(stream);
 
-    const commandLineArgs = getCommandLineArgs();
     const result = Module.moduleConvert(internalFilenameOutput, commandLineArgs);
+    setStatusMessage();
     if (result != internalFilenameOutput) {
-        setStatusMessage();
+        disableControls(false);
         return true;
     }
     
@@ -316,4 +340,17 @@ var convertFile = async function() {
     a.download = internalFilenameOutput;
     a.href = window.URL.createObjectURL(blob);
     a.click();
+
+    disableControls(false);
 }
+
+app.addEventListener('submit', function (e) {
+    convertFile(e);
+}, false);
+
+convertButton.addEventListener('keydown', function (e) {
+    if (e.key != 'Enter') {
+        e.preventDefault();
+        return false;
+    }
+}, false);

@@ -22,12 +22,10 @@ LFLAGS	= -lm zlib/libz.a
 # Emscripten compiler and linker flags
 WASM_LDFLAGS	= -O3
 WASM_DEFINES	= -s USE_ZLIB=1 -s INLINING_LIMIT=1
-WASM_LDEFINES	= $(WASM_DEFINES) -s ASSERTIONS=1 -s MODULARIZE=0 -s AGGRESSIVE_VARIABLE_ELIMINATION=1 -s NO_EXIT_RUNTIME=1 -s FORCE_FILESYSTEM=1 -s EXPORTED_FUNCTIONS="['_main']" -s EXPORTED_RUNTIME_METHODS='["FS", "FS_createFolder"]' -s NO_DISABLE_EXCEPTION_CATCHING
-# -s EXPORTED_FUNCTIONS="['_malloc','_free']"  -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap"]'
+WASM_LDEFINES	= $(WASM_DEFINES) -s ASSERTIONS=1 -s MODULARIZE=0 -s AGGRESSIVE_VARIABLE_ELIMINATION=1 -s NO_EXIT_RUNTIME=1 -s FORCE_FILESYSTEM=1 -s EXPORTED_FUNCTIONS="['_main']" -s EXPORTED_RUNTIME_METHODS='["FS"]' -s NO_DISABLE_EXCEPTION_CATCHING
 
 WASM_FLAGS	= -c -std=c++17 -Izstr -Wall -Wno-unknown-pragmas $(WASM_LDFLAGS) $(WASM_DEFINES)
 WASM_LFLAGS	= -std=c++17 --bind -lidbfs.js -Izstr -Wall -Wno-unknown-pragmas $(WASM_LDFLAGS) $(WASM_LDEFINES)
-# -s EXPORT_NAME="'dmf2mod'"
 
 # Build command-line program by default
 all: cmd_program
@@ -40,13 +38,13 @@ cmd_program: core dmf2mod.o
 dmf2mod.o: dmf2mod.cpp
 	$(CC) $(FLAGS) dmf2mod.cpp
 
-# Web App:
+# Web App, WASM version:
 webapp: core_wasm webapp.cpp
 	$(WASM_CC) webapp.cpp -s WASM=1 $(WASM_LFLAGS) $(WASM_CORE_OBJS) --pre-js webapp/pre.js -o webapp/dmf2mod.js
 	@echo "Done building web app"
 
-# Non-WASM version:
-#	$(WASM_CC) -s WASM=0 $(WASM_LFLAGS) webapp.cpp $(WASM_CORE_OBJS) -o webapp/dmf2mod.asm.js
+# Web App, asm.js version:
+#	$(WASM_CC) webapp.cpp -s WASM=0 $(WASM_LFLAGS) $(WASM_CORE_OBJS) --pre-js webapp/pre.js -o webapp/dmf2mod.asm.js
 
 # Dmf2mod core:
 core: zlib $(CORE_OBJS)

@@ -48,7 +48,6 @@ template<> ConversionOptionsBase* ConversionOptionsStatic<optionsClass>::CreateS
 template<> Module* ModuleStatic<moduleClass>::CreateStatic(); \
 template<> ModuleType ModuleStatic<moduleClass>::GetTypeStatic(); \
 template<> std::string ModuleStatic<moduleClass>::GetFileExtensionStatic(); \
-template<> std::function<ConversionOptionsBase*(void)> ModuleStatic<moduleClass>::GetCreateConversionOptionsStatic(); \
 template<> ModuleType ConversionOptionsStatic<optionsClass>::GetTypeStatic(); \
 template<> std::vector<std::string> ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic(); \
 template<> ModuleType ModuleInterface<moduleClass, optionsClass>::GetType() const; \
@@ -71,7 +70,6 @@ template<> const std::vector<std::string> ConversionOptionsStatic<optionsClass>:
 template<> Module* ModuleStatic<moduleClass>::CreateStatic() { return new moduleClass; } \
 template<> ModuleType ModuleStatic<moduleClass>::GetTypeStatic() { return m_Type; } \
 template<> std::string ModuleStatic<moduleClass>::GetFileExtensionStatic() { return m_FileExtension; } \
-template<> std::function<ConversionOptionsBase*(void)> ModuleStatic<moduleClass>::GetCreateConversionOptionsStatic() { return m_CreateConversionOptionsStatic; } \
 template<> ModuleType ConversionOptionsStatic<optionsClass>::GetTypeStatic() { return m_Type; } \
 template<> std::vector<std::string> ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic() { return m_AvailableOptions; } \
 template<> ModuleType ModuleInterface<moduleClass, optionsClass>::GetType() const { return ModuleStatic<moduleClass>::GetTypeStatic(); } \
@@ -131,6 +129,7 @@ public:
 
     bool ErrorOccurred() const { return m_ErrorCode != 0; }
     bool Failed() const { return ErrorOccurred(); }
+    bool AnyMessages() const { return ErrorOccurred() || WarningsIssued(); }
     int GetLastErrorCode() const { return m_ErrorCode; }
     
     template <class T, 
@@ -173,8 +172,8 @@ public:
     }
     
     void PrintError();
-    void PrintWarnings();
-    void PrintAll();
+    void PrintWarnings(bool useStdErr = false);
+    void PrintAll(bool useStdErrWarnings = false);
 
     void Clear()
     {
@@ -219,7 +218,6 @@ protected:
 
     static ModuleType GetTypeStatic();
     static std::string GetFileExtensionStatic();
-    static std::function<ConversionOptionsBase*(void)> GetCreateConversionOptionsStatic();
     
 private:
     const static ModuleType m_Type;
@@ -233,6 +231,9 @@ template <typename T>
 class ConversionOptionsStatic
 {
 public:
+    // Unfortunately with the way I'm doing things currently, this needs to be public:
+    static ConversionOptionsBase* CreateStatic();
+
     // TODO: Figure out how to make this protected or private
     // Returns a list of strings of the format: "-o, --option=[min,max]" or "-a" or "--flag" or "--flag=[]" etc.
     //  representing the command-line options for this module and their acceptable values
@@ -248,10 +249,6 @@ protected:
 
     // The output module type
     static ModuleType GetTypeStatic();
-
-public:
-    // Unfortunately with the way I'm doing things currently, this needs to be public:
-    static ConversionOptionsBase* CreateStatic();
 
 private:
     const static ModuleType m_Type;
@@ -299,7 +296,7 @@ private:
         RegistrationMap[T::GetTypeStatic()] = &T::CreateStatic;
         FileExtensionMap[T::GetFileExtensionStatic()] = T::GetTypeStatic();
 
-        ConversionOptionsRegistrationMap[T::GetTypeStatic()] = T::GetCreateConversionOptionsStatic();
+        ConversionOptionsRegistrationMap[T::GetTypeStatic()] = &T::OptionsType::CreateStatic;
         
         //typedef typename T::OptionsType OPT;
         AvailableOptionsMap[T::GetTypeStatic()] = T::OptionsType::GetAvailableOptionsStatic();

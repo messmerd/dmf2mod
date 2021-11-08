@@ -11,6 +11,8 @@ static ModulePtr G_Module;
 static std::string G_InputFilename;
 static CommonFlags G_CoreOptions;
 
+static void SetStatusType(bool isError);
+
 int main()
 {
     ModuleUtils::RegisterModules();
@@ -66,6 +68,13 @@ std::string GetAvailableOptions(std::string moduleType)
  */
 bool ModuleImport(std::string filename)
 {
+    SetStatusType(true);
+    if (ModuleUtils::GetTypeFromFilename(filename) == ModuleType::NONE)
+    {
+        std::cerr << "The input file is not recognized as a supported module type.\n\n";
+        return true;
+    }
+
     G_InputFilename = filename;
     G_Module = Module::CreateAndImport(filename);
     if (!G_Module)
@@ -75,11 +84,24 @@ bool ModuleImport(std::string filename)
         return true;
     }
 
-    if (G_Module->ErrorOccurred())
+    if (G_Module->GetStatus().AnyMessages())
     {
-        std::cerr << "Error during import:\n";
-        G_Module->GetStatus().PrintError();
-        return true;
+        if (G_Module->GetStatus().ErrorOccurred())
+        {
+            SetStatusType(true);
+            std::cerr << "Errors during import:\n";
+            G_Module->GetStatus().PrintError();
+        }
+
+        if (G_Module->GetStatus().WarningsIssued())
+        {
+            SetStatusType(false);
+            std::cerr << "Warnings during import:\n";
+            G_Module->GetStatus().PrintWarnings(true);
+        }
+
+        if (G_Module->ErrorOccurred())
+            return true;
     }
 
     return false;
@@ -101,7 +123,13 @@ std::string ModuleConvert(std::string outputFilename, std::string commandLineArg
     if (outputFilename == G_InputFilename)
         return ""; // Same type; No conversion necessary
 
+    SetStatusType(true);
     const auto moduleType = ModuleUtils::GetTypeFromFilename(outputFilename);
+    if (moduleType == ModuleType::NONE)
+    {
+        std::cerr << "The output file is not recognized as a supported module type.\n\n";
+        return "";
+    }
 
     // Create conversion options object
     ConversionOptionsPtr options = ConversionOptions::Create(moduleType);
@@ -132,13 +160,26 @@ std::string ModuleConvert(std::string outputFilename, std::string commandLineArg
     if (!output)
         return "";
 
-    if (output->GetStatus().Failed())
+    if (output->GetStatus().AnyMessages())
     {
-        std::cerr << "Error during conversion:\n";
-        output->GetStatus().PrintError();
-        return "";
+        if (output->GetStatus().ErrorOccurred())
+        {
+            SetStatusType(true);
+            std::cerr << "Error during conversion:\n";
+            output->GetStatus().PrintError();
+        }
+        if (output->GetStatus().WarningsIssued())
+        {
+            SetStatusType(false);
+            std::cerr << "Warning(s) during conversion:\n";
+            output->GetStatus().PrintWarnings(true);
+        }
+        
+        if (output->ErrorOccurred())
+            return "";
     }
 
+    SetStatusType(true);
     if (output->Export(outputFilename))
     {
         std::cerr << "Error during export:\n";
@@ -147,6 +188,13 @@ std::string ModuleConvert(std::string outputFilename, std::string commandLineArg
     }
     
     return outputFilename;
+}
+
+static void SetStatusType(bool isError)
+{
+    EM_ASM({
+        statusMessageIsError = $0;
+    }, isError);
 }
 
 

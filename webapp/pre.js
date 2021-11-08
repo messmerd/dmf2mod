@@ -12,6 +12,9 @@ Module['print'] = function (e) {
 
 Module['printErr'] = function (e) {
     //std::cerr redirects to here
-    console.log(e);
-    statusMessage += e + '\n';
+    //console.log(e);
+    if (statusMessageIsError)
+        errorMessage += e + '\n';
+    else
+        warningMessage += e + '\n';
 }

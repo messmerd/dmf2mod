@@ -18,7 +18,7 @@
 #include <vector>
 #include <memory>
 
-#define DMF2MOD_VERSION "0.11"
+#define DMF2MOD_VERSION "0.2"
 
 // Forward declarations
 enum class ModuleType;

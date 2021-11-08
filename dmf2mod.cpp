@@ -2,8 +2,7 @@
     dmf2mod.cpp
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Cross-platform command-line implementation of the 
-    dmf2mod core.
+    Cross-platform command-line frontend for the dmf2mod core.
 
     Usage:
         dmf2mod output.[ext] input.[ext] [options]

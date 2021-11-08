@@ -1,3 +1,10 @@
+/*
+    webapp.cpp
+    Written by Dalton Messmer <messmer.dalton@gmail.com>.
+
+    WebAssembly backend for dmf2mod.
+*/
+
 #include "modules.h"
 #include <emscripten/emscripten.h>
 #include <emscripten/bind.h>

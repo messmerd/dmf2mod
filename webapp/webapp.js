@@ -1,8 +1,15 @@
-var appInitialised = false;
-const appFieldset = document.getElementById('dmf2mod_app_fieldset');
+/*
+    webapp.js
+    Written by Dalton Messmer <messmer.dalton@gmail.com>.
+
+    Event handlers and helper functions used by the dmf2mod web application
+*/
+
 const app = document.getElementById('dmf2mod_app');
+const appFieldset = document.getElementById('dmf2mod_app_fieldset');
 const statusArea = document.getElementById('status_area');
-const convertButton = document.getElementById('convert_button');
+
+var appInitialised = false;
 var errorMessage = '';
 var warningMessage = '';
 var statusMessageIsError = true;
@@ -53,7 +60,7 @@ var arrayIsEmpty = function(a) {
 
 var loadOptions = function() {
     var optionsElement = document.getElementById('options');
-    optionsElement.innerHTML = '<label>Output type:</label>';
+    optionsElement.innerHTML = '<label><b>Output type:</b></label>';
 
     var availMods = Module.getAvailableModules().split(',');
     if (arrayIsEmpty(availMods)) {
@@ -91,7 +98,7 @@ var loadOptions = function() {
             continue;
         }
 
-        optionsHTML += '<br>Options:<br>';
+        optionsHTML += '<br><label><b>Options:</b></label><br>';
         var optionsArray = options.split(';');
         for (let j in optionsArray) {
             const o = optionsArray[j];
@@ -346,11 +353,4 @@ var convertFile = async function(event) {
 
 app.addEventListener('submit', function (e) {
     convertFile(e);
-}, false);
-
-convertButton.addEventListener('keydown', function (e) {
-    if (e.key != 'Enter') {
-        e.preventDefault();
-        return false;
-    }
 }, false);

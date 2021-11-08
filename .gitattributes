@@ -1,3 +1,0 @@
-# Tell GitHub Linguist to ignore these 3rd party directories:
-zlib/** linguist-vendored
-zstr/** linguist-vendored

@@ -1,9 +1,0 @@
-# Ignore everything
-/**
-!/.gitignore
-
-# Un-ignore source code
-!/*.cpp
-!/*.h
-
-# TODO: Move source code to "src" directory, documents to "doc", and sample file and tests to "testing"

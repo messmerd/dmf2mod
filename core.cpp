@@ -23,6 +23,7 @@
 std::map<ModuleType, std::function<ModuleBase*(void)>> ModuleUtils::RegistrationMap = {};
 std::map<std::string, ModuleType> ModuleUtils::FileExtensionMap = {};
 std::map<ModuleType, std::function<ConversionOptionsBase*(void)>> ModuleUtils::ConversionOptionsRegistrationMap = {};
+std::map<ModuleType, std::vector<std::string>> ModuleUtils::AvailableOptionsMap = {};
 
 CommonFlags ModuleUtils::m_CoreOptions = {};
 
@@ -30,7 +31,7 @@ static bool ParseFlags(std::vector<std::string>& args, CommonFlags& flags);
 
 // ModuleUtils class
 
-std::vector<std::string> ModuleUtils::GetAvaliableModules()
+std::vector<std::string> ModuleUtils::GetAvailableModules()
 {
     std::vector<std::string> vec;
     for (const auto& mapPair : FileExtensionMap)
@@ -46,7 +47,6 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
     inputOutputInfo.InputType = ModuleType::NONE;
     inputOutputInfo.OutputFile = "";
     inputOutputInfo.OutputType = ModuleType::NONE;
-    //options = nullptr;
 
     std::vector<std::string> args(argc, "");
     for (int i = 0; i < argc; i++)
@@ -66,7 +66,7 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
         }
         else
         {
-            std::cout << "ERROR: Could not parse arguments.\n";
+            std::cerr << "ERROR: Could not parse command-line arguments.\n";
             return true;
         }
     }
@@ -94,13 +94,13 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
             }
             else
             {
-                std::cout << "ERROR: Input file type '" << GetFileExtension(args[2]) << "' is unsupported.\n";
+                std::cerr << "ERROR: Input file type '" << GetFileExtension(args[2]) << "' is unsupported.\n";
                 return true;
             }
         }
         else
         {
-            std::cout << "ERROR: The input file '" << args[2] << "' could not be found.\n";
+            std::cerr << "ERROR: The input file '" << args[2] << "' could not be found.\n";
             return true;
         }
         
@@ -112,7 +112,7 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
                 const size_t dotPos = inputFile.rfind('.');
                 if (dotPos == 0 || dotPos + 1 >= inputFile.size())
                 {
-                    std::cout << "ERROR: The input file is invalid.\n";
+                    std::cerr << "ERROR: The input file is invalid.\n";
                     return true;
                 }
 
@@ -121,7 +121,7 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
             }
             else
             {
-                std::cout << "ERROR: '" << args[1] << "' is not a valid module type.\n";
+                std::cerr << "ERROR: Output file type '" << args[1] << "' is unsupported.\n";
                 return true;
             }
         }
@@ -130,14 +130,14 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
             outputFile = args[1];
             if (GetTypeFromFilename(args[1]) == ModuleType::NONE)
             {
-                std::cout << "ERROR: '" << GetFileExtension(args[1]) << "' is not a valid module type.\n";
+                std::cerr << "ERROR: '" << GetFileExtension(args[1]) << "' is not a valid module type.\n";
                 return true;
             }
         }
         
         if (FileExists(outputFile) && !flags.force)
         {
-            std::cout << "ERROR: The output file '" << outputFile << "' already exists. Run with the '-f' flag to allow the file to be overwritten.\n";
+            std::cerr << "ERROR: The output file '" << outputFile << "' already exists. Run with the '-f' flag to allow the file to be overwritten.\n";
             return true;
         }
 
@@ -164,7 +164,7 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
         ConversionOptionsPtr optionsTemp = ConversionOptions::Create(inputOutputInfo.OutputType);
         if (!optionsTemp)
         {
-            std::cout << "ERROR: Failed to create ConversionOptionsBase-derived object for the module type '" << GetFileExtension(outputFile) 
+            std::cerr << "ERROR: Failed to create ConversionOptionsBase-derived object for the module type '" << GetFileExtension(outputFile) 
                 << "'. The module may not be properly registered with dmf2mod.\n";
             return true;
         }
@@ -262,16 +262,6 @@ ModuleType ModuleUtils::GetTypeFromFileExtension(const std::string& extension)
     return ModuleType::NONE;
 }
 
-std::string ModuleUtils::GetExtensionFromType(ModuleType moduleType)
-{
-    for (const auto& mapPair : FileExtensionMap)
-    {
-        if (mapPair.second == moduleType)
-            return mapPair.first;
-    }
-    return "";
-}
-
 std::string ModuleUtils::GetBaseNameFromFilename(const std::string& filename)
 {
     // Filename must contain base name, a dot, then the extension
@@ -326,6 +316,23 @@ bool ModuleUtils::FileExists(const std::string& filename)
     return file.is_open();
 }
 
+std::string ModuleUtils::GetExtensionFromType(ModuleType moduleType)
+{
+    for (const auto& mapPair : FileExtensionMap)
+    {
+        if (mapPair.second == moduleType)
+            return mapPair.first;
+    }
+    return "";
+}
+
+std::vector<std::string> ModuleUtils::GetAvailableOptions(ModuleType moduleType)
+{
+    if (AvailableOptionsMap.count(moduleType) > 0)
+        return AvailableOptionsMap[moduleType];
+    return {};
+}
+
 bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType)
 {
     // If module-specific help was requested
@@ -375,21 +382,31 @@ bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType
 void Status::PrintError()
 {
     if (ErrorOccurred())
-        std::cerr << m_ErrorMessage << "\n";
+        std::cerr << m_ErrorMessage << "\n\n";
 }
 
-void Status::PrintWarnings()
+void Status::PrintWarnings(bool useStdErr)
 {
-    for (const auto& message : m_WarningMessages)
+    if (!m_WarningMessages.empty())
     {
-        std::cout << message << "\n";
+        for (const auto& message : m_WarningMessages)
+        {
+            if (useStdErr)
+                std::cerr << message << "\n";
+            else
+                std::cout << message << "\n";
+        }
+        if (useStdErr)
+            std::cerr << "\n";
+        else
+            std::cout << "\n";
     }
 }
 
-void Status::PrintAll()
+void Status::PrintAll(bool useStdErrWarnings)
 {
     PrintError();
-    PrintWarnings();
+    PrintWarnings(useStdErrWarnings);
 }
 
 std::string Status::CommonErrorMessageCreator(Category category, int errorCode, const std::string& arg)
@@ -453,12 +470,6 @@ std::string ModuleStatic<T>::GetFileExtensionStatic()
     return m_FileExtension;
 }
 
-template <typename T>
-std::function<ConversionOptionsBase*(void)> ModuleStatic<T>::GetCreateConversionOptionsStatic()
-{
-    return m_CreateConversionOptionsStatic;
-}
-
 // ConversionOptionsStatic class
 
 template <typename T>
@@ -489,20 +500,32 @@ ConversionOptionsPtr ConversionOptionsBase::Create()
 
 // Interface classes
 
-template <typename T>
-ModuleType ModuleInterface<T>::GetType() const
+template <typename T, typename O>
+ModuleType ModuleInterface<T, O>::GetType() const
 {
     return ModuleStatic<T>::GetTypeStatic();
 }
 
-template <typename T>
-std::string ModuleInterface<T>::GetFileExtension() const
+template <typename T, typename O>
+std::string ModuleInterface<T, O>::GetFileExtension() const
 {
     return ModuleStatic<T>::GetFileExtensionStatic();
+}
+
+template <typename T, typename O>
+std::vector<std::string> ModuleInterface<T, O>::GetAvailableOptions() const
+{
+    return ConversionOptionsStatic<O>::GetAvailableOptionsStatic();
 }
 
 template <typename T>
 ModuleType ConversionOptionsInterface<T>::GetType() const
 {
     return ConversionOptionsStatic<T>::GetTypeStatic();
+}
+
+template <typename T>
+std::vector<std::string> ConversionOptionsInterface<T>::GetAvailableOptions() const
+{
+    return ConversionOptionsStatic<T>::GetAvailableOptionsStatic();
 }

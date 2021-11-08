@@ -1,9 +1,19 @@
 # Ignore everything
 /**
+
+# Un-ignore
 !/.gitignore
+!/.gitattributes
+!/.github/**
 
 # Un-ignore source code
 !/*.cpp
 !/*.h
+
+# Un-ignore web app source files
+!/webapp/
+!/webapp/*.js
+!/webapp/*.html
+/webapp/dmf2mod.js
 
 # TODO: Move source code to "src" directory, documents to "doc", and sample file and tests to "testing"

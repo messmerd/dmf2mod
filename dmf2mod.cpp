@@ -2,8 +2,7 @@
     dmf2mod.cpp
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Cross-platform command-line implementation of the 
-    dmf2mod core.
+    Cross-platform command-line frontend for the dmf2mod core.
 
     Usage:
         dmf2mod output.[ext] input.[ext] [options]
@@ -27,19 +26,15 @@ int main(int argc, char *argv[])
     if (!options)
         return 0;
 
-    /*
-    // Import the input file using more explicit way:
-    ModulePtr input = Module::Create(io.InputType);
-    if (!input || input->Import(io.InputFile.c_str()))
-    {
-        // Error occurred during import
-        return 1;
-    }
-    */
-
     // Import the input file by inferring module type:
     ModulePtr input = Module::CreateAndImport(io.InputFile);
-    if (!input || input->GetStatus().Failed())
+    if (!input)
+    {
+        std::cerr << "ERROR: The input module type is not registered.\n";
+        return 1;
+    }
+    
+    if (input->GetStatus().Failed())
     {
         // Error occurred during import
         input->GetStatus().PrintAll();
@@ -54,9 +49,15 @@ int main(int argc, char *argv[])
 
     // Convert the input module to the output module type:
     ModulePtr output = input->Convert(io.OutputType, options);
+    if (!output)
+    {
+        std::cerr << "ERROR: The output module type is not registered.\n";
+        return 1;
+    }
+
     if (!output || output->GetStatus().Failed())
     {
-        // Error occurred during conversion
+        // Error/warnings occurred during conversion
         output->GetStatus().PrintAll();
         return 1;
     }

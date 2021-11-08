@@ -149,7 +149,17 @@ typedef enum DMF_IMPORT_ERROR
     IMPORT_ERROR_FAIL=1
 } DMF_IMPORT_ERROR;
 
-class DMF : public ModuleInterface<DMF>
+class DMFConversionOptions : public ConversionOptionsInterface<DMFConversionOptions>
+{
+public:
+    DMFConversionOptions() {}
+    ~DMFConversionOptions() {}
+
+    bool ParseArgs(std::vector<std::string>& args) override { return false; } // DMF files don't have any conversion flags right now
+    void PrintHelp() override;
+};
+
+class DMF : public ModuleInterface<DMF, DMFConversionOptions>
 {
 public:
     static const System SYSTEMS(SYSTEM_TYPE systemType) { return m_Systems[systemType]; }
@@ -234,16 +244,6 @@ private:
     PCMSample*      m_PCMSamples;
 
     static const System m_Systems[];
-};
-
-class DMFConversionOptions : public ConversionOptionsInterface<DMFConversionOptions>
-{
-public:
-    DMFConversionOptions() {}
-    ~DMFConversionOptions() {}
-
-    bool ParseArgs(std::vector<std::string>& args) override { return false; } // DMF files don't have any conversion flags right now
-    void PrintHelp() override;
 };
 
 // Deflemask Game Boy channels

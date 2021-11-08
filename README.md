@@ -3,31 +3,34 @@ dmf2mod [![Build Status](https://github.com/messmerd/dmf2mod/workflows/build/bad
 
 A cross-platform command-line utility for converting Deflemask's DMF files to other trackers' module files.
 
+⭢ *Check it out [in your browser](https://messmerd.github.io/dmf2mod)!*
+
 ### Currently supported conversions:
-- DMF (Game Boy only) --> MOD
+- DMF (Game Boy only) ⭢ MOD
 
 ### Possible future conversions:
-- MOD --> DMF
-- DMF --> XM
-- XM --> DMF
-- MOD --> XM
+- MOD ⭢ DMF
+- DMF ⭢ XM
+- XM ⭢ DMF
+- MOD ⭢ XM
 
-## Build    
-Clone the repository: 
+## Build
+#### Command-line application:
 
-```git clone https://github.com/messmerd/dmf2mod.git```
+```
+make
+```
 
-Go to the dmf2mod directory: 
+Requires GCC (MinGW on Windows) and make. Works on Windows, Linux, and MacOS.
+Other compilers besides GCC would probably work, though this hasn't been tested.
 
-```cd dmf2mod ```
+#### Web application:
 
-Next, run make. 
+```
+make webapp
+```
 
-```make```
-
-And that's it!
-
-Note that `g++`, `gcc`, and `make` must be installed and added to the PATH in order to build.
+Requires the Emscripten SDK and make.
 
 ## Usage
 ```
@@ -47,7 +50,7 @@ Options when converting to MOD:
 --effects=[min,max]      The number of ProTracker effects to use. (Default: max)
 ```
  
-## DMF-->MOD Limitations
+## DMF⭢MOD Limitations
 Because of the limitations of the MOD format, there are several restrictions on the DMF files that can be converted to MOD. For example, DMF files must use the Game Boy system, patterns must have 64 rows, only one effect column is allowed per channel, etc. 
 
 The range of notes that ProTracker can play is about half that of Deflemask, and because of this, dmf2mod may have to downsample some wavetables to play them at higher frequencies in MOD. This is not done by default: You must pass the `--downsample` flag to allow dmf2mod to do this.
@@ -58,24 +61,24 @@ Unlike Deflemask, the MOD format implements volume changes as effects, and since
 
 Deflemask instruments are unsupported, so if you want to change the volume of a channel or the WAVE channel's wavetable for example, your module will need to use only the built-in commands in Deflemask's pattern editor.
 
-Currently, dmf2mod converts notes, volume changes, initial tempo, and the following Deflemask effects: 
+Currently, dmf2mod converts notes, volume changes, initial tempo, and the following Deflemask effects:
 - **Bxx**  - Position Jump
-- **10xx** - Set WAVE 
-- **12xx** - Set Duty Cycle 
+- **10xx** - Set WAVE
+- **12xx** - Set Duty Cycle
 
 Effects 10xx and 12xx are implemented by changing the sample in MOD rather than as an effect. As such, they do not count towards the 1 effect per channel limit.
 
-SQ1, SQ2, and WAVE channels are supported. 
+SQ1, SQ2, and WAVE channels are supported.
  
-In later updates, I may add: 
-- Pattern Break (Dxx) 
-- Tempo changes 
-- More effects 
-- Support for patterns of different sizes than 64 
+In later updates, I may add:
+- Pattern Break (Dxx)
+- Tempo changes
+- More effects
+- Support for patterns of different sizes than 64
 
 Instruments will not receive support due to MOD limitations, and neither will the Noise channel because it relies heavily on Instruments and their envelopes to sound good. However, support for copying only the Noise channel notes may be implemented in the future.
 
 ______
-Created by Dalton Messmer <messmer.dalton(at)gmail(dot)com>. 
+Created by Dalton Messmer <messmer.dalton(at)gmail(dot)com>.
 
-Zlib library created by Jean-loup Gailly and Mark Adler (https://zlib.net/).
+zlib library created by Jean-loup Gailly and Mark Adler (https://zlib.net/).

@@ -64,7 +64,6 @@ template<> ModuleType ConversionOptionsInterface<optionsClass>::GetType() const;
 template<> const ModuleType ModuleStatic<moduleClass>::m_Type = enumType; \
 template<> const std::string ModuleStatic<moduleClass>::m_FileExtension = fileExt; \
 template<> ConversionOptionsBase* ConversionOptionsStatic<optionsClass>::CreateStatic() { return new optionsClass; } \
-template<> const std::function<ConversionOptionsBase*(void)> ModuleStatic<moduleClass>::m_CreateConversionOptionsStatic = &ConversionOptionsStatic<optionsClass>::CreateStatic; \
 template<> const ModuleType ConversionOptionsStatic<optionsClass>::m_Type = enumType; \
 template<> const std::vector<std::string> ConversionOptionsStatic<optionsClass>::m_AvailableOptions = availOptions; \
 template<> Module* ModuleStatic<moduleClass>::CreateStatic() { return new moduleClass; } \
@@ -76,9 +75,6 @@ template<> ModuleType ModuleInterface<moduleClass, optionsClass>::GetType() cons
 template<> std::string ModuleInterface<moduleClass, optionsClass>::GetFileExtension() const { return ModuleStatic<moduleClass>::GetFileExtensionStatic(); } \
 template<> std::vector<std::string> ConversionOptionsInterface<optionsClass>::GetAvailableOptions() const { return ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic(); } \
 template<> ModuleType ConversionOptionsInterface<optionsClass>::GetType() const { return ConversionOptionsStatic<optionsClass>::GetTypeStatic(); } \
-
-//template<> typename ModuleInterface<moduleClass, optionsClass>::OptionsType = optionsClass;
-
 
 // Command-line options that are supported regardless of which modules are supported
 struct CommonFlags
@@ -222,7 +218,6 @@ protected:
 private:
     const static ModuleType m_Type;
     const static std::string m_FileExtension; // Without dot
-    const static std::function<ConversionOptionsBase*(void)> m_CreateConversionOptionsStatic;
 };
 
 
@@ -378,7 +373,7 @@ public:
     /*
      * Converts the module to the specified type using the provided conversion options
      */
-    ModulePtr Convert(ModuleType type, ConversionOptionsPtr& options)
+    ModulePtr Convert(ModuleType type, const ConversionOptionsPtr& options)
     {
         // Don't convert if the types are the same
         if (type == GetType())
@@ -445,7 +440,7 @@ public:
     virtual std::string GetName() const = 0;
 
 protected:
-    virtual bool ConvertFrom(const Module* input, ConversionOptionsPtr& options) = 0;
+    virtual bool ConvertFrom(const Module* input, const ConversionOptionsPtr& options) = 0;
 
     Status m_Status;
 };

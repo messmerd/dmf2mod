@@ -132,7 +132,7 @@ typedef struct PCMSample
     char *name; 
     uint8_t rate, pitch, amp, bits;
     uint16_t *data; 
-} PCMSample; 
+} PCMSample;
 
 typedef struct PatternRow
 {
@@ -141,7 +141,7 @@ typedef struct PatternRow
     int16_t effectCode[MAX_EFFECTS_COLUMN_COUNT];
     int16_t effectValue[MAX_EFFECTS_COLUMN_COUNT];
     int16_t instrument;
-} PatternRow; 
+} PatternRow;
 
 typedef enum DMF_IMPORT_ERROR
 {
@@ -209,7 +209,7 @@ public:
     PatternRow*** GetPatternValues() const { return m_PatternValues; }
 
 private:
-    bool ConvertFrom(const Module* input, ConversionOptionsPtr& options) override
+    bool ConvertFrom(const Module* input, const ConversionOptionsPtr& options) override
     {
         return true; // Not implemented
     };
@@ -252,6 +252,6 @@ typedef enum DMF_GAMEBOY_CHANNEL {
 } DMF_GAMEBOY_CHANNEL;
 
 // Compares notes n1 and n2. Returns 1 if n1 > n2, -1 if n1 < n2, and 0 if n1 == n2.
-int8_t NoteCompare(const Note *n1, const Note *n2);
+int8_t NoteCompare(const Note& n1, const Note& n2);
 
-int8_t NoteCompare(const Note* n1, const Note n2);
+//int8_t NoteCompare(const Note& n1, Note n2);

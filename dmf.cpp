@@ -669,17 +669,17 @@ double DMF::GetBPM() const
     return (15.0 * globalTick) / ((m_ModuleInfo.timeBase + 1) * (m_ModuleInfo.tickTime1 + m_ModuleInfo.tickTime2));
 }
 
-int8_t NoteCompare(const Note *n1, const Note *n2)
+int8_t NoteCompare(const Note& n1, const Note& n2)
 {
     // Compares notes n1 and n2
     // Assumes note isn't Note OFF or Empty note
     // Notes must use the DMF convention where the note C# is the 1st note of an octave rather than C-
 
-    if (n1->octave + n1->pitch / 13.f > n2->octave + n2->pitch / 13.f)
+    if (n1.octave + n1.pitch / 13.f > n2.octave + n2.pitch / 13.f)
     {
         return 1; // n1 > n2 (n1 has a higher pitch than n2)
     }
-    else if (n1->octave + n1->pitch / 13.f < n2->octave + n2->pitch / 13.f)
+    else if (n1.octave + n1.pitch / 13.f < n2.octave + n2.pitch / 13.f)
     {
         return -1; // n1 < n2 (n1 has a lower pitch than n2)
     }
@@ -689,8 +689,9 @@ int8_t NoteCompare(const Note *n1, const Note *n2)
     }
 }
 
-int8_t NoteCompare(const Note* n1, const Note n2)
+/*
+int8_t NoteCompare(const Note& n1, Note n2)
 {
-    return NoteCompare(n1, &n2);
+    return NoteCompare(n1, n2);
 }
-
+*/

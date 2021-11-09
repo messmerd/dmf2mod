@@ -16,7 +16,7 @@ endif
 CC	 = g++
 
 # Compiler and linker flags
-FLAGS	= -c -std=c++17 -Izlib -Izstr -g -Wall -Wno-unknown-pragmas
+FLAGS	= -c -std=c++17 -Izlib -Izstr -Wall -Wno-unknown-pragmas
 LFLAGS	= -lm zlib/libz.a
 
 # Emscripten compiler and linker flags

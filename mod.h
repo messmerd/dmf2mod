@@ -39,6 +39,14 @@ typedef enum PT_EFFECT {
     PT_SETSPEED=0xF0
 } PT_EFFECT;
 
+struct ChannelRow
+{
+    uint8_t SampleNumber;
+    uint16_t SamplePeriod;
+    uint8_t EffectCode;
+    uint8_t EffectValue;
+};
+
 class MODConversionOptions : public ConversionOptionsInterface<MODConversionOptions>
 {
 public:
@@ -110,18 +118,95 @@ public:
     };
 
 private:
-    bool ConvertFrom(const Module* input, ConversionOptionsPtr& options) override;
+    bool ConvertFrom(const Module* input, const ConversionOptionsPtr& options) override;
 
-    int InitSamples(const DMF* dmf, Note **lowestNote, Note **highestNote);
-    int FinalizeSampMap(const DMF* dmf, Note *lowestNote, Note *highestNote);
-    void ExportSampleInfo(const DMF* dmf, int8_t ptSampleNumLow, int8_t ptSampleNumHigh, uint8_t indexLow, uint8_t indexHigh, int8_t finetune);
-    void ExportSampleData(const DMF* dmf);
-    void ExportSampleDataHelper(const DMF* dmf, uint8_t ptSampleNum, uint8_t index);
-    int WriteProTrackerPatternRow(const DMF* dmf, PatternRow *pat, MODChannelState *state);
-    int CheckEffects(PatternRow *pat, MODChannelState *state, uint16_t *effect);
+    int InitSamples(const DMF& dmf);
+    int FinalizeSampMap(const DMF& dmf);
+    void ExportSampleInfo(const DMF& dmf, int8_t ptSampleNumLow, int8_t ptSampleNumHigh, uint8_t indexLow, uint8_t indexHigh, int8_t finetune);
+    void ExportSampleData(const DMF& dmf);
+    void ExportSampleDataHelper(const DMF& dmf, uint8_t ptSampleNum, uint8_t index);
+    int WriteProTrackerPatternRow(const DMF& dmf, const PatternRow& pat, MODChannelState& state);
+    int CheckEffects(const PatternRow& pat, MODChannelState& state, uint16_t& effect);
     uint16_t GetProTrackerEffect(int16_t effectCode, int16_t effectValue);
 
     uint8_t GetPTTempo(double bpm);
+
+
+    const ChannelRow& GetChannelRow(unsigned pattern, unsigned row, unsigned channel)
+    {
+        return m_Patterns.at(pattern).at((row << m_NumberOfChannelsPowOfTwo) + channel);
+    }
+
+    std::vector<std::vector<ChannelRow>> m_Patterns; // Per pattern: Vector of channel rows that together contain data for entire pattern
+    unsigned m_NumberOfChannels;
+    unsigned char m_NumberOfChannelsPowOfTwo; // For efficiency. 2^m_NumberOfChannelsPowOfTwo = m_NumberOfChannels.
+
+    enum class SampleType
+    {
+        Square, Wave
+    };
+
+    /*
+    sampMap gives the ProTracker (PT) sample numbers for a given SQW / WAVE sample of either low note range or high note range. 
+    The index for a particular SQW / WAVE sample is specified using the format below: 
+    For index 0 thru 3: SQW samples, 12.5% duty cycle thru 75% duty cycle (low note range) 
+    For index 4 thru totalWavetables + 3: WAVE samples (low note range) 
+    For index 4 + totalWavetables thru 7 + totalWavetables: SQW samples, 12.5% duty cycle thru 75% duty cycle (high note range) 
+    For index 8 + totalWavetables thru 7 + totalWavetables * 2: WAVE samples (high note range)  
+    The value of sampMap is -1 if a PT sample is not needed for the given SQW / WAVE sample. 
+    */
+    std::vector<int8_t> m_SampleMap;
+    //std::map<unsigned char, unsigned char> m_SampleMap;
+
+
+    unsigned char m_DMFTotalWavetables; // For effeciency. dmf->GetTotalWavetables() 
+    
+    inline unsigned char GetMODSampleNumberLowFromDMFSquare(unsigned squareDuty)
+    {
+        return m_SampleMap.at(squareDuty);
+    }
+
+    inline unsigned char GetMODSampleNumberHighFromDMFSquare(unsigned squareDuty)
+    {
+        return m_SampleMap.at(4 + m_DMFTotalWavetables + squareDuty);
+    }
+    
+    inline unsigned char GetMODSampleNumberLowFromDMFWavetable(unsigned wavetableNumber)
+    {
+        return m_SampleMap.at(4 + wavetableNumber);
+    }
+
+    inline unsigned char GetMODSampleNumberHighFromDMFWavetable(unsigned wavetableNumber)
+    {
+        return m_SampleMap.at(8 + m_DMFTotalWavetables + wavetableNumber);
+    }
+
+    /*
+    Specifies the point at which the note range starts for a given SQW / WAVE sample (high or low note range).
+    A note range always contains 36 notes. I.e. C-2 thru B-4 (Deflemask tracker note format).
+    Uses the same index format of sampMap minus the high note range indices.  
+    If a certain SQW / WAVE sample is unused, then pitch = 0 and octave = 0. 
+    */
+    std::vector<Note> m_NoteRangeStart;
+
+    /*
+    Specifies the ProTracker sample length for a given SQW / WAVE sample.
+    Uses the same index format of sampMap.  
+    If a certain SQW / WAVE sample is unused, then pitch = 0 and octave = 0. 
+    The value of sampleLength is -1 if a PT sample is not needed for the given SQW / WAVE sample.
+    */
+    std::vector<int> m_SampleLength;
+
+    // Lowest/highest note for each square wave duty cycle or wavetable instrument.
+    // First 4 indicies are for square waves, rest are for wavetables.
+    std::vector<Note> m_LowestNotes;
+    std::vector<Note> m_HighestNotes;
+
+    int8_t m_TotalMODSamples;
+
+    MODConversionOptions* m_Options;
+
+    const bool m_UsingSetupPattern = true; // Whether to use a pattern at the start of the module to set up the initial tempo and other stuff. 
 
     std::stringstream m_Stream;
 };

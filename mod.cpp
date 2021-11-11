@@ -733,6 +733,352 @@ uint16_t MOD::GetProTrackerEffect(int16_t effectCode, int16_t effectValue)
     return ((uint16_t)ptEff << 4) | ptEffVal;
 }
 
+mod_sample_id_t MOD::GetMODSampleId(dmf_sample_id_t dmfSampleId, const Note& dmfNote)
+{
+    // Must call CreateSampleMapping first.
+
+    if (m_SampleMap2.count(dmfSampleId) > 0)
+    {
+        MODSplitSample& splitSample = m_SampleMap2[dmfSampleId];
+
+        // If there's no split point, there's no high/low versions, just one version stored in lowId
+        if (splitSample.splitPoint.octave == 0 && splitSample.splitPoint.pitch == 0)
+            return splitSample.lowId;
+
+        // Use DMF note to check which MOD sample ID to use based on split point
+        if (dmfNote >= splitSample.splitPoint)
+            return splitSample.highId;
+        else
+            return splitSample.lowId;
+    }
+    return -1; // Sample mapping for this DMF sample does not exist. Does not need to be imported.
+}
+
+
+bool MOD::CreateSampleMapping(const DMF& dmf)
+{
+    // This function loops through all DMF pattern contents to find the highest and lowest notes 
+    //  for each square wave duty cycle and each wavetable. It also finds which SQW duty cycles are 
+    //  used and which wavetables are used and stores this info in m_SampleMap.
+    //  Then it calls the function finalizeSampMap.
+
+    m_SampleMap2.clear();
+    m_SampleIdLowestHighestNotesMap.clear();
+
+    // The current square wave duty cycle, note volume, and other information that the 
+    //      tracker stores for each channel while playing a tracker file.
+    MODChannelState state[DMF::SYSTEMS(SYS_GAMEBOY).channels], stateJumpCopy[DMF::SYSTEMS(SYS_GAMEBOY).channels];
+    for (int i = 0; i < DMF::SYSTEMS(SYS_GAMEBOY).channels; i++)
+    {
+        state[i].channel = (DMF_GAMEBOY_CHANNEL)i;   // Set channel types: SQ1, SQ2, WAVE, NOISE.
+        state[i].dutyCycle = 0; // Default is 0 or a 12.5% duty cycle square wave.
+        state[i].wavetable = 0; // Default is wavetable #0.
+        state[i].sampleChanged = true; // Whether dutyCycle or wavetable recently changed
+        state[i].volume = DMF_NOTE_VOLUMEMAX; // The max volume for a channel (in DMF units)
+        state[i].notePlaying = false; // Whether a note is currently playing on a channel
+        state[i].onHighNoteRange = false; // Whether a note is using the PT sample for the high note range.
+        state[i].needToSetVolume = false; // Whether the volume needs to be set (can happen after sample changes).
+
+        stateJumpCopy[i] = state[i]; // Shallow copy, but it's ok since there are no pointers to anything.
+    }
+
+    // The main MODChannelState structs should NOT update during patterns or parts of 
+    //   patterns that the Position Jump (Bxx) effect skips over. (Ignore loops)
+    //   Keep a copy of the main state for each channel, and once it reaches the 
+    //   jump destination, overwrite the current state with the copied state.
+    bool stateSuspended = false; // true == currently in part that a Position Jump skips over
+    int8_t jumpDestination = -1; // Pattern matrix row where you are jumping to. Not a loop.
+
+    int16_t effectCode, effectValue;
+
+    const ModuleInfo& moduleInfo = dmf.GetModuleInfo();
+    PatternRow*** const patternValues = dmf.GetPatternValues();
+    uint8_t** const patternMatrixValues = dmf.GetPatternMatrixValues();
+    
+    // Most of the following nested for loop is copied from the export pattern data loop in ConvertFrom.
+    // I didn't want to do this, but I think having two of the same loop is the only simple way.
+    // Loop through SQ1, SQ2, and WAVE channels:
+    for (int chan = DMF_GAMEBOY_SQW1; chan <= DMF_GAMEBOY_WAVE; chan++)
+    {
+        // Loop through Deflemask patterns
+        for (int patMatRow = 0; patMatRow < moduleInfo.totalRowsInPatternMatrix; patMatRow++)
+        {
+            // Row within pattern
+            for (int patRow = 0; patRow < 64; patRow++)
+            {
+                PatternRow pat = patternValues[chan][patternMatrixValues[chan][patMatRow]][patRow];
+                effectCode = pat.effectCode[0];
+                effectValue = pat.effectValue[0];
+
+                // If just arrived at jump destination:
+                if (patMatRow == jumpDestination && patRow == 0 && stateSuspended)
+                { 
+                    // Restore state copies
+                    for (int v = 0; v < DMF::SYSTEMS(SYS_GAMEBOY).channels; v++)
+                    {
+                        state[v] = stateJumpCopy[v];
+                    }
+                    stateSuspended = false;
+                    jumpDestination = -1;
+                }
+                
+                // If a Position Jump command was found and it's not in a section skipped by another Position Jump:
+                if (effectCode == DMF_POSJUMP && !stateSuspended)
+                {
+                    if (effectValue >= patMatRow) // If not a loop
+                    {
+                        // Save copies of states
+                        for (int v = 0; v < DMF::SYSTEMS(SYS_GAMEBOY).channels; v++)
+                        {
+                            stateJumpCopy[v] = state[v];
+                        }
+                        stateSuspended = true;
+                        jumpDestination = effectValue;
+                    }
+                }
+                else if (effectCode == DMF_SETDUTYCYCLE && state[chan].dutyCycle != effectValue && chan <= DMF_GAMEBOY_SQW2) // If sqw channel duty cycle needs to change 
+                {
+                    if (effectValue >= 0 && effectValue <= 3)
+                    {
+                        state[chan].dutyCycle = effectValue;
+                        state[chan].sampleChanged = true;
+                    }
+                }
+                else if (effectCode == DMF_SETWAVE && state[chan].wavetable != effectValue && chan == DMF_GAMEBOY_WAVE) // If wave channel wavetable needs to change 
+                {
+                    if (effectValue >= 0 && effectValue < m_DMFTotalWavetables)
+                    {
+                        state[chan].wavetable = effectValue;
+                        state[chan].sampleChanged = true;
+                    }
+                }
+
+                // A note on the SQ1, SQ2, or WAVE channels:
+                if (pat.note.pitch >= 1 && pat.note.pitch <= 12 && chan != DMF_GAMEBOY_NOISE)
+                {
+                    mod_sample_id_t sampleId = chan == DMF_GAMEBOY_WAVE ? state[chan].wavetable + 4 : state[chan].dutyCycle;
+
+                    // Mark this square wave or wavetable as used
+                    m_SampleMap2[sampleId] = {}; // TODO: Is this all zeroed out?
+
+                    // Get lowest/highest notes
+                    if (m_SampleIdLowestHighestNotesMap.count(sampleId) == 0) // 1st time
+                    {
+                        m_SampleIdLowestHighestNotesMap[sampleId] = std::pair<Note, Note>(pat.note, pat.note);
+                    }
+                    else
+                    {
+                        auto& notePair = m_SampleIdLowestHighestNotesMap[sampleId];
+                        if (pat.note > notePair.second)
+                        {
+                            // Found a new highest note
+                            notePair.second = pat.note;
+                        }
+                        if (pat.note < notePair.first)
+                        {
+                            // Found a new lowest note
+                            notePair.first = pat.note;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return SampleSplittingAndAssignment();
+}
+
+bool MOD::SampleSplittingAndAssignment()
+{
+    // This method determines whether a sample will need to be split into low and high ranges, then assigns 
+    //  ProTracker (PT) sample numbers
+
+    int8_t finetune = 0; // Not really used, at least for now
+    uint8_t ptSampleNum = 1; // PT sample #0 is special.
+    
+    mod_sample_id_t currentMODSampleId = 1; // Sample #0 is special in ProTracker
+
+    // Only the samples we need will be in this map
+    for (auto& mapPair : m_SampleMap2)
+    {
+        dmf_sample_id_t sampleId = mapPair.first;
+        MODSplitSample& splitSample = mapPair.second;
+
+        auto& lowHighNotes = m_SampleIdLowestHighestNotesMap[sampleId];
+        auto& lowestNote = lowHighNotes.first;
+        auto& highestNote = lowHighNotes.second;
+
+        bool noSplittingIsPossible = false;
+
+        // If the range is 3 octaves or less:
+        if (highestNote.octave*12 + highestNote.pitch - lowestNote.octave*12 - lowestNote.pitch <= 36)
+        {
+            // (Note: The note C-n in the Deflemask tracker is called C-(n-1) in DMF format because the 1st note of an octave is C# in DMF files.)
+            
+            finetune = 0;
+
+            Note lowNoteToCompare = { DMF_NOTE_C, 1 };
+            Note highNoteToCompare = { DMF_NOTE_B, 4 };
+
+            if (lowestNote >= lowNoteToCompare && highNoteToCompare <= highNoteToCompare)
+            {
+                noSplittingIsPossible = true;
+
+                // If between C-2 and B-4 (Deflemask tracker note format)
+                splitSample.splitPoint = lowNoteToCompare;
+                // Use sample length: 64 (Double length)
+            }
+
+            lowNoteToCompare = { DMF_NOTE_C, 2 };
+            highNoteToCompare = { DMF_NOTE_B, 5 };
+
+            if (lowestNote >= lowNoteToCompare && highNoteToCompare <= highNoteToCompare)
+            {
+                noSplittingIsPossible = true;
+
+                // If between C-3 and B-5 (Deflemask tracker note format)
+                splitSample.splitPoint = lowNoteToCompare;
+                // Use sample length: 32 (regular wavetable length)
+            }
+            else if (lowestNote >= (Note){DMF_NOTE_C, 3} && highestNote <= (Note){DMF_NOTE_B, 6})
+            {
+                // If between C-4 and B-6 (Deflemask tracker note format) and none of the above options work
+                if (sampleId >= 4 && !m_Options->GetDownsample()) // If on a wavetable instrument and can't downsample it
+                {
+                    m_Status.SetError(Status::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(sampleId - 4));
+                    return true;
+                }
+
+                noSplittingIsPossible = true;
+
+                splitSample.splitPoint = { DMF_NOTE_C, 3 };
+                // Use sample length: 16 (half length - downsampling needed)
+            }
+            else if (lowestNote >= (Note){DMF_NOTE_C, 4} && highestNotes <= (Note){DMF_NOTE_B, 7})
+            {
+                // If between C-5 and B-7 (Deflemask tracker note format)
+                if (sampleId >= 4 && !m_Options->GetDownsample()) // If on a wavetable instrument and can't downsample it
+                {
+                    m_Status.SetError(Status::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(sampleId - 4));
+                    return true;
+                }
+                
+                noSplittingIsPossible = true;
+
+                splitSample.splitPoint = { DMF_NOTE_C, 4 };
+                // Use sample length: 8 (1/4 length - downsampling needed)
+            }
+            else if (highestNote == (Note){DMF_NOTE_C, 7})
+            {
+                // If between C#5 and C-8 (highest note) (Deflemask tracker note format):
+                if (sampleId >= 4 && !m_Options->GetDownsample()) // If on a wavetable instrument and can't downsample it
+                {
+                    m_Status.SetError(Status::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(i - 4));
+                    return true;
+                }
+                
+                // TODO: This note is currently unsupported. Should fail here.
+
+                noSplittingIsPossible = true;
+                finetune = 0; // One semitone up from B = C- ??? was 7
+
+                splitSample.splitPoint = { DMF_NOTE_C, 4 };
+                // Use sample length: 8 (1/4 length - downsampling needed)
+            }
+
+            if (noSplittingIsPossible) // If one of the above options worked
+            {
+                if (sampleId >= 4) // If on a wavetable instrument
+                {
+                    // Double wavetable sample length.
+                    // This will lower all wavetable instruments by one octave, which should make it
+                    // match the octave for wavetable instruments in Deflemask
+                    
+                    // TODO:
+                    ///m_SampleLength[indexLow] *= 2;
+                }
+
+                splitSample.lowId = currentMODSampleId; // Assign PT sample number to this square wave / WAVE sample
+                splitSample.highId = -1; // No PT sample needed for this square wave / WAVE sample (high note range)
+                // TODO: Was exporting sample info here
+                currentMODSampleId++;
+            }
+        }
+
+        // If none of the options above worked, both high note range and low note range are needed.
+        if (!noSplittingIsPossible) // If splitting is necessary
+        {
+            // Use sample length: 64 (Double length) for low range (C-2 to B-4)
+            // Use sample length: 8 (Quarter length) for high range (C-5 to B-7)
+
+            // If on a wavetable sample
+            if (sampleId >= 4)
+            {
+                // If it cannot be downsampled (square waves can always be downsampled w/o permission):
+                if (!m_Options->GetDownsample())
+                {
+                    m_Status.SetError(Status::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(sampleId - 4));
+                    return true;
+                }
+
+                // !!!! 11/9/2021: This code has never been used before due to a logic issue preventing it from
+                //                  being reached. It will need testing. I'm commenting it out for now to keep
+                //                  previous behavior:
+
+                // Double wavetable sample length.
+                // This is lower all wavetable instruments by one octave, which should make it
+                // match the octave for wavetable instruments in Deflemask
+                ///m_SampleLength[indexLow] *= 2;
+                ///m_SampleLength[indexHigh] *= 2;
+            }
+
+            splitSample.splitPoint = {DMF_NOTE_C, 4};
+
+            // TODO: Previously stored two note range values instead of a single "split point". Will this work?
+            //m_NoteRangeStart[indexLow].octave = 1;
+            //m_NoteRangeStart[indexLow].pitch = DMF_NOTE_C;
+            //m_NoteRangeStart[indexHigh].octave = 4;
+            //m_NoteRangeStart[indexHigh].pitch = DMF_NOTE_C;
+            finetune = 0;
+
+            if (highestNote == (Note){DMF_NOTE_C, 7})
+            {
+                m_Status.AddWarning(GetWarningMessage(MOD::ConvertWarning::PitchHigh));
+            }
+
+            /*
+            // If lowest possible note is needed:
+            if (lowestNote == (Note){DMF_NOTE_C, 1})
+            {
+                // If highest and lowest possible notes are both needed:
+                if (highestNote == (Note){DMF_NOTE_C, 7})
+                {
+                    ///std::cout << "WARNING: Can't use the highest Deflemask note (C-8).\n";
+                    //std::cout << "WARNING: Can't use both the highest note (C-8) and the lowest note (C-2).\n";
+                }
+                else // Only highest possible note is needed 
+                {
+                    finetune = 7; // One semitone up from B = C-  ???
+                }
+            }
+            */
+
+            splitSample.lowId = currentMODSampleId++; // Assign PT sample number to this square wave / WAVE sample
+            splitSample.highId = currentMODSampleId++; // Assign PT sample number to this square wave / WAVE sample
+            // Called ExportSampleInfo here
+        }
+    }
+
+    m_TotalMODSamples = currentMODSampleId - 1; // Set the number of PT samples that will be needed. (minus sample #0 which is special)
+    return 0; // Success
+}
+
+
+
+
+
+
+// OLD METHOD; CAN REMOVE WHEN READY. Replaced with CreateSampleMapping
 int MOD::InitSamples(const DMF& dmf)
 {
     // This function loops through all DMF pattern contents to find the highest and lowest notes 
@@ -875,6 +1221,7 @@ int MOD::InitSamples(const DMF& dmf)
     return FinalizeSampMap(dmf);
 }
 
+// OLD METHOD; CAN REMOVE WHEN READY. Replaced with SampleSplittingAndAssignment
 int MOD::FinalizeSampMap(const DMF& dmf)
 {
     // This function assigns ProTracker (PT) sample numbers and exports sample info
@@ -998,7 +1345,7 @@ int MOD::FinalizeSampMap(const DMF& dmf)
 
                 // !!!! 11/9/2021: This code has never been used before due to a logic issue preventing it from
                 //                  being reached. It will need testing. I'm commenting it out for now to keep
-                //                  previous behavior.
+                //                  previous behavior:
 
                 // Double wavetable sample length.
                 // This is lower all wavetable instruments by one octave, which should make it
@@ -1046,6 +1393,8 @@ int MOD::FinalizeSampMap(const DMF& dmf)
     m_TotalMODSamples = ptSampleNum - 1; // Set the number of PT samples that will be needed. (minus sample #0 which is special)
     return 0; // Success
 }
+
+
 
 void MOD::ExportSampleInfo(const DMF& dmf, int8_t ptSampleNumLow, int8_t ptSampleNumHigh, uint8_t indexLow, uint8_t indexHigh, int8_t finetune)
 {

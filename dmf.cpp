@@ -669,6 +669,41 @@ double DMF::GetBPM() const
     return (15.0 * globalTick) / ((m_ModuleInfo.timeBase + 1) * (m_ModuleInfo.tickTime1 + m_ModuleInfo.tickTime2));
 }
 
+bool operator==(const Note& lhs, const Note& rhs)
+{
+    return lhs.octave == rhs.octave && lhs.pitch == rhs.pitch;
+}
+
+bool operator!=(const Note& lhs, const Note& rhs)
+{
+    return lhs.octave != rhs.octave || lhs.pitch != rhs.pitch;
+}
+
+// For the following operators:
+// Assumes note isn't Note OFF or Empty note
+// Notes must use the DMF convention where the note C# is the 1st note of an octave rather than C-
+
+bool operator>(const Note& lhs, const Note& rhs)
+{
+    return lhs.octave + lhs.pitch / 13.f > rhs.octave + rhs.pitch / 13.f;
+}
+
+bool operator<(const Note& lhs, const Note& rhs)
+{
+    return lhs.octave + lhs.pitch / 13.f < rhs.octave + rhs.pitch / 13.f;
+}
+
+bool operator>=(const Note& lhs, const Note& rhs)
+{
+    return lhs.octave + lhs.pitch / 13.f >= rhs.octave + rhs.pitch / 13.f;
+}
+
+bool operator<=(const Note& lhs, const Note& rhs)
+{
+    return lhs.octave + lhs.pitch / 13.f <= rhs.octave + rhs.pitch / 13.f;
+}
+
+
 int8_t NoteCompare(const Note& n1, const Note& n2)
 {
     // Compares notes n1 and n2

@@ -47,6 +47,16 @@ struct ChannelRow
     uint8_t EffectValue;
 };
 
+typedef int dmf_sample_id_t;
+typedef int mod_sample_id_t;
+
+struct MODSplitSample
+{
+    mod_sample_id_t lowId;
+    mod_sample_id_t highId; // -1 in the case that this upper range is not needed
+    Note splitPoint; // Either the first note of the upper range (high ID), or the first note of the range
+};
+
 class MODConversionOptions : public ConversionOptionsInterface<MODConversionOptions>
 {
 public:
@@ -131,6 +141,11 @@ private:
 
     uint8_t GetPTTempo(double bpm);
 
+    // Gets MOD sample ID from DMF sample ID and note.
+    mod_sample_id_t GetMODSampleId(dmf_sample_id_t dmfSampleId, const Note& dmfNote);
+
+    bool CreateSampleMapping(const DMF& dmf);
+    bool SampleSplittingAndAssignment();
 
     const ChannelRow& GetChannelRow(unsigned pattern, unsigned row, unsigned channel)
     {
@@ -156,8 +171,8 @@ private:
     The value of sampMap is -1 if a PT sample is not needed for the given SQW / WAVE sample. 
     */
     std::vector<int8_t> m_SampleMap;
-    //std::map<unsigned char, unsigned char> m_SampleMap;
-
+    std::map<dmf_sample_id_t, MODSplitSample> m_SampleMap2;
+    
 
     unsigned char m_DMFTotalWavetables; // For effeciency. dmf->GetTotalWavetables() 
     
@@ -201,6 +216,8 @@ private:
     // First 4 indicies are for square waves, rest are for wavetables.
     std::vector<Note> m_LowestNotes;
     std::vector<Note> m_HighestNotes;
+
+    std::map<dmf_sample_id_t, std::pair<Note, Note>> m_SampleIdLowestHighestNotesMap;
 
     int8_t m_TotalMODSamples;
 

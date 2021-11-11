@@ -63,11 +63,18 @@ typedef enum DMF_GAMEBOY_EFFECT {
 
 // To do: Add enums for effects exclusive to the rest of Deflemask's systems. 
 
-typedef struct Note
+struct Note
 {
     uint16_t pitch;
     uint16_t octave;
-} Note;
+};
+
+bool operator==(const Note& lhs, const Note& rhs);
+bool operator!=(const Note& lhs, const Note& rhs);
+bool operator>(const Note& lhs, const Note& rhs);
+bool operator<(const Note& lhs, const Note& rhs);
+bool operator>=(const Note& lhs, const Note& rhs);
+bool operator<=(const Note& lhs, const Note& rhs);
 
 typedef struct System
 {

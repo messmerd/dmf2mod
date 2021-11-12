@@ -130,22 +130,27 @@ public:
 private:
     bool ConvertFrom(const Module* input, const ConversionOptionsPtr& options) override;
 
-    int InitSamples(const DMF& dmf);
-    int FinalizeSampMap(const DMF& dmf);
+    // Conversion:
+    bool CreateSampleMapping(const DMF& dmf);
+    bool SampleSplittingAndAssignment();
+    bool ConvertSampleData(const DMF& dmf);
+    bool ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelState& state, ChannelRow& modChannelRow);
+    void MOD::ConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectValue, uint16_t& modEffectCode, uint16_t& modEffectValue);
+    bool ConvertEffect(const PatternRow& pat, MODChannelState& state, uint16_t& effectCode, uint16_t& effectValue);
+
+
     void ExportSampleInfo(const DMF& dmf, int8_t ptSampleNumLow, int8_t ptSampleNumHigh, uint8_t indexLow, uint8_t indexHigh, int8_t finetune);
     void ExportSampleData(const DMF& dmf);
     void ExportSampleDataHelper(const DMF& dmf, uint8_t ptSampleNum, uint8_t index);
-    int WriteProTrackerPatternRow(const DMF& dmf, const PatternRow& pat, MODChannelState& state);
-    int CheckEffects(const PatternRow& pat, MODChannelState& state, uint16_t& effect);
-    uint16_t GetProTrackerEffect(int16_t effectCode, int16_t effectValue);
+    
+    
 
     uint8_t GetPTTempo(double bpm);
 
     // Gets MOD sample ID from DMF sample ID and note.
     mod_sample_id_t GetMODSampleId(dmf_sample_id_t dmfSampleId, const Note& dmfNote);
 
-    bool CreateSampleMapping(const DMF& dmf);
-    bool SampleSplittingAndAssignment();
+    
 
     const ChannelRow& GetChannelRow(unsigned pattern, unsigned row, unsigned channel)
     {
@@ -173,6 +178,10 @@ private:
     std::vector<int8_t> m_SampleMap;
     std::map<dmf_sample_id_t, MODSplitSample> m_SampleMap2;
     
+    
+
+    std::map<mod_sample_id_t, std::vector<int8_t>> m_Samples;
+    std::map<mod_sample_id_t, unsigned> m_SampleLengths;
 
     unsigned char m_DMFTotalWavetables; // For effeciency. dmf->GetTotalWavetables() 
     
@@ -218,12 +227,15 @@ private:
     std::vector<Note> m_HighestNotes;
 
     std::map<dmf_sample_id_t, std::pair<Note, Note>> m_SampleIdLowestHighestNotesMap;
+    bool m_SilentSampleNeeded = false;
 
     int8_t m_TotalMODSamples;
 
     MODConversionOptions* m_Options;
 
     const bool m_UsingSetupPattern = true; // Whether to use a pattern at the start of the module to set up the initial tempo and other stuff. 
+
+    std::string m_SongName;
 
     std::stringstream m_Stream;
 };

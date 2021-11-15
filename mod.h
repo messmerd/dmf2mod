@@ -66,6 +66,10 @@ struct MODSampleInfo
     // -1 in the case that the upper range is not needed
     mod_sample_id_t highId;
 
+    // Sample lengths:
+    unsigned lowLength;
+    unsigned highLength;
+
     /*
         Specifies the first note of high note range for a given SQW / WAVE sample, or
         the first note of the range if it does not have both a high and low note range.
@@ -253,6 +257,5 @@ private:
     unsigned m_NumberOfRowsInPatternMatrix;
     std::vector<std::vector<ChannelRow>> m_Patterns; // Per pattern: Vector of channel rows that together contain data for entire pattern
     std::map<mod_sample_id_t, std::vector<int8_t>> m_Samples;
-    std::map<mod_sample_id_t, unsigned> m_SampleLengths;
 
 };

@@ -292,7 +292,7 @@ bool MOD::ConvertPatterns(const DMF& dmf)
         posJumpRow.SamplePeriod = 0;
         posJumpRow.EffectCode = PT_POSJUMP;
         posJumpRow.EffectValue = 1;
-        SetChannelRow(0, 0, 0, posJumpRow);
+        SetChannelRow(0, 0, 1, posJumpRow);
 
         // All other channel rows in the pattern are already zeroed out so nothing needs to be done for them
     }
@@ -399,7 +399,6 @@ bool MOD::ConvertPatterns(const DMF& dmf)
                     // Error occurred while writing the pattern row
                     m_SampleIdLowestHighestNotesMap.clear();
                     m_SampleMap2.clear();
-                    m_SampleLengths.clear();
                     return true;
                 }
 
@@ -866,7 +865,7 @@ bool MOD::CreateSampleMapping(const DMF& dmf)
     PatternRow*** const patternValues = dmf.GetPatternValues();
     uint8_t** const patternMatrixValues = dmf.GetPatternMatrixValues();
     
-    // Most of the following nested for loop is copied from the export pattern data loop in ConvertFrom.
+    // Most of the following nested for loop is copied from the export pattern data loop in ConvertPatterns.
     // I didn't want to do this, but I think having two of the same loop is the only simple way.
     // Loop through SQ1, SQ2, and WAVE channels:
     for (int chan = DMF_GAMEBOY_SQW1; chan <= DMF_GAMEBOY_WAVE; chan++)
@@ -987,9 +986,12 @@ bool MOD::SampleSplittingAndAssignment()
         dmf_sample_id_t sampleId = mapPair.first;
         MODSampleInfo& modSampleInfo = mapPair.second;
 
-        auto& lowHighNotes = m_SampleIdLowestHighestNotesMap[sampleId];
-        auto& lowestNote = lowHighNotes.first;
-        auto& highestNote = lowHighNotes.second;
+        modSampleInfo.lowLength = 0;
+        modSampleInfo.highLength = 0;
+
+        const auto& lowHighNotes = m_SampleIdLowestHighestNotesMap[sampleId];
+        const auto& lowestNote = lowHighNotes.first;
+        const auto& highestNote = lowHighNotes.second;
 
         // Whether the DMF "sample" (square wave type or wavetable) will need two MOD samples to work given PT's limited range
         bool noSplittingIsNeeded = false;
@@ -999,30 +1001,22 @@ bool MOD::SampleSplittingAndAssignment()
         {
             // (Note: The note C-n in the Deflemask tracker is called C-(n-1) in DMF format because the 1st note of an octave is C# in DMF files.)
 
-            Note lowNoteToCompare = { DMF_NOTE_C, 1 };
-            Note highNoteToCompare = { DMF_NOTE_B, 4 };
-
-            if (lowestNote >= lowNoteToCompare && highNoteToCompare <= highNoteToCompare)
+            if (lowestNote >= (Note){DMF_NOTE_C, 1} && highestNote <= (Note){DMF_NOTE_B, 4})
             {
                 noSplittingIsNeeded = true;
 
                 // If between C-2 and B-4 (Deflemask tracker note format)
-                modSampleInfo.splitPoint.pitch = lowNoteToCompare.pitch;
-                modSampleInfo.splitPoint.octave = lowNoteToCompare.octave;
-                // Use sample length: 64 (Double length)
+                modSampleInfo.splitPoint = { DMF_NOTE_C, 1 };
+                modSampleInfo.lowLength = 64; // Use sample length: 64 (Double length)
             }
 
-            lowNoteToCompare = { DMF_NOTE_C, 2 };
-            highNoteToCompare = { DMF_NOTE_B, 5 };
-
-            if (lowestNote >= lowNoteToCompare && highNoteToCompare <= highNoteToCompare)
+            if (lowestNote >= (Note){DMF_NOTE_C, 2} && highestNote <= (Note){DMF_NOTE_B, 5})
             {
                 noSplittingIsNeeded = true;
 
                 // If between C-3 and B-5 (Deflemask tracker note format)
-                modSampleInfo.splitPoint.pitch = lowNoteToCompare.pitch;
-                modSampleInfo.splitPoint.octave = lowNoteToCompare.octave;
-                // Use sample length: 32 (regular wavetable length)
+                modSampleInfo.splitPoint = { DMF_NOTE_C, 2 };
+                modSampleInfo.lowLength = 32; // Use sample length: 32 (regular wavetable length)
             }
             else if (lowestNote >= (Note){DMF_NOTE_C, 3} && highestNote <= (Note){DMF_NOTE_B, 6})
             {
@@ -1036,7 +1030,7 @@ bool MOD::SampleSplittingAndAssignment()
                 noSplittingIsNeeded = true;
 
                 modSampleInfo.splitPoint = { DMF_NOTE_C, 3 };
-                // Use sample length: 16 (half length - downsampling needed)
+                modSampleInfo.lowLength = 16; // Use sample length: 16 (half length - downsampling needed)
             }
             else if (lowestNote >= (Note){DMF_NOTE_C, 4} && highestNote <= (Note){DMF_NOTE_B, 7})
             {
@@ -1050,7 +1044,7 @@ bool MOD::SampleSplittingAndAssignment()
                 noSplittingIsNeeded = true;
 
                 modSampleInfo.splitPoint = { DMF_NOTE_C, 4 };
-                // Use sample length: 8 (1/4 length - downsampling needed)
+                modSampleInfo.lowLength = 8; // Use sample length: 8 (1/4 length - downsampling needed)
             }
             else if (highestNote == (Note){DMF_NOTE_C, 7})
             {
@@ -1067,7 +1061,7 @@ bool MOD::SampleSplittingAndAssignment()
                 //finetune = 0; // One semitone up from B = C- ??? was 7
 
                 modSampleInfo.splitPoint = { DMF_NOTE_C, 4 };
-                // Use sample length: 8 (1/4 length - downsampling needed)
+                modSampleInfo.lowLength = 8; // Use sample length: 8 (1/4 length - downsampling needed)
             }
 
             if (noSplittingIsNeeded) // If one of the above options worked
@@ -1086,7 +1080,7 @@ bool MOD::SampleSplittingAndAssignment()
                 modSampleInfo.highId = -1; // No PT sample needed for this square wave / WAVE sample (high note range)
                 // TODO: Was exporting sample info here
                 currentMODSampleId++;
-                std::cout << "Added a non-split sample to map\n";
+                std::cout << "Added a non-split sample to map; sampleId=" << sampleId << ";\n";
             }
         }
 
@@ -1094,7 +1088,9 @@ bool MOD::SampleSplittingAndAssignment()
         if (!noSplittingIsNeeded) // If splitting is necessary
         {
             // Use sample length: 64 (Double length) for low range (C-2 to B-4)
+            modSampleInfo.lowLength = 64;
             // Use sample length: 8 (Quarter length) for high range (C-5 to B-7)
+            modSampleInfo.highLength = 8;
 
             // If on a wavetable sample
             if (sampleId >= 4)
@@ -1151,7 +1147,7 @@ bool MOD::SampleSplittingAndAssignment()
             modSampleInfo.highId = currentMODSampleId++; // Assign PT sample number to this square wave / WAVE sample
             // Called ExportSampleInfo here
 
-            std::cout << "Added a split sample to map\n";
+            std::cout << "Added a split sample to map: sampleId=" << sampleId << ";\n";
         }
     }
 
@@ -1159,8 +1155,10 @@ bool MOD::SampleSplittingAndAssignment()
     if (m_SilentSampleNeeded)
     {
         m_SampleMap2[-1] = {};
-        m_SampleMap2[-1].lowId = 1;
+        m_SampleMap2[-1].lowId = 1; // Silent sample is always sample #1 if it is used
         m_SampleMap2[-1].highId = -1;
+        m_SampleMap2[-1].lowLength = 8;
+        m_SampleMap2[-1].highLength = 0;
         m_SampleMap2[-1].splitPoint = {};
         std::cout << "Added silent sample to map\n";
     }
@@ -1172,7 +1170,9 @@ bool MOD::SampleSplittingAndAssignment()
     std::cout << "Total MOD samples:" << std::to_string(m_TotalMODSamples) << "; m_SampleMap2.size():" << m_SampleMap2.size() << ";\n";
     for (const auto& mapPair : m_SampleMap2)
     {
-
+        auto sampId = mapPair.first;
+        const auto& sampInfo = mapPair.second;
+        std::cout << "dmf sample Id: " << sampId << "; mod lowId: " << sampInfo.lowId << "; mod highId: " << sampInfo.highId << "; low length: " << sampInfo.lowLength << "; high length: " << sampInfo.highLength << ";\n";
     }
 
 
@@ -1263,6 +1263,8 @@ bool MOD::ConvertSampleData(const DMF& dmf)
 
         mod_sample_id_t lowId = modSampleInfo.lowId;
         mod_sample_id_t highId = modSampleInfo.highId;
+        unsigned lowSampleLength = modSampleInfo.lowLength;
+        unsigned highSampleLength = modSampleInfo.highLength;
 
         bool isSplitSample = highId != -1;
 
@@ -1273,18 +1275,18 @@ bool MOD::ConvertSampleData(const DMF& dmf)
         // If it's a square wave sample
         if (sampleId <= 3)
         {
-            m_Samples[lowId] = GenerateSquareWaveSample(sampleId, m_SampleLengths[lowId]);
+            m_Samples[lowId] = GenerateSquareWaveSample(sampleId, lowSampleLength);
             if (isSplitSample)
-                m_Samples[highId] = GenerateSquareWaveSample(sampleId, m_SampleLengths[highId]);
+                m_Samples[highId] = GenerateSquareWaveSample(sampleId, highSampleLength);
         }
         else // Wavetable sample
         {
             const int wavetableIndex = sampleId - 4;
             uint32_t* wavetableData = dmf.GetWavetableValues()[wavetableIndex];
             
-            m_Samples[lowId] = GenerateWavetableSample(wavetableData, m_SampleLengths[lowId]);
+            m_Samples[lowId] = GenerateWavetableSample(wavetableData, lowSampleLength);
             if (isSplitSample)
-                m_Samples[highId] = GenerateWavetableSample(wavetableData, m_SampleLengths[highId]);
+                m_Samples[highId] = GenerateWavetableSample(wavetableData, highSampleLength);
         }
     }
 
@@ -1293,7 +1295,6 @@ bool MOD::ConvertSampleData(const DMF& dmf)
     {
         // -1 is the ID for the special silent sample
         m_Samples[-1] = {0,0,0,0,0,0,0,0};
-        m_SampleLengths[-1] = 8;
     }
 
     return false;
@@ -1374,16 +1375,16 @@ void MOD::ExportSampleInfo(std::ofstream& fout) const
             while (name.size() < 22)
                 name += " ";
             
-            const mod_sample_id_t modSampleId = noteRange == 0 ? sampleInfo.lowId : sampleInfo.highId;
+            const unsigned modSampleLength = noteRange == 0 ? sampleInfo.lowLength : sampleInfo.highLength;
 
-            fout.put(m_SampleLengths.at(modSampleId) >> 9);         // Length byte 0
-            fout.put(m_SampleLengths.at(modSampleId) >> 1);         // Length byte 1
-            fout.put(finetune);                                     // Finetune value !!!
-            fout.put(PT_NOTE_VOLUMEMAX);                            // Sample volume // TODO: Optimize this?
-            fout.put(0);                                            // Repeat offset byte 0
-            fout.put(0);                                            // Repeat offset byte 1
-            fout.put(m_SampleLengths.at(modSampleId) >> 9);            // Sample repeat length byte 0
-            fout.put((m_SampleLengths.at(modSampleId) >> 1) & 0x00FF); // Sample repeat length byte 1
+            fout.put(modSampleLength >> 9);     // Length byte 0
+            fout.put(modSampleLength >> 1);     // Length byte 1
+            fout.put(finetune);                 // Finetune value !!!
+            fout.put(PT_NOTE_VOLUMEMAX);        // Sample volume // TODO: Optimize this?
+            fout.put(0);                        // Repeat offset byte 0
+            fout.put(0);                        // Repeat offset byte 1
+            fout.put(modSampleLength >> 9);     // Sample repeat length byte 0
+            fout.put(modSampleLength >> 1);     // Sample repeat length byte 1
         }
     }
 

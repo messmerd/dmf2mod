@@ -61,7 +61,7 @@ typedef enum DMF_GAMEBOY_EFFECT {
     DMF_SETSWEEPDIR=0x14
 } DMF_GAMEBOY_EFFECT;
 
-// To do: Add enums for effects exclusive to the rest of Deflemask's systems. 
+// To do: Add enums for effects exclusive to the rest of Deflemask's systems.
 
 struct Note
 {
@@ -133,7 +133,7 @@ typedef struct Instrument
 
 } Instrument;
 
-typedef struct PCMSample 
+typedef struct PCMSample
 {
     uint32_t size; 
     char *name; 

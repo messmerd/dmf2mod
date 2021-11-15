@@ -37,6 +37,13 @@ static const unsigned int PT_NOTE_VOLUMEMAX = 64u; // Yes, there are 65 differen
 static std::string ErrorMessageCreator(Status::Category category, int errorCode, const std::string& arg);
 static std::string GetWarningMessage(MOD::ConvertWarning warning);
 
+/*
+static Note ToDMFNote(MODNote note)
+{
+    return (Note){ .octave=note.octave, .pitch=note.pitch };
+}
+*/
+
 // The current square wave duty cycle, note volume, and other information that the 
 //      tracker stores for each channel while playing a tracker file.
 typedef struct MODChannelState
@@ -124,8 +131,6 @@ void MODConversionOptions::PrintHelp()
 
 MOD::MOD()
 {
-    m_Stream.clear();
-    m_Stream.str(std::string());
     m_Status.SetErrorMessageCreator(&ErrorMessageCreator);
 }
 
@@ -138,7 +143,13 @@ bool MOD::Export(const std::string& filename)
         m_Status.SetError(Status::Category::Export, Status::ExportError::FileOpen);
         return true;
     }
-    outFile << m_Stream.rdbuf();
+
+    ExportModuleName(outFile);
+    ExportSampleInfo(outFile);
+    ExportModuleInfo(outFile);
+    ExportPatterns(outFile);
+    ExportSampleData(outFile);
+
     outFile.close();
 
     if (!ModuleUtils::GetCoreOptions().silent)
@@ -183,7 +194,8 @@ bool MOD::ConvertFrom(const Module* input, const ConversionOptionsPtr& options)
     }
 
     const ModuleInfo& moduleInfo = dmf.GetModuleInfo();
-    if (moduleInfo.totalRowsInPatternMatrix + (int)m_UsingSetupPattern > 64) // totalRowsInPatternMatrix is 1 more than it actually is 
+    m_NumberOfRowsInPatternMatrix = moduleInfo.totalRowsInPatternMatrix + (int)m_UsingSetupPattern;
+    if (m_NumberOfRowsInPatternMatrix > 64) // totalRowsInPatternMatrix is 1 more than it actually is 
     {
         m_Status.SetError(Status::Category::Convert, MOD::ConvertError::TooManyPatternMatrixRows);
         return true;
@@ -195,37 +207,27 @@ bool MOD::ConvertFrom(const Module* input, const ConversionOptionsPtr& options)
         return true;
     }
 
+    m_NumberOfChannels = DMF::SYSTEMS(SYS_GAMEBOY).channels;
+    m_NumberOfChannelsPowOfTwo = 0;
+    unsigned channels = m_NumberOfChannels;
+    while (channels > 1)
+    {
+        channels >>= 1;
+        m_NumberOfChannelsPowOfTwo++;
+    }
+
     ///////////////// CONVERT SONG NAME
 
-    VisualInfo visualInfo = dmf.GetVisualInfo();
-
-    m_SongName.clear();
-    for (int i = 0; i < visualInfo.songNameLength; i++)
+    m_ModuleName.clear();
+    for (int i = 0; i < dmf.GetVisualInfo().songNameLength; i++)
     {
-        m_SongName += (char)tolower(visualInfo.songName[i]);
+        m_ModuleName += (char)tolower(dmf.GetVisualInfo().songName[i]);
     }
-
-    /*
-    // Print module name, truncating or padding with zeros as needed
-    for (int i = 0; i < 20; i++)
-    {
-        if (i < visualInfo.songNameLength)
-        {
-            m_Stream.put(tolower(visualInfo.songName[i]));
-        }
-        else
-        {
-            m_Stream.put(0);
-        }
-    }
-    */
 
     ///////////////// CONVERT SAMPLE INFO
 
     if (!silent)
         std::cout << "Converting sample info...\n";
-
-    m_DMFTotalWavetables = dmf.GetTotalWavetables();
 
     if (CreateSampleMapping(dmf))
     {
@@ -233,106 +235,74 @@ bool MOD::ConvertFrom(const Module* input, const ConversionOptionsPtr& options)
         return true;
     }
 
-    m_LowestNotes.clear();
-    m_HighestNotes.clear();
+    // Not needed anymore:
+    m_SampleIdLowestHighestNotesMap.clear();
     
+    ///////////////// CONVERT SAMPLE DATA
+
+    if (!silent)
+        std::cout << "Converting samples...\n";
+
     if (ConvertSampleData(dmf))
     {
         return true;
     }
-
-    /* // For testing
-    for (int i = 0; i < 8 + dmf->totalWavetables * 2; i++) 
-    {
-        printf("sampMap[%i] = %i. noteRangeStart[n] = %i, %i.\n", i, sampMap[i], noteRangeStart[i].pitch, noteRangeStart[i].octave); 
-    }
-    */
-
-   /*
-    // The remaining samples are blank:
-    for (int i = m_TotalMODSamples; i < 31; i++)
-    {
-        // According to real ProTracker files viewed in a hex viewer, the 30th and final byte
-        //    of a blank sample is 0x01 and all 29 other bytes are 0x00.
-        for (int j = 0; j < 29; j++)
-        {
-            m_Stream.put(0);
-        }
-        m_Stream.put(1);
-    }
-    */
-
-    ///////////////// EXPORT OTHER INFO
-
-    if (!silent)
-        std::cout << "Converting other information...\n";
-
-    m_Stream.put(moduleInfo.totalRowsInPatternMatrix + (int)m_UsingSetupPattern);   // Song length in patterns (not total number of patterns) 
-    m_Stream.put(127);                        // 0x7F - Useless byte that has to be here
-
-    // Pattern matrix (Each ProTracker pattern number is the same as its pattern matrix row number)
-    for (uint8_t i = 0; i < moduleInfo.totalRowsInPatternMatrix + (int)m_UsingSetupPattern; i++)
-    {
-        m_Stream.put(i);
-    }
-    for (uint8_t i = moduleInfo.totalRowsInPatternMatrix + (int)m_UsingSetupPattern; i < 128; i++)
-    {
-        m_Stream.put(0);
-    }
-    
-    m_Stream << "M.K."; // ProTracker uses "M!K!" if there's more than 64 pattern matrix rows...
 
     ///////////////// CONVERT PATTERN DATA
 
     if (!silent)
         std::cout << "Converting pattern data...\n";
 
+    if (ConvertPatterns(dmf))
+        return true;
+    
+    ///////////////// CLEAN UP
+
+    // Temporaries used during conversion:
+    m_SampleMap2.clear();
+
+    if (!silent)
+        std::cout << "Done converting to MOD.\n\n";
+
+    // Success
+    return false;
+}
+
+bool MOD::ConvertPatterns(const DMF& dmf)
+{
+    m_Patterns.assign(m_NumberOfRowsInPatternMatrix, {});
+
+    m_InitialTempo = GetMODTempo(dmf.GetBPM());
+
     if (m_UsingSetupPattern)
     {
-        // Export initial tempo (An approximation. ProTracker can only support Deflemask tempo between 16 and 127.5 bpm.)
-        uint16_t effect = ((uint16_t)PT_SETSPEED << 4) | GetPTTempo(dmf.GetBPM());
-        m_Stream.put(0);  // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
-        m_Stream.put(0);  // Sample period/effect param. (lower 8 bits)
-        m_Stream.put((effect & 0x0F00) >> 8); // Sample number (lower 4b); effect code (upper 4b)
-        m_Stream.put(effect & 0x00FF); // Effect code (lower 8 bits)
+        m_Patterns[0].assign(64 * m_NumberOfChannels, {0, 0, 0, 0});
 
-        // Export position jump (once the Pattern Break effect is implemented, it can be used instead.)
-        effect = ((uint16_t)PT_POSJUMP << 4) | 1; // Jump to next pattern
-        m_Stream.put(0);  // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
-        m_Stream.put(0);  // Sample period/effect param. (lower 8 bits)
-        m_Stream.put((effect & 0x0F00) >> 8); // Sample number (lower 4b); effect code (upper 4b)
-        m_Stream.put(effect & 0x00FF); // Effect code (lower 8 bits)
+        // Set initial tempo (An approximation. ProTracker can only support Deflemask tempo between 16 and 127.5 bpm.)
+        ChannelRow tempoRow;
+        tempoRow.SampleNumber = 0;
+        tempoRow.SamplePeriod = 0;
+        tempoRow.EffectCode = PT_SETSPEED;
+        tempoRow.EffectValue = m_InitialTempo;
+        SetChannelRow(0, 0, 0, tempoRow);
 
-        // Blank (WAVE channel)
-        m_Stream.put(0); // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
-        m_Stream.put(0); // Sample period/effect param. (lower 8 bits)
-        m_Stream.put(0); // Sample number (lower 4b); effect code (upper 4b)
-        m_Stream.put(0); // Effect code (lower 8 bits)
+        // Set position jump (once the Pattern Break effect is implemented, it can be used instead.)
+        ChannelRow posJumpRow;
+        posJumpRow.SampleNumber = 0;
+        posJumpRow.SamplePeriod = 0;
+        posJumpRow.EffectCode = PT_POSJUMP;
+        posJumpRow.EffectValue = 1;
+        SetChannelRow(0, 0, 0, posJumpRow);
 
-        // Blank (NOISE channel)
-        m_Stream.put(0); // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
-        m_Stream.put(0); // Sample period/effect param. (lower 8 bits)
-        m_Stream.put(0); // Sample number (lower 4b); effect code (upper 4b)
-        m_Stream.put(0); // Effect code (lower 8 bits)
-        
-        // Loop through the rest of the rows in 1st pattern:
-        for (int patRow = 1; patRow < 64; patRow++)
-        {
-            // Loop through channels:
-            for (int chan = 0; chan < DMF::SYSTEMS(SYS_GAMEBOY).channels; chan++)
-            {
-                m_Stream.put(0); // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
-                m_Stream.put(0); // Sample period/effect param. (lower 8 bits) 
-                m_Stream.put(0); // Sample number (lower 4b); effect code (upper 4b)
-                m_Stream.put(0); // Effect code (lower 8 bits)
-            }
-        }
+        // All other channel rows in the pattern are already zeroed out so nothing needs to be done for them
     }
-    
+
+    std::cout << "Here\n";
+
     // The current square wave duty cycle, note volume, and other information that the 
     //      tracker stores for each channel while playing a tracker file.
-    MODChannelState state[DMF::SYSTEMS(SYS_GAMEBOY).channels], stateJumpCopy[DMF::SYSTEMS(SYS_GAMEBOY).channels];
-    for (int i = 0; i < DMF::SYSTEMS(SYS_GAMEBOY).channels; i++)
+    MODChannelState state[m_NumberOfChannels], stateJumpCopy[m_NumberOfChannels];
+    for (unsigned i = 0; i < m_NumberOfChannels; i++)
     {
         state[i].channel = (DMF_GAMEBOY_CHANNEL)i;   // Set channel types: SQ1, SQ2, WAVE, NOISE.
         state[i].dutyCycle = 0; // Default is 0 or a 12.5% duty cycle square wave.
@@ -359,14 +329,19 @@ bool MOD::ConvertFrom(const Module* input, const ConversionOptionsPtr& options)
     bool stateSuspended = false; // true == currently in part that a Position Jump skips over
     int8_t jumpDestination = -1; // Pattern matrix row where you are jumping to. Not a loop.
 
+    const int dmfTotalRowsInPatternMatrix = dmf.GetModuleInfo().totalRowsInPatternMatrix;
+
     // Loop through ProTracker pattern matrix rows (corresponds to pattern numbers):
-    for (int patMatRow = 0; patMatRow < moduleInfo.totalRowsInPatternMatrix; patMatRow++)
+    for (int patMatRow = 0; patMatRow < dmfTotalRowsInPatternMatrix; patMatRow++)
     {
+        // patMatRow is in MOD pattern matrix rows, not DMF
+        m_Patterns[patMatRow + (int)m_UsingSetupPattern].assign(64 * m_NumberOfChannels, {});
+
         // Loop through rows in a pattern:
-        for (int patRow = 0; patRow < 64; patRow++)
+        for (unsigned patRow = 0; patRow < 64; patRow++)
         {
             // Loop through channels:
-            for (int chan = 0; chan < DMF::SYSTEMS(SYS_GAMEBOY).channels; chan++)
+            for (unsigned chan = 0; chan < m_NumberOfChannels; chan++)
             {
                 pat = patternValues[chan][patternMatrixValues[chan][patMatRow]][patRow];
                 effectCode = pat.effectCode[0];
@@ -376,7 +351,7 @@ bool MOD::ConvertFrom(const Module* input, const ConversionOptionsPtr& options)
                 if (patMatRow == jumpDestination && patRow == 0 && stateSuspended)
                 {
                     // Restore state copies
-                    for (int v = 0; v < DMF::SYSTEMS(SYS_GAMEBOY).channels; v++)
+                    for (unsigned v = 0; v < m_NumberOfChannels; v++)
                     {
                         state[v] = stateJumpCopy[v];
                     }
@@ -391,7 +366,7 @@ bool MOD::ConvertFrom(const Module* input, const ConversionOptionsPtr& options)
                     if (effectValue >= patMatRow) // If not a loop
                     {
                         // Save copies of states
-                        for (int v = 0; v < DMF::SYSTEMS(SYS_GAMEBOY).channels; v++)
+                        for (unsigned v = 0; v < m_NumberOfChannels; v++)
                         {
                             stateJumpCopy[v] = state[v];
                         }
@@ -417,42 +392,30 @@ bool MOD::ConvertFrom(const Module* input, const ConversionOptionsPtr& options)
                 }
                 #pragma endregion
 
-                if (WriteProTrackerPatternRow(dmf, pat, state[chan]))
+                ChannelRow tempChannelRow;
+
+                if (ConvertChannelRow(dmf, pat, state[chan], tempChannelRow))
                 {
                     // Error occurred while writing the pattern row
-                    m_NoteRangeStart.clear();
-                    m_SampleMap.clear();
-                    m_SampleLength.clear();
+                    m_SampleIdLowestHighestNotesMap.clear();
+                    m_SampleMap2.clear();
+                    m_SampleLengths.clear();
                     return true;
                 }
+
+                SetChannelRow(patMatRow + (int)m_UsingSetupPattern, patRow, chan, tempChannelRow);
             }
         }
     }
 
-    ///////////////// CONVERT SAMPLE DATA
-
-    if (!silent)
-        std::cout << "Converting samples...\n";
-    ExportSampleData(dmf);
-    
-    ///////////////// CLEAN UP
-
-    m_NoteRangeStart.clear();
-    m_SampleMap.clear();
-    m_SampleLength.clear();
-
-    if (!silent)
-        std::cout << "Done converting to MOD.\n\n";
-
-    // Success
     return false;
 }
 
 bool MOD::ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelState& state, ChannelRow& modChannelRow)
 {
     // Writes 4 bytes of pattern row information to the .mod file
-    uint16_t effect;
-    if (ConvertEffect(pat, state, effect))
+    uint16_t effectCode, effectValue;
+    if (ConvertEffect(pat, state, effectCode, effectValue))
     {
         return true; // An error occurred
     }
@@ -461,11 +424,13 @@ bool MOD::ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelSta
     {
         modChannelRow.SampleNumber = 0;
         modChannelRow.SamplePeriod = 0;
-        modChannelRow.EffectCode
-        m_Stream.put(0); // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
-        m_Stream.put(0); // Sample period/effect param. (lower 8 bits)
-        m_Stream.put((effect & 0x0F00) >> 8);  // Sample number (lower 4b) = 0 b/c there's no note; effect code (upper 4b)
-        m_Stream.put(effect & 0x00FF);         // Effect code (lower 8 bits)
+        modChannelRow.EffectCode = effectCode;
+        modChannelRow.EffectValue = effectValue;
+        
+        //m_Stream.put(0); // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
+        //m_Stream.put(0); // Sample period/effect param. (lower 8 bits)
+        //m_Stream.put((effect & 0x0F00) >> 8);  // Sample number (lower 4b) = 0 b/c there's no note; effect code (upper 4b)
+        //m_Stream.put(effect & 0x00FF);         // Effect code (lower 8 bits)
     }
     else if (pat.note.pitch == DMF_NOTE_OFF) // Note OFF. Only handle note OFF effect.
     {
@@ -474,14 +439,19 @@ bool MOD::ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelSta
         //uint16_t period = proTrackerPeriodTable[2][DMF_NOTE_C % 12]; // This note won't be played, but it makes ProTracker happy.
         //fout.put((period & 0x0F00) >> 8);  // Sample number (upper 4b); sample period/effect param. (upper 4b)
         //fout.put(period & 0x00FF);         // Sample period/effect param. (lower 8 bits)
-        m_Stream.put(0);                         // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
-        m_Stream.put(0);                         // Sample period/effect param. (lower 8 bits)
-        m_Stream.put((effect & 0x0F00) >> 8);    // Sample number (lower 4b); effect code (upper 4b)
-        m_Stream.put(effect & 0x00FF);           // Effect code (lower 8 bits)
+        //m_Stream.put(0);                         // Sample number (upper 4b) = 0 b/c there's no note; sample period/effect param. (upper 4b) = 0 b/c there's no note
+        //m_Stream.put(0);                         // Sample period/effect param. (lower 8 bits)
+        //m_Stream.put((effect & 0x0F00) >> 8);    // Sample number (lower 4b); effect code (upper 4b)
+        //m_Stream.put(effect & 0x00FF);           // Effect code (lower 8 bits)
+
+        modChannelRow.SampleNumber = GetMODSampleId(-1, {}); // Use silent sample
+        modChannelRow.SamplePeriod = 214; // C-3; Doesn't really matter
+        modChannelRow.EffectCode = effectCode;
+        modChannelRow.EffectValue = effectValue;
     }
     else  // A note is playing
     {
-        uint8_t indexLow, indexHigh = 0;
+        uint8_t dmfSampleId;
         uint16_t period = 0;
 
         uint16_t modOctave = 0; // The note's octave to export to the MOD file.
@@ -491,31 +461,54 @@ bool MOD::ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelSta
             if (state.channel != DMF_GAMEBOY_NOISE)
             {
                 // The indices for this SQW / WAVE sample's low note range and high note range:
-                indexLow = state.channel == DMF_GAMEBOY_WAVE ? state.wavetable + 4 : state.dutyCycle;
-                indexHigh = indexLow + 4 + m_DMFTotalWavetables;
-                
-                // If using high note range and the current note is in the high note range:
-                if (m_NoteRangeStart[indexHigh].pitch != 0 && NoteCompare(pat.note, m_NoteRangeStart[indexHigh]) >= 0)
+                dmfSampleId = state.channel == DMF_GAMEBOY_WAVE ? state.wavetable + 4 : state.dutyCycle;
+
+                if (m_SampleMap2.count(dmfSampleId) > 0)
                 {
-                    // Find the note's octave in ProTracker:
-                    modOctave = pat.note.octave - m_NoteRangeStart[indexHigh].octave;
-                    if (!state.onHighNoteRange)
+                    MODSampleInfo& modSampleInfo = m_SampleMap2[dmfSampleId];
+                    Note dmfSplitPoint;
+                    dmfSplitPoint.octave = modSampleInfo.splitPoint.octave;
+                    dmfSplitPoint.pitch = modSampleInfo.splitPoint.pitch;
+
+                    // If using high note range:
+                    if (modSampleInfo.highId != -1)
                     {
-                        // Switching to a different note range requires the use of a different ProTracker sample.
-                        state.sampleChanged = true;
+                        //std::cout << "pat.note.pitch=" << pat.note.pitch << "; dmfSplitPoint.pitch=" << dmfSplitPoint.pitch << "\n";
+                        //std::cout << "pat.note.octave=" << pat.note.octave << "; dmfSplitPoint.octave=" << dmfSplitPoint.octave << "\n";
+                        
+                        // If the current note is in the high note range
+                        if (pat.note >= dmfSplitPoint)
+                        {
+                            // Find the note's octave in MOD format:
+                            modOctave = pat.note.octave - dmfSplitPoint.octave;
+                            if (!state.onHighNoteRange)
+                            {
+                                // Switching to a different note range requires the use of a different MOD sample.
+                                state.sampleChanged = true;
+                            }
+                            state.onHighNoteRange = true;
+                        }
+                        else // If current note is in the low note range
+                        {
+                            // Find the note's octave in MOD format:
+                            modOctave = pat.note.octave - dmfSplitPoint.octave + 3;
+                            if (state.onHighNoteRange)
+                            {
+                                // Switching to a different note range requires the use of a different MOD sample.
+                                state.sampleChanged = true;
+                            }
+                            state.onHighNoteRange = false;
+                        }
                     }
-                    state.onHighNoteRange = true;
+                    else // Only one MOD note range for this DMF sample
+                    {
+                        // Find the note's octave in MOD format:
+                        modOctave = pat.note.octave - dmfSplitPoint.octave;
+                    }
                 }
-                else // Using the low note range
+                else
                 {
-                    // Find the note's octave in ProTracker:
-                    modOctave = pat.note.octave - m_NoteRangeStart[indexLow].octave;
-                    if (state.onHighNoteRange)
-                    {
-                        // Switching to a different note range requires the use of a different ProTracker sample. 
-                        state.sampleChanged = true;
-                    }
-                    state.onHighNoteRange = false;
+                    // Throw error
                 }
             }
         }
@@ -527,6 +520,8 @@ bool MOD::ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelSta
             modOctave++;
         }
 
+        //std::cout << "Here... modOctave=" << modOctave << "\n";
+
         period = proTrackerPeriodTable[modOctave][pat.note.pitch % 12];
 
         uint8_t sampleNumber;
@@ -536,15 +531,26 @@ bool MOD::ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelSta
         }
         else if (state.channel != DMF_GAMEBOY_NOISE) // A ProTracker sample needs to change
         {
-            sampleNumber = state.onHighNoteRange ? m_SampleMap[indexLow + 4 + m_DMFTotalWavetables] : m_SampleMap[indexLow]; // Get new PT sample number
+            //sampleNumber = state.onHighNoteRange ? m_SampleMap[indexLow + 4 + m_DMFTotalWavetables] : m_SampleMap[indexLow]; // Get new PT sample number
+
+            MODSampleInfo* modSampleInfo = GetMODSampleInfo(dmfSampleId);
+            sampleNumber = state.onHighNoteRange ? modSampleInfo->highId : modSampleInfo->lowId;
+
             state.sampleChanged = false; // Just changed the sample, so resetting this for next time.
-            if (effect == PT_NOEFFECT_CODE)
+            
+            if (effectCode == PT_NOEFFECT_CODE)
             {
                 // When you change PT samples, the channel volume resets, so 
-                //  if there are still no effects are being used on this pattern row, 
+                //  if there are still no effects being used on this pattern row, 
                 //  use a volume change effect to set the volume to where it needs to be.
                 uint8_t newVolume = std::round(state.volume / (double)DMF_NOTE_VOLUMEMAX * (double)PT_NOTE_VOLUMEMAX); // Convert DMF volume to PT volume
-                effect = ((uint16_t)PT_SETVOLUME << 4u) + newVolume;
+
+                effectCode = PT_SETVOLUME;
+                effectValue = newVolume;
+                
+                // TODO: If the default volume of the sample is selected in a smart way, we could potentially skip having to use a volume effect sometimes
+
+                //effect = ((uint16_t)PT_SETVOLUME << 4u) + newVolume;
                 // NOTE: The WASM version does not truncate 16 bit values to 8 bit even if you 
                 //  store it in a uint8_t type or mask it with (sixteen & 0x00FFu).
             }
@@ -554,10 +560,15 @@ bool MOD::ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelSta
             sampleNumber = 0; // Keep noise channel quiet since it isn't implemented yet.
         }
 
-        m_Stream.put((sampleNumber & 0xF0) | ((period & 0x0F00) >> 8));  // Sample number (upper 4b); sample period/effect param. (upper 4b)
-        m_Stream.put(period & 0x00FF);                                   // Sample period/effect param. (lower 8 bits)
-        m_Stream.put((sampleNumber << 4) | ((effect & 0x0F00) >> 8));    // Sample number (lower 4b); effect code (upper 4b)
-        m_Stream.put(effect & 0x00FF);                                   // Effect code (lower 8 bits)
+        modChannelRow.SampleNumber = sampleNumber;
+        modChannelRow.SamplePeriod = period;
+        modChannelRow.EffectCode = effectCode;
+        modChannelRow.EffectValue = effectValue;
+        
+        //m_Stream.put((sampleNumber & 0xF0) | ((period & 0x0F00) >> 8));  // Sample number (upper 4b); sample period/effect param. (upper 4b)
+        //m_Stream.put(period & 0x00FF);                                   // Sample period/effect param. (lower 8 bits)
+        //m_Stream.put((sampleNumber << 4) | ((effectCode & 0x0F00) >> 8));    // Sample number (lower 4b); effect code (upper 4b)
+        //m_Stream.put(effect & 0x00FF);                                   // Effect code (lower 8 bits)
         
         state.notePlaying = true;
     }
@@ -678,25 +689,25 @@ void MOD::ConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectValu
     uint8_t ptEff = PT_NOEFFECT;
     uint8_t ptEffVal = PT_NOEFFECTVAL;
 
-    switch (effectCode)
+    switch (dmfEffectCode)
     {
         case DMF_NOEFFECT:
             ptEff = PT_NOEFFECT; break; // ?
         case DMF_ARP:
             ptEff = PT_ARP;
-            ptEffVal = effectValue;
+            ptEffVal = dmfEffectValue;
             break;
         case DMF_PORTUP:
             ptEff = PT_PORTUP;
-            ptEffVal = effectValue;
+            ptEffVal = dmfEffectValue;
             break;
         case DMF_PORTDOWN:
             ptEff = PT_PORTDOWN;
-            ptEffVal = effectValue;
+            ptEffVal = dmfEffectValue;
             break;
         case DMF_PORT2NOTE:
             ptEff = PT_PORT2NOTE; 
-            ptEffVal = effectValue; //CLAMP(effectValue + 6, 0x00, 0xFF); // ???
+            ptEffVal = dmfEffectValue; //CLAMP(dmfEffectValue + 6, 0x00, 0xFF); // ???
             break;
         case DMF_VIBRATO:
             ptEff = PT_VIBRATO; break;
@@ -714,7 +725,7 @@ void MOD::ConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectValu
             ptEff = PT_VOLSLIDE; break;
         case DMF_POSJUMP:
             ptEff = PT_POSJUMP;
-            ptEffVal = effectValue + (int)m_UsingSetupPattern;
+            ptEffVal = dmfEffectValue + (int)m_UsingSetupPattern;
             break;
         case DMF_RETRIG:
             ptEff = PT_RETRIGGERSAMPLE; break;  // ?
@@ -736,7 +747,7 @@ void MOD::ConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectValu
             break; // ? 
         case DMF_NOTECUT:
             ptEff = PT_CUTSAMPLE;
-            ptEffVal = effectValue; // ??
+            ptEffVal = dmfEffectValue; // ??
             break;
         case DMF_NOTEDELAY:
             ptEff = PT_DELAYSAMPLE; break; // ?
@@ -770,22 +781,46 @@ void MOD::ConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectValu
 mod_sample_id_t MOD::GetMODSampleId(dmf_sample_id_t dmfSampleId, const Note& dmfNote)
 {
     // Must call CreateSampleMapping first.
+    // dmfSampleId == -1 --> Returns silent sample id
+    // 0 <= dmfSampleId <= 3 --> Returns square wave sample id
+    // dmfSampleId >= 4 --> Returns wavetable sample id
 
-    if (m_SampleMap2.count(dmfSampleId) > 0)
+    if (IsDMFSampleUsed(dmfSampleId))
     {
-        MODSplitSample& splitSample = m_SampleMap2[dmfSampleId];
+        MODSampleInfo* modSampleInfo = GetMODSampleInfo(dmfSampleId);
 
-        // If there's no split point, there's no high/low versions, just one version stored in lowId
-        if (splitSample.splitPoint.octave == 0 && splitSample.splitPoint.pitch == 0)
-            return splitSample.lowId;
+        // If there's no highId set, there's no high/low versions, just one version stored in lowId
+        if (modSampleInfo->highId == -1)
+            return modSampleInfo->lowId;
 
         // Use DMF note to check which MOD sample ID to use based on split point
-        if (dmfNote >= splitSample.splitPoint)
-            return splitSample.highId;
+        if (dmfNote >= modSampleInfo->splitPoint)
+            return modSampleInfo->highId;
         else
-            return splitSample.lowId;
+            return modSampleInfo->lowId;
     }
     return -1; // Sample mapping for this DMF sample does not exist. Does not need to be imported.
+}
+
+/*
+mod_sample_id_t MOD::GetMODSampleId(dmf_sample_id_t dmfSampleId, Note dmfNote)
+{
+    return GetMODSampleId(dmfSampleId, dmfNote);
+}
+*/
+
+MODSampleInfo* MOD::GetMODSampleInfo(dmf_sample_id_t dmfSampleId)
+{
+    if (IsDMFSampleUsed(dmfSampleId))
+    {
+        return &m_SampleMap2[dmfSampleId];
+    }
+    return nullptr;
+}
+
+bool MOD::IsDMFSampleUsed(dmf_sample_id_t dmfSampleId)
+{
+    return m_SampleMap2.count(dmfSampleId) > 0;
 }
 
 bool MOD::CreateSampleMapping(const DMF& dmf)
@@ -799,10 +834,12 @@ bool MOD::CreateSampleMapping(const DMF& dmf)
     m_SampleIdLowestHighestNotesMap.clear();
     m_SilentSampleNeeded = false;
 
+    m_DMFTotalWavetables = dmf.GetTotalWavetables();
+
     // The current square wave duty cycle, note volume, and other information that the 
     //      tracker stores for each channel while playing a tracker file.
-    MODChannelState state[DMF::SYSTEMS(SYS_GAMEBOY).channels], stateJumpCopy[DMF::SYSTEMS(SYS_GAMEBOY).channels];
-    for (int i = 0; i < DMF::SYSTEMS(SYS_GAMEBOY).channels; i++)
+    MODChannelState state[m_NumberOfChannels], stateJumpCopy[m_NumberOfChannels];
+    for (unsigned i = 0; i < m_NumberOfChannels; i++)
     {
         state[i].channel = (DMF_GAMEBOY_CHANNEL)i;   // Set channel types: SQ1, SQ2, WAVE, NOISE.
         state[i].dutyCycle = 0; // Default is 0 or a 12.5% duty cycle square wave.
@@ -848,7 +885,7 @@ bool MOD::CreateSampleMapping(const DMF& dmf)
                 if (patMatRow == jumpDestination && patRow == 0 && stateSuspended)
                 { 
                     // Restore state copies
-                    for (int v = 0; v < DMF::SYSTEMS(SYS_GAMEBOY).channels; v++)
+                    for (unsigned v = 0; v < m_NumberOfChannels; v++)
                     {
                         state[v] = stateJumpCopy[v];
                     }
@@ -862,7 +899,7 @@ bool MOD::CreateSampleMapping(const DMF& dmf)
                     if (effectValue >= patMatRow) // If not a loop
                     {
                         // Save copies of states
-                        for (int v = 0; v < DMF::SYSTEMS(SYS_GAMEBOY).channels; v++)
+                        for (unsigned v = 0; v < m_NumberOfChannels; v++)
                         {
                             stateJumpCopy[v] = state[v];
                         }
@@ -903,7 +940,8 @@ bool MOD::CreateSampleMapping(const DMF& dmf)
                     // Get lowest/highest notes
                     if (m_SampleIdLowestHighestNotesMap.count(sampleId) == 0) // 1st time
                     {
-                        m_SampleIdLowestHighestNotesMap[sampleId] = std::pair<Note, Note>(pat.note, pat.note);
+                        MODNote n = { .pitch = pat.note.pitch, .octave = pat.note.octave };
+                        m_SampleIdLowestHighestNotesMap[sampleId] = std::pair<MODNote, MODNote>(n, n);
                     }
                     else
                     {
@@ -911,12 +949,14 @@ bool MOD::CreateSampleMapping(const DMF& dmf)
                         if (pat.note > notePair.second)
                         {
                             // Found a new highest note
-                            notePair.second = pat.note;
+                            notePair.second.pitch = pat.note.pitch;
+                            notePair.second.octave = pat.note.octave;
                         }
                         if (pat.note < notePair.first)
                         {
                             // Found a new lowest note
-                            notePair.first = pat.note;
+                            notePair.first.pitch = pat.note.pitch;
+                            notePair.first.octave = pat.note.octave;
                         }
                     }
                 }
@@ -931,17 +971,21 @@ bool MOD::SampleSplittingAndAssignment()
 {
     // This method determines whether a sample will need to be split into low and high ranges, then assigns 
     //  ProTracker (PT) sample numbers
-
-    int8_t finetune = 0; // Not really used, at least for now
-    uint8_t ptSampleNum = 1; // PT sample #0 is special.
     
     mod_sample_id_t currentMODSampleId = 1; // Sample #0 is special in ProTracker
 
-    // Only the samples we need will be in this map
+    if (m_SilentSampleNeeded)
+    {
+        // The silent sample will be sample #1
+        // It will be added to the sample map AFTER the loop below, since the loop's logic doesn't pertain to it
+        currentMODSampleId = 2;
+    }
+
+    // Only the samples we need will be in this map (+ the silent sample possibly)
     for (auto& mapPair : m_SampleMap2)
     {
         dmf_sample_id_t sampleId = mapPair.first;
-        MODSplitSample& splitSample = mapPair.second;
+        MODSampleInfo& modSampleInfo = mapPair.second;
 
         auto& lowHighNotes = m_SampleIdLowestHighestNotesMap[sampleId];
         auto& lowestNote = lowHighNotes.first;
@@ -954,8 +998,6 @@ bool MOD::SampleSplittingAndAssignment()
         if (highestNote.octave*12 + highestNote.pitch - lowestNote.octave*12 - lowestNote.pitch <= 36)
         {
             // (Note: The note C-n in the Deflemask tracker is called C-(n-1) in DMF format because the 1st note of an octave is C# in DMF files.)
-            
-            finetune = 0;
 
             Note lowNoteToCompare = { DMF_NOTE_C, 1 };
             Note highNoteToCompare = { DMF_NOTE_B, 4 };
@@ -965,7 +1007,8 @@ bool MOD::SampleSplittingAndAssignment()
                 noSplittingIsNeeded = true;
 
                 // If between C-2 and B-4 (Deflemask tracker note format)
-                splitSample.splitPoint = lowNoteToCompare;
+                modSampleInfo.splitPoint.pitch = lowNoteToCompare.pitch;
+                modSampleInfo.splitPoint.octave = lowNoteToCompare.octave;
                 // Use sample length: 64 (Double length)
             }
 
@@ -977,7 +1020,8 @@ bool MOD::SampleSplittingAndAssignment()
                 noSplittingIsNeeded = true;
 
                 // If between C-3 and B-5 (Deflemask tracker note format)
-                splitSample.splitPoint = lowNoteToCompare;
+                modSampleInfo.splitPoint.pitch = lowNoteToCompare.pitch;
+                modSampleInfo.splitPoint.octave = lowNoteToCompare.octave;
                 // Use sample length: 32 (regular wavetable length)
             }
             else if (lowestNote >= (Note){DMF_NOTE_C, 3} && highestNote <= (Note){DMF_NOTE_B, 6})
@@ -991,10 +1035,10 @@ bool MOD::SampleSplittingAndAssignment()
 
                 noSplittingIsNeeded = true;
 
-                splitSample.splitPoint = { DMF_NOTE_C, 3 };
+                modSampleInfo.splitPoint = { DMF_NOTE_C, 3 };
                 // Use sample length: 16 (half length - downsampling needed)
             }
-            else if (lowestNote >= (Note){DMF_NOTE_C, 4} && highestNotes <= (Note){DMF_NOTE_B, 7})
+            else if (lowestNote >= (Note){DMF_NOTE_C, 4} && highestNote <= (Note){DMF_NOTE_B, 7})
             {
                 // If between C-5 and B-7 (Deflemask tracker note format)
                 if (sampleId >= 4 && !m_Options->GetDownsample()) // If on a wavetable instrument and can't downsample it
@@ -1005,7 +1049,7 @@ bool MOD::SampleSplittingAndAssignment()
                 
                 noSplittingIsNeeded = true;
 
-                splitSample.splitPoint = { DMF_NOTE_C, 4 };
+                modSampleInfo.splitPoint = { DMF_NOTE_C, 4 };
                 // Use sample length: 8 (1/4 length - downsampling needed)
             }
             else if (highestNote == (Note){DMF_NOTE_C, 7})
@@ -1013,16 +1057,16 @@ bool MOD::SampleSplittingAndAssignment()
                 // If between C#5 and C-8 (highest note) (Deflemask tracker note format):
                 if (sampleId >= 4 && !m_Options->GetDownsample()) // If on a wavetable instrument and can't downsample it
                 {
-                    m_Status.SetError(Status::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(i - 4));
+                    m_Status.SetError(Status::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(sampleId - 4));
                     return true;
                 }
                 
                 // TODO: This note is currently unsupported. Should fail here.
 
                 noSplittingIsNeeded = true;
-                finetune = 0; // One semitone up from B = C- ??? was 7
+                //finetune = 0; // One semitone up from B = C- ??? was 7
 
-                splitSample.splitPoint = { DMF_NOTE_C, 4 };
+                modSampleInfo.splitPoint = { DMF_NOTE_C, 4 };
                 // Use sample length: 8 (1/4 length - downsampling needed)
             }
 
@@ -1038,10 +1082,11 @@ bool MOD::SampleSplittingAndAssignment()
                     ///m_SampleLength[indexLow] *= 2;
                 }
 
-                splitSample.lowId = currentMODSampleId; // Assign PT sample number to this square wave / WAVE sample
-                splitSample.highId = -1; // No PT sample needed for this square wave / WAVE sample (high note range)
+                modSampleInfo.lowId = currentMODSampleId; // Assign PT sample number to this square wave / WAVE sample
+                modSampleInfo.highId = -1; // No PT sample needed for this square wave / WAVE sample (high note range)
                 // TODO: Was exporting sample info here
                 currentMODSampleId++;
+                std::cout << "Added a non-split sample to map\n";
             }
         }
 
@@ -1072,14 +1117,13 @@ bool MOD::SampleSplittingAndAssignment()
                 ///m_SampleLength[indexHigh] *= 2;
             }
 
-            splitSample.splitPoint = {DMF_NOTE_C, 4};
+            modSampleInfo.splitPoint = {DMF_NOTE_C, 4};
 
             // TODO: Previously stored two note range values instead of a single "split point". Will this work?
             //m_NoteRangeStart[indexLow].octave = 1;
             //m_NoteRangeStart[indexLow].pitch = DMF_NOTE_C;
             //m_NoteRangeStart[indexHigh].octave = 4;
             //m_NoteRangeStart[indexHigh].pitch = DMF_NOTE_C;
-            finetune = 0;
 
             if (highestNote == (Note){DMF_NOTE_C, 7})
             {
@@ -1103,18 +1147,34 @@ bool MOD::SampleSplittingAndAssignment()
             }
             */
 
-            splitSample.lowId = currentMODSampleId++; // Assign PT sample number to this square wave / WAVE sample
-            splitSample.highId = currentMODSampleId++; // Assign PT sample number to this square wave / WAVE sample
+            modSampleInfo.lowId = currentMODSampleId++; // Assign PT sample number to this square wave / WAVE sample
+            modSampleInfo.highId = currentMODSampleId++; // Assign PT sample number to this square wave / WAVE sample
             // Called ExportSampleInfo here
+
+            std::cout << "Added a split sample to map\n";
         }
     }
 
-    m_TotalMODSamples = currentMODSampleId - 1; // Set the number of PT samples that will be needed. (minus sample #0 which is special)
-    
+    // Now add the silent sample to the sample map
     if (m_SilentSampleNeeded)
-        m_TotalMODSamples++;
+    {
+        m_SampleMap2[-1] = {};
+        m_SampleMap2[-1].lowId = 1;
+        m_SampleMap2[-1].highId = -1;
+        m_SampleMap2[-1].splitPoint = {};
+        std::cout << "Added silent sample to map\n";
+    }
+
+    m_TotalMODSamples = currentMODSampleId - 1; // Set the number of MOD samples that will be needed. (minus sample #0 which is special)
     
     // TODO: Check if there are too many samples needed here
+
+    std::cout << "Total MOD samples:" << std::to_string(m_TotalMODSamples) << "; m_SampleMap2.size():" << m_SampleMap2.size() << ";\n";
+    for (const auto& mapPair : m_SampleMap2)
+    {
+
+    }
+
 
     return 0; // Success
 }
@@ -1127,7 +1187,7 @@ std::vector<int8_t> GenerateSquareWaveSample(unsigned dutyCycle, unsigned length
     uint8_t duty[] = {1, 2, 4, 6};
     
     // This loop creates a square wave with the correct length and duty cycle:
-    for (int i = 1; i <= length; i++)
+    for (unsigned i = 1; i <= length; i++)
     {
         if ((i * 8.f) / length <= (float)duty[dutyCycle])
         {
@@ -1147,7 +1207,7 @@ std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned le
     std::vector<int8_t> sample;
     sample.assign(length, 0);
 
-    for (int i = 0; i < length; i++)
+    for (unsigned i = 0; i < length; i++)
     {
         // Note: For the Deflemask Game Boy system, all wavetable lengths are 32.
         if (length == 128) // Quadruple length
@@ -1199,10 +1259,10 @@ bool MOD::ConvertSampleData(const DMF& dmf)
     for (const auto& mapPair : m_SampleMap2)
     {
         dmf_sample_id_t sampleId = mapPair.first;
-        const MODSplitSample& splitSample = mapPair.second;
+        const MODSampleInfo& modSampleInfo = mapPair.second;
 
-        mod_sample_id_t lowId = splitSample.lowId;
-        mod_sample_id_t highId = splitSample.highId;
+        mod_sample_id_t lowId = modSampleInfo.lowId;
+        mod_sample_id_t highId = modSampleInfo.highId;
 
         bool isSplitSample = highId != -1;
 
@@ -1240,173 +1300,162 @@ bool MOD::ConvertSampleData(const DMF& dmf)
 }
 
 
-void MOD::ExportSampleInfo(const DMF& dmf, int8_t ptSampleNumLow, int8_t ptSampleNumHigh, uint8_t indexLow, uint8_t indexHigh, int8_t finetune)
-{
-    uint8_t index;
 
-    for (int i = 0; i < 2; i++) // 0 == low note range, 1 == high note range
+
+void MOD::ExportModuleName(std::ofstream& fout) const
+{
+    // Print module name, truncating or padding with zeros as needed
+    for (unsigned i = 0; i < 20; i++)
     {
-        if (i == 0) // Low note range
+        if (i < m_ModuleName.size())
         {
-            index = indexLow;
-            // If there's also a high note range version of this sample, we want the "(low)" text:
-            if (ptSampleNumHigh != -1)
-            {
-                if (indexLow <= 3) // SQW
-                {
-                    switch (indexLow)
-                    {
-                        case 0: m_Stream << "SQW, Duty 12.5% (low) "; break;
-                        case 1: m_Stream << "SQW, Duty 25% (low)   "; break;
-                        case 2: m_Stream << "SQW, Duty 50% (low)   "; break;
-                        case 3: m_Stream << "SQW, Duty 75% (low)   "; break;
-                    }
-                }
-                else  // WAVE
-                {
-                    m_Stream << "Wavetable #" << std::left << std::setw(2) << std::to_string(index - 4) << " (low)   ";
-                }
-            }
-            else // Else, no "(low)" text.
-            {
-                if (indexLow <= 3) // SQW
-                {
-                    switch (indexLow)
-                    {
-                        case 0: m_Stream << "SQW, Duty 12.5%       "; break;
-                        case 1: m_Stream << "SQW, Duty 25%         "; break;
-                        case 2: m_Stream << "SQW, Duty 50%         "; break;
-                        case 3: m_Stream << "SQW, Duty 75%         "; break;
-                    }
-                }
-                else  // WAVE
-                {
-                    m_Stream << "Wavetable #" << std::left << std::setw(2) << std::to_string(index - 4) << "         ";
-                }
-            }
+            fout.put(tolower(m_ModuleName[i]));
         }
-        else if (ptSampleNumHigh != -1) // High note range, if available
-        { 
-            index = indexHigh;
-            if (indexLow <= 3) // SQW
+        else
+        {
+            fout.put(0);
+        }
+    }
+}
+
+void MOD::ExportSampleInfo(std::ofstream& fout) const
+{
+    const int8_t finetune = 0;
+    
+    // Export sample info
+    for (const auto& mapPair : m_SampleMap2)
+    {
+        dmf_sample_id_t sampleId = mapPair.first;
+        const MODSampleInfo& sampleInfo = mapPair.second;
+
+        const bool highRangeExists = sampleInfo.highId != -1;
+
+        for (int noteRange = 0; noteRange < 1 + (int)highRangeExists; noteRange++)
+        {
+            std::string name;
+            if (sampleId == -1) // Silent sample
             {
-                switch (indexLow)
+                name = "Silence";
+            }
+            else if (sampleId < 4) // Square wave
+            {
+                name = "SQW, Duty ";
+                switch (sampleId)
                 {
-                    case 0: m_Stream << "SQW, Duty 12.5% (high)"; break;
-                    case 1: m_Stream << "SQW, Duty 25% (high)  "; break;
-                    case 2: m_Stream << "SQW, Duty 50% (high)  "; break;
-                    case 3: m_Stream << "SQW, Duty 75% (high)  "; break;
+                    case 0: name += "12.5%"; break;
+                    case 1: name += "25%"; break;
+                    case 2: name += "50%"; break;
+                    case 3: name += "75%"; break;
+                }
+
+                if (highRangeExists)
+                {
+                    if (noteRange == 0)
+                        name += " (low)";
+                    else
+                        name += " (high)";
                 }
             }
-            else  // WAVE
+            else // Wavetable
             {
-                m_Stream << "Wavetable #" << std::left << std::setw(2) << std::to_string(index - 8 - m_DMFTotalWavetables) << " (high)  ";
+                name = "Wavetable #";
+                name += std::to_string(sampleId - 4);
+                
+                if (highRangeExists)
+                {
+                    if (noteRange == 0)
+                        name += " (low)";
+                    else
+                        name += " (high)";
+                }
             }
+
+            // Pad name with zeros
+            while (name.size() < 22)
+                name += " ";
             
-        }
-        else // If high note range is not available, we're done.
-        {
-            break; 
-        }
+            const mod_sample_id_t modSampleId = noteRange == 0 ? sampleInfo.lowId : sampleInfo.highId;
 
-        m_Stream.put(m_SampleLength[index] >> 9);                 // Length byte 0
-        m_Stream.put(m_SampleLength[index] >> 1);                 // Length byte 1
-        m_Stream.put(finetune);                                 // Finetune value !!!
-        m_Stream.put(PT_NOTE_VOLUMEMAX);                        // Sample volume
-        m_Stream.put(0);                                        // Repeat offset byte 0
-        m_Stream.put(0);                                        // Repeat offset byte 1
-        m_Stream.put(m_SampleLength[index] >> 9);                 // Sample repeat length byte 0
-        m_Stream.put((m_SampleLength[index] >> 1) & 0x00FF);      // Sample repeat length byte 1
+            fout.put(m_SampleLengths.at(modSampleId) >> 9);         // Length byte 0
+            fout.put(m_SampleLengths.at(modSampleId) >> 1);         // Length byte 1
+            fout.put(finetune);                                     // Finetune value !!!
+            fout.put(PT_NOTE_VOLUMEMAX);                            // Sample volume // TODO: Optimize this?
+            fout.put(0);                                            // Repeat offset byte 0
+            fout.put(0);                                            // Repeat offset byte 1
+            fout.put(m_SampleLengths.at(modSampleId) >> 9);            // Sample repeat length byte 0
+            fout.put((m_SampleLengths.at(modSampleId) >> 1) & 0x00FF); // Sample repeat length byte 1
+        }
     }
-}
 
-void MOD::ExportSampleData(const DMF& dmf)
-{ 
-    uint8_t ptSampleNum = 1;
-
-    for (unsigned i = 0; i < 4u + m_DMFTotalWavetables; i++)
+    // The remaining samples are blank:
+    for (int i = m_TotalMODSamples; i < 31; i++)
     {
-        if (m_SampleMap[i] == ptSampleNum)
+        // According to real ProTracker files viewed in a hex viewer, the 30th and final byte
+        //    of a blank sample is 0x01 and all 29 other bytes are 0x00.
+        for (int j = 0; j < 29; j++)
         {
-            ExportSampleDataHelper(dmf, ptSampleNum, i);
-            ptSampleNum++;
-            if (m_SampleMap[i + 4 + m_DMFTotalWavetables] == ptSampleNum)
-            {
-                ExportSampleDataHelper(dmf, ptSampleNum, i + 4 + m_DMFTotalWavetables);
-                ptSampleNum++;
-            }
+            fout.put(0);
         }
+        fout.put(1);
     }
 }
 
-void MOD::ExportSampleDataHelper(const DMF& dmf, uint8_t ptSampleNum, uint8_t index)
+void MOD::ExportModuleInfo(std::ofstream& fout) const
 {
-    // This function must be called for SQW / WAVE samples in the same 
-    //      order as their PT sample numbers. The ExportSampleData function guarantees it.
+    
+    fout.put(m_NumberOfRowsInPatternMatrix);   // Song length in patterns (not total number of patterns) 
+    fout.put(127);                        // 0x7F - Useless byte that has to be here
 
-    // If it's a square wave sample
-    if (index <= 3 || (index >= 4 + m_DMFTotalWavetables && index <= 7 + m_DMFTotalWavetables))
+    // Pattern matrix (Each ProTracker pattern number is the same as its pattern matrix row number)
+    for (uint8_t i = 0; i < m_NumberOfRowsInPatternMatrix; i++)
     {
-        uint8_t duty[] = {1, 2, 4, 6};
-        uint8_t dutyNum = index <= 3 ? index : index - 4 - m_DMFTotalWavetables;
-        
-        // This loop exports a square wave with the correct length and duty cycle:
-        for (int i = 1; i <= m_SampleLength[index]; i++)
-        {
-            if ((i * 8.f) / m_SampleLength[index] <= (float)duty[dutyNum])
-            {
-                m_Stream.put(127); // high
-            }
-            else
-            {
-                m_Stream.put(-10); // low
-            }
-        }
+        fout.put(i);
     }
-    else  // Wavetable sample
+    for (uint8_t i = m_NumberOfRowsInPatternMatrix; i < 128; i++)
     {
-        uint8_t waveNum = index <= 3 + m_DMFTotalWavetables ? index - 4 : index - 8 - m_DMFTotalWavetables;
-        for (int i = 0; i < m_SampleLength[index]; i++)
+        fout.put(0);
+    }
+    
+    fout << "M.K."; // ProTracker uses "M!K!" if there's more than 64 pattern matrix rows
+}
+
+void MOD::ExportPatterns(std::ofstream& fout) const
+{
+    for (const auto& pattern : m_Patterns)
+    {
+        for (const auto& channelRow : pattern)
         {
-            // Note: For the Deflemask Game Boy system, all wavetable lengths are 32.
-            if (m_SampleLength[index] == 128) // Quadruple length
-            {
-                // Convert from DMF sample values (0 to 15) to PT sample values (-128 to 127).
-                m_Stream.put((int8_t)((dmf.GetWavetableValue(waveNum, i / 4) / 15.f * 255.f) - 128.f));
-            }
-            else if (m_SampleLength[index] == 64) // Double length
-            {
-                // Convert from DMF sample values (0 to 15) to PT sample values (-128 to 127).
-                m_Stream.put((int8_t)((dmf.GetWavetableValue(waveNum, i / 2) / 15.f * 255.f) - 128.f));
-            }
-            else if (m_SampleLength[index] == 32) // Normal length 
-            {
-                // Convert from DMF sample values (0 to 15) to PT sample values (-128 to 127).
-                m_Stream.put((int8_t)((dmf.GetWavetableValue(waveNum, i) / 15.f * 255.f) - 128.f));
-            }
-            else if (m_SampleLength[index] == 16) // Half length (loss of information)
-            {
-                // Take average of every two sample values to make new sample value
-                int avg = (int8_t)((dmf.GetWavetableValue(waveNum, i * 2) / 15.f * 255.f) - 128.f);
-                avg += (int8_t)((dmf.GetWavetableValue(waveNum, (i * 2) + 1) / 15.f * 255.f) - 128.f);
-                avg /= 2;
-                m_Stream.put((int8_t)avg);
-            }
-            else if (m_SampleLength[index] == 8) // Quarter length (loss of information)
-            {
-                // Take average of every four sample values to make new sample value
-                int avg = (int8_t)((dmf.GetWavetableValue(waveNum, i * 4) / 15.f * 255.f) - 128.f);
-                avg += (int8_t)((dmf.GetWavetableValue(waveNum, (i * 4) + 1) / 15.f * 255.f) - 128.f);
-                avg += (int8_t)((dmf.GetWavetableValue(waveNum, (i * 4) + 2) / 15.f * 255.f) - 128.f);
-                avg += (int8_t)((dmf.GetWavetableValue(waveNum, (i * 4) + 3) / 15.f * 255.f) - 128.f);
-                avg /= 4;
-                m_Stream.put((int8_t)avg);
-            }
+            // Sample number (upper 4b); sample period/effect param. (upper 4b)
+            fout.put((channelRow.SampleNumber & 0xF0) | ((channelRow.SamplePeriod & 0x0F00) >> 8));
+
+            // Sample period/effect param. (lower 8 bits)
+            fout.put(channelRow.SamplePeriod & 0x00FF);
+        
+            //const uint16_t effect = ((uint16_t)channelRow.EffectCode << 4) | channelRow.EffectValue;
+
+            // Sample number (lower 4b); effect code (upper 4b)
+            fout.put((channelRow.SampleNumber << 4) | (channelRow.EffectCode >> 4));
+            
+            // Effect code (lower 8 bits)
+            fout.put(((channelRow.EffectCode << 4) & 0x00FF) | channelRow.EffectValue);
         }
     }
 }
 
-uint8_t MOD::GetPTTempo(double bpm)
+void MOD::ExportSampleData(std::ofstream& fout) const
+{
+    for (const auto& sample : m_Samples)
+    {
+        for (int8_t value : sample.second)
+        {
+            fout.put(value);
+        }
+    }
+}
+
+
+
+uint8_t MOD::GetMODTempo(double bpm)
 {
     // Get ProTracker tempo from Deflemask bpm.
     if (bpm * 2.0 > 255.0) // If tempo is too high (over 127.5 bpm)
@@ -1479,4 +1528,29 @@ std::string ErrorMessageCreator(Status::Category category, int errorCode, const 
             break;
     }
     return "";
+}
+
+inline unsigned char MOD::GetMODSampleNumberLowFromDMFSquare(unsigned squareDuty) const
+{
+    return m_SampleMap2.at(squareDuty).lowId;
+}
+
+inline unsigned char MOD::GetMODSampleNumberHighFromDMFSquare(unsigned squareDuty) const
+{
+    return m_SampleMap2.at(squareDuty).highId;
+}
+
+inline unsigned char MOD::GetMODSampleNumberLowFromDMFWavetable(unsigned wavetableNumber) const
+{
+    return m_SampleMap2.at(4 + wavetableNumber).lowId;
+}
+
+inline unsigned char MOD::GetMODSampleNumberHighFromDMFWavetable(unsigned wavetableNumber) const
+{
+    return m_SampleMap2.at(4 + wavetableNumber).highId;
+}
+
+MODNote::operator Note() const
+{
+    return (Note){ .pitch = pitch, .octave = octave };
 }

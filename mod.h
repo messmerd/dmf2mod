@@ -30,15 +30,15 @@ struct MODChannelState;
 // An effect is represented with 12 bits, which is 3 groups of 4 bits: [e][x][y]. 
 // The effect code is [e] or [e][x], and the effect value is [x][y] or [y]. 
 // Effect codes of the form [e] are stored as [e][0x0] below 
-typedef enum PT_EFFECT {
-    PT_NOEFFECT=0x00, PT_NOEFFECTVAL=0x00, PT_NOEFFECT_CODE=0x00, /* PT_NOEFFECT_CODE is the same as ((uint16_t)PT_NOEFFECT << 4) | PT_NOEFFECTVAL */
-    PT_ARP=0x00, PT_PORTUP=0x10, PT_PORTDOWN=0x20, PT_PORT2NOTE=0x30, PT_VIBRATO=0x40, PT_PORT2NOTEVOLSLIDE=0x50, PT_VIBRATOVOLSLIDE=0x60,
-    PT_TREMOLO=0x70, PT_PANNING=0x80, PT_SETSAMPLEOFFSET=0x90, PT_VOLSLIDE=0xA0, PT_POSJUMP=0xB0, PT_SETVOLUME=0xC0, PT_PATBREAK=0xD0, 
-    PT_SETFILTER=0xE0, PT_FINESLIDEUP=0xE1, PT_FINESLIDEDOWN=0xE2, PT_SETGLISSANDO=0xE3, PT_SETVIBRATOWAVEFORM=0xE4, 
-    PT_SETFINETUNE=0xE5, PT_LOOPPATTERN=0xE6, PT_SETTREMOLOWAVEFORM=0xE7, PT_RETRIGGERSAMPLE=0xE9, PT_FINEVOLSLIDEUP=0xEA, 
-    PT_FINEVOLSLIDEDOWN=0xEB, PT_CUTSAMPLE=0xEC, PT_DELAYSAMPLE=0xED, PT_DELAYPATTERN=0xEE, PT_INVERTLOOP=0xEF,
-    PT_SETSPEED=0xF0
-} PT_EFFECT;
+typedef enum MOD_EFFECT {
+    MOD_NOEFFECT=0x00, MOD_NOEFFECTVAL=0x00, MOD_NOEFFECT_CODE=0x00, /* MOD_NOEFFECT_CODE is the same as ((uint16_t)MOD_NOEFFECT << 4) | MOD_NOEFFECTVAL */
+    MOD_ARP=0x00, MOD_PORTUP=0x10, MOD_PORTDOWN=0x20, MOD_PORT2NOTE=0x30, MOD_VIBRATO=0x40, MOD_PORT2NOTEVOLSLIDE=0x50, MOD_VIBRATOVOLSLIDE=0x60,
+    MOD_TREMOLO=0x70, MOD_PANNING=0x80, MOD_SETSAMPLEOFFSET=0x90, MOD_VOLSLIDE=0xA0, MOD_POSJUMP=0xB0, MOD_SETVOLUME=0xC0, MOD_PATBREAK=0xD0, 
+    MOD_SETFILTER=0xE0, MOD_FINESLIDEUP=0xE1, MOD_FINESLIDEDOWN=0xE2, MOD_SETGLISSANDO=0xE3, MOD_SETVIBRATOWAVEFORM=0xE4, 
+    MOD_SETFINETUNE=0xE5, MOD_LOOPPATTERN=0xE6, MOD_SETTREMOLOWAVEFORM=0xE7, MOD_RETRIGGERSAMPLE=0xE9, MOD_FINEVOLSLIDEUP=0xEA, 
+    MOD_FINEVOLSLIDEDOWN=0xEB, MOD_CUTSAMPLE=0xEC, MOD_DELAYSAMPLE=0xED, MOD_DELAYPATTERN=0xEE, MOD_INVERTLOOP=0xEF,
+    MOD_SETSPEED=0xF0
+} MOD_EFFECT;
 
 struct MODNote
 {
@@ -242,12 +242,12 @@ private:
     bool m_SilentSampleNeeded = false;
     unsigned char m_DMFTotalWavetables; // For effeciency. dmf->GetTotalWavetables()
     uint8_t m_InitialTempo;
-    
-    std::map<dmf_sample_id_t, MODSampleInfo> m_SampleMap2;
 
     // Lowest/highest note for each square wave duty cycle or wavetable instrument.
     std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>> m_SampleIdLowestHighestNotesMap;
 
+    // TODO: This map uses DMF sample IDs but is used during export. Make it module-independent
+    std::map<dmf_sample_id_t, MODSampleInfo> m_SampleMap2;
 
     //////////// MOD file info
     std::string m_ModuleName;

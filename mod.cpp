@@ -215,9 +215,9 @@ bool MOD::ConvertFrom(const Module* input, const ConversionOptionsPtr& options)
     ///////////////// CONVERT SONG NAME
 
     m_ModuleName.clear();
-    for (int i = 0; i < dmf.GetVisualInfo().songNameLength; i++)
+    for (int i = 0; i < std::min((int)dmf.GetVisualInfo().songNameLength, 20); i++)
     {
-        m_ModuleName += (char)tolower(dmf.GetVisualInfo().songName[i]);
+        m_ModuleName += dmf.GetVisualInfo().songName[i];
     }
 
     ///////////////// CONVERT SAMPLE INFO
@@ -270,7 +270,7 @@ bool MOD::CreateSampleMapping(const DMF& dmf)
     //  used and which wavetables are used and stores this info in m_SampleMap.
     //  Then it calls the function finalizeSampMap.
 
-    m_SampleMap2.clear();
+    m_SampleMap.clear();
     m_SampleIdLowestHighestNotesMap.clear();
     m_SilentSampleNeeded = false;
 
@@ -378,7 +378,7 @@ bool MOD::CreateSampleMapping(const DMF& dmf)
                     mod_sample_id_t sampleId = chan == DMF_GAMEBOY_WAVE ? state[chan].wavetable + 4 : state[chan].dutyCycle;
 
                     // Mark this square wave or wavetable as used
-                    m_SampleMap2[sampleId] = {};
+                    m_SampleMap[sampleId] = {};
 
                     // Get lowest/highest notes
                     if (m_SampleIdLowestHighestNotesMap.count(sampleId) == 0) // 1st time
@@ -425,10 +425,10 @@ bool MOD::SampleSplittingAndAssignment()
     }
 
     // Only the samples we need will be in this map (+ the silent sample possibly)
-    for (auto& mapPair : m_SampleMap2)
+    for (auto& mapPair : m_SampleMap)
     {
         dmf_sample_id_t sampleId = mapPair.first;
-        MODSampleInfo& modSampleInfo = mapPair.second;
+        MODMappedDMFSample& modSampleInfo = mapPair.second;
 
         modSampleInfo.lowLength = 0;
         modSampleInfo.highLength = 0;
@@ -578,12 +578,12 @@ bool MOD::SampleSplittingAndAssignment()
     // Now add the silent sample to the sample map
     if (m_SilentSampleNeeded)
     {
-        m_SampleMap2[-1] = {};
-        m_SampleMap2[-1].lowId = 1; // Silent sample is always sample #1 if it is used
-        m_SampleMap2[-1].highId = -1;
-        m_SampleMap2[-1].lowLength = 8;
-        m_SampleMap2[-1].highLength = 0;
-        m_SampleMap2[-1].splitPoint = {};
+        m_SampleMap[-1] = {};
+        m_SampleMap[-1].lowId = 1; // Silent sample is always sample #1 if it is used
+        m_SampleMap[-1].highId = -1;
+        m_SampleMap[-1].lowLength = 8;
+        m_SampleMap[-1].highLength = 0;
+        m_SampleMap[-1].splitPoint = {};
     }
 
     m_TotalMODSamples = currentMODSampleId - 1; // Set the number of MOD samples that will be needed. (minus sample #0 which is special)
@@ -595,44 +595,96 @@ bool MOD::SampleSplittingAndAssignment()
 
 bool MOD::ConvertSampleData(const DMF& dmf)
 {
-    // Convert samples
-    for (const auto& mapPair : m_SampleMap2)
+    // Fill out information needed to define a MOD sample
+    m_Samples.clear();
+    for (const auto& mapPair : m_SampleMap)
     {
-        dmf_sample_id_t sampleId = mapPair.first;
-        const MODSampleInfo& modSampleInfo = mapPair.second;
+        dmf_sample_id_t modSampleId = mapPair.first;
 
-        mod_sample_id_t lowId = modSampleInfo.lowId;
-        mod_sample_id_t highId = modSampleInfo.highId;
-        unsigned lowSampleLength = modSampleInfo.lowLength;
-        unsigned highSampleLength = modSampleInfo.highLength;
-
-        bool isSplitSample = highId != -1;
-
-        m_Samples[lowId] = {};
-        if (isSplitSample)
-            m_Samples[highId] = {};
-
-        if (sampleId == -1)
+        for (int noteRange = 0; noteRange < 2; noteRange++)
         {
-            // Silence sample
-            m_Samples[lowId] = std::vector<int8_t>(modSampleInfo.lowLength, 0);
-        }
-        else if (sampleId <= 3)
-        {
-            // Square wave sample
-            m_Samples[lowId] = GenerateSquareWaveSample(sampleId, lowSampleLength);
-            if (isSplitSample)
-                m_Samples[highId] = GenerateSquareWaveSample(sampleId, highSampleLength);
-        }
-        else
-        {
-            // Wavetable sample
-            const int wavetableIndex = sampleId - 4;
-            uint32_t* wavetableData = dmf.GetWavetableValues()[wavetableIndex];
+            const MODMappedDMFSample& splitSample = mapPair.second;
+            const bool highRangeExists = splitSample.highId != -1;
+            if (noteRange == 1 && !highRangeExists)
+                break;
+
+            MODSample si;
+
+            if (noteRange == 0)
+            {
+                si.id = splitSample.lowId;
+                si.length = splitSample.lowLength;
+                si.repeatLength = splitSample.lowLength;
+            }
+            else
+            {
+                si.id = splitSample.highId;
+                si.length = splitSample.highLength;
+                si.repeatLength = splitSample.highLength;
+            }
+
+            si.name = "";
+
+            if (modSampleId == -1) // Silent sample
+            {
+                si.name = "Silence";
+                si.volume = 0;
+                si.data = std::vector<int8_t>(si.length, 0);
+            }
+            else if (modSampleId < 4) // Square wave
+            {
+                si.name = "SQW, Duty ";
+                switch (modSampleId)
+                {
+                    case 0: si.name += "12.5%"; break;
+                    case 1: si.name += "25%"; break;
+                    case 2: si.name += "50%"; break;
+                    case 3: si.name += "75%"; break;
+                }
+
+                if (highRangeExists)
+                {
+                    if (noteRange == 0)
+                        si.name += " (low)";
+                    else
+                        si.name += " (high)";
+                }
+
+                si.volume = MOD_NOTE_VOLUMEMAX; // TODO: Optimize this?
+                si.data = GenerateSquareWaveSample(modSampleId, si.length);
+            }
+            else // Wavetable
+            {
+                si.name = "Wavetable #";
+                si.name += std::to_string(modSampleId - 4);
+                
+                if (highRangeExists)
+                {
+                    if (noteRange == 0)
+                        si.name += " (low)";
+                    else
+                        si.name += " (high)";
+                }
+
+                si.volume = MOD_NOTE_VOLUMEMAX; // TODO: Optimize this?
+
+                const int wavetableIndex = modSampleId - 4;
+                uint32_t* wavetableData = dmf.GetWavetableValues()[wavetableIndex];
             
-            m_Samples[lowId] = GenerateWavetableSample(wavetableData, lowSampleLength);
-            if (isSplitSample)
-                m_Samples[highId] = GenerateWavetableSample(wavetableData, highSampleLength);
+                si.data = GenerateWavetableSample(wavetableData, si.length);
+            }
+
+            if (si.name.size() > 22)
+                throw std::invalid_argument("Sample name must be 22 characters or less");
+
+            // Pad name with zeros
+            while (si.name.size() < 22)
+                si.name += " ";
+            
+            si.repeatOffset = 0;
+            si.finetune = 0;
+            
+            m_Samples[si.id] = si;
         }
     }
 
@@ -724,7 +776,7 @@ bool MOD::ConvertPatterns(const DMF& dmf)
         m_Patterns[0].assign(64 * m_NumberOfChannels, {0, 0, 0, 0});
 
         // Set initial tempo (An approximation. ProTracker can only support Deflemask tempo between 16 and 127.5 bpm.)
-        ChannelRow tempoRow;
+        MODChannelRow tempoRow;
         tempoRow.SampleNumber = 0;
         tempoRow.SamplePeriod = 0;
         tempoRow.EffectCode = MOD_SETSPEED;
@@ -732,7 +784,7 @@ bool MOD::ConvertPatterns(const DMF& dmf)
         SetChannelRow(0, 0, 0, tempoRow);
 
         // Set position jump (once the Pattern Break effect is implemented, it can be used instead.)
-        ChannelRow posJumpRow;
+        MODChannelRow posJumpRow;
         posJumpRow.SampleNumber = 0;
         posJumpRow.SamplePeriod = 0;
         posJumpRow.EffectCode = MOD_POSJUMP;
@@ -835,13 +887,13 @@ bool MOD::ConvertPatterns(const DMF& dmf)
                 }
                 #pragma endregion
 
-                ChannelRow tempChannelRow;
+                MODChannelRow tempChannelRow;
 
                 if (ConvertChannelRow(dmf, pat, state[chan], tempChannelRow))
                 {
                     // Error occurred while writing the pattern row
                     m_SampleIdLowestHighestNotesMap.clear();
-                    m_SampleMap2.clear();
+                    m_SampleMap.clear();
                     return true;
                 }
 
@@ -853,7 +905,7 @@ bool MOD::ConvertPatterns(const DMF& dmf)
     return false;
 }
 
-bool MOD::ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelState& state, ChannelRow& modChannelRow)
+bool MOD::ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelState& state, MODChannelRow& modChannelRow)
 {
     // Writes 4 bytes of pattern row information to the .mod file
     uint16_t effectCode, effectValue;
@@ -892,9 +944,9 @@ bool MOD::ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelSta
                 // The indices for this SQW / WAVE sample's low note range and high note range:
                 dmfSampleId = state.channel == DMF_GAMEBOY_WAVE ? state.wavetable + 4 : state.dutyCycle;
 
-                if (m_SampleMap2.count(dmfSampleId) > 0)
+                if (m_SampleMap.count(dmfSampleId) > 0)
                 {
-                    MODSampleInfo& modSampleInfo = m_SampleMap2[dmfSampleId];
+                    MODMappedDMFSample& modSampleInfo = m_SampleMap[dmfSampleId];
                     Note dmfSplitPoint;
                     dmfSplitPoint.octave = modSampleInfo.splitPoint.octave;
                     dmfSplitPoint.pitch = modSampleInfo.splitPoint.pitch;
@@ -955,7 +1007,7 @@ bool MOD::ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelSta
         }
         else if (state.channel != DMF_GAMEBOY_NOISE) // A MOD sample needs to change
         {
-            MODSampleInfo* modSampleInfo = GetMODSampleInfo(dmfSampleId);
+            MODMappedDMFSample* modSampleInfo = GetMODMappedDMFSample(dmfSampleId);
             sampleNumber = state.onHighNoteRange ? modSampleInfo->highId : modSampleInfo->lowId;
 
             state.sampleChanged = false; // Just changed the sample, so resetting this for next time.
@@ -1164,7 +1216,7 @@ mod_sample_id_t MOD::GetMODSampleId(dmf_sample_id_t dmfSampleId, const Note& dmf
 
     if (IsDMFSampleUsed(dmfSampleId))
     {
-        MODSampleInfo* modSampleInfo = GetMODSampleInfo(dmfSampleId);
+        MODMappedDMFSample* modSampleInfo = GetMODMappedDMFSample(dmfSampleId);
 
         // If there's no highId set, there's no high/low versions, just one version stored in lowId
         if (modSampleInfo->highId == -1)
@@ -1179,18 +1231,18 @@ mod_sample_id_t MOD::GetMODSampleId(dmf_sample_id_t dmfSampleId, const Note& dmf
     return -1; // Sample mapping for this DMF sample does not exist. Does not need to be imported.
 }
 
-MODSampleInfo* MOD::GetMODSampleInfo(dmf_sample_id_t dmfSampleId)
+MODMappedDMFSample* MOD::GetMODMappedDMFSample(dmf_sample_id_t dmfSampleId)
 {
     if (IsDMFSampleUsed(dmfSampleId))
     {
-        return &m_SampleMap2[dmfSampleId];
+        return &m_SampleMap[dmfSampleId];
     }
     return nullptr;
 }
 
 bool MOD::IsDMFSampleUsed(dmf_sample_id_t dmfSampleId)
 {
-    return m_SampleMap2.count(dmfSampleId) > 0;
+    return m_SampleMap.count(dmfSampleId) > 0;
 }
 
 ///////// EXPORT /////////
@@ -1202,7 +1254,7 @@ void MOD::ExportModuleName(std::ofstream& fout) const
     {
         if (i < m_ModuleName.size())
         {
-            fout.put(tolower(m_ModuleName[i]));
+            fout.put(m_ModuleName[i]);
         }
         else
         {
@@ -1213,75 +1265,30 @@ void MOD::ExportModuleName(std::ofstream& fout) const
 
 void MOD::ExportSampleInfo(std::ofstream& fout) const
 {
-    const int8_t finetune = 0;
-    
-    // Export sample info
-    for (const auto& mapPair : m_SampleMap2)
+    for (const auto& mapPair : m_Samples)
     {
-        dmf_sample_id_t sampleId = mapPair.first;
-        const MODSampleInfo& sampleInfo = mapPair.second;
+        const auto& sample = mapPair.second;
+        
+        if (sample.name.size() > 22)
+            throw std::invalid_argument("Sample name must be 22 characters or less");
 
-        const bool highRangeExists = sampleInfo.highId != -1;
+        // Pad name with zeros
+        std::string nameCopy = sample.name;
+        while (nameCopy.size() < 22)
+            nameCopy += " ";
 
-        for (int noteRange = 0; noteRange < 1 + (int)highRangeExists; noteRange++)
-        {
-            std::string name;
-            if (sampleId == -1) // Silent sample
-            {
-                name = "Silence";
-            }
-            else if (sampleId < 4) // Square wave
-            {
-                name = "SQW, Duty ";
-                switch (sampleId)
-                {
-                    case 0: name += "12.5%"; break;
-                    case 1: name += "25%"; break;
-                    case 2: name += "50%"; break;
-                    case 3: name += "75%"; break;
-                }
+        fout << nameCopy;
 
-                if (highRangeExists)
-                {
-                    if (noteRange == 0)
-                        name += " (low)";
-                    else
-                        name += " (high)";
-                }
-            }
-            else // Wavetable
-            {
-                name = "Wavetable #";
-                name += std::to_string(sampleId - 4);
-                
-                if (highRangeExists)
-                {
-                    if (noteRange == 0)
-                        name += " (low)";
-                    else
-                        name += " (high)";
-                }
-            }
-
-            // Pad name with zeros
-            while (name.size() < 22)
-                name += " ";
-            
-            fout << name;
-
-            const unsigned modSampleLength = noteRange == 0 ? sampleInfo.lowLength : sampleInfo.highLength;
-
-            fout.put(modSampleLength >> 9);     // Length byte 0
-            fout.put(modSampleLength >> 1);     // Length byte 1
-            fout.put(finetune);                 // Finetune value !!!
-            fout.put(MOD_NOTE_VOLUMEMAX);        // Sample volume // TODO: Optimize this?
-            fout.put(0);                        // Repeat offset byte 0
-            fout.put(0);                        // Repeat offset byte 1
-            fout.put(modSampleLength >> 9);     // Sample repeat length byte 0
-            fout.put(modSampleLength >> 1);     // Sample repeat length byte 1
-        }
+        fout.put(sample.length >> 9);       // Length byte 0
+        fout.put(sample.length >> 1);       // Length byte 1
+        fout.put(sample.finetune);          // Finetune value !!!
+        fout.put(sample.volume);            // Sample volume // TODO: Optimize this?
+        fout.put(sample.repeatOffset >> 9); // Repeat offset byte 0
+        fout.put(sample.repeatOffset >> 1); // Repeat offset byte 1
+        fout.put(sample.repeatLength >> 9); // Sample repeat length byte 0
+        fout.put(sample.repeatLength >> 1); // Sample repeat length byte 1
     }
-
+    
     // The remaining samples are blank:
     for (int i = m_TotalMODSamples; i < 31; i++)
     {
@@ -1297,7 +1304,6 @@ void MOD::ExportSampleInfo(std::ofstream& fout) const
 
 void MOD::ExportModuleInfo(std::ofstream& fout) const
 {
-    
     fout.put(m_NumberOfRowsInPatternMatrix);   // Song length in patterns (not total number of patterns) 
     fout.put(127);                        // 0x7F - Useless byte that has to be here
 
@@ -1339,9 +1345,10 @@ void MOD::ExportPatterns(std::ofstream& fout) const
 
 void MOD::ExportSampleData(std::ofstream& fout) const
 {
-    for (const auto& sample : m_Samples)
+    for (const auto& sampleInfo : m_Samples)
     {
-        for (int8_t value : sample.second)
+        const auto& sampleData = sampleInfo.second.data;
+        for (int8_t value : sampleData)
         {
             fout.put(value);
         }

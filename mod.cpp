@@ -156,8 +156,6 @@ bool MOD::Export(const std::string& filename)
 
 bool MOD::ConvertFrom(const Module* input, const ConversionOptionsPtr& options)
 {
-    const std::set<std::string> supportedInputTypes = {"dmf"};
-
     m_Status.Clear();
 
     if (!input)
@@ -165,21 +163,30 @@ bool MOD::ConvertFrom(const Module* input, const ConversionOptionsPtr& options)
         m_Status.SetError(Status::Category::Convert, Status::ConvertError::InvalidArgument);
         return true;
     }
-    
-    if (supportedInputTypes.count(input->GetFileExtension()) == 0)
+
+    switch (input->GetType())
     {
-        m_Status.SetError(Status::Category::Convert, Status::ConvertError::UnsupportedInputType, input->GetFileExtension());
-        return true;
+        case ModuleType::DMF:
+            return ConvertFromDMF(*(input->Cast<DMF>()), options);
+            break;
+        // Add other input types here if support is added
+        default:
+            // Unsupported input type for conversion to MOD
+            m_Status.SetError(Status::Category::Convert, Status::ConvertError::UnsupportedInputType, input->GetFileExtension());
+            return true;
     }
+
+    return true;
+}
+
+///////// CONVERT FROM DMF /////////
+
+bool MOD::ConvertFromDMF(const DMF& dmf, const ConversionOptionsPtr& options)
+{
+    m_Options = reinterpret_cast<MODConversionOptions*>(options.get());
 
     const bool silent = ModuleUtils::GetCoreOptions().silent;
     
-    m_Options = reinterpret_cast<MODConversionOptions*>(options.get());
-
-    // Convert from DMF here. Other module types can be added in later.
-    
-    const DMF& dmf = *(input->Cast<DMF>());
-
     if (!silent)
         std::cout << "Starting to convert to MOD...\n";
     
@@ -223,24 +230,12 @@ bool MOD::ConvertFrom(const Module* input, const ConversionOptionsPtr& options)
     ///////////////// CONVERT SAMPLE INFO
 
     if (!silent)
-        std::cout << "Converting sample info...\n";
-
-    if (CreateSampleMapping(dmf))
-    {
-        // An error occurred
-        return true;
-    }
-
-    // Not needed anymore:
-    m_SampleIdLowestHighestNotesMap.clear();
-    
-    ///////////////// CONVERT SAMPLE DATA
-
-    if (!silent)
         std::cout << "Converting samples...\n";
 
-    if (ConvertSampleData(dmf))
+    std::map<dmf_sample_id_t, MODMappedDMFSample> sampleMap;
+    if (DMFConvertSamples(dmf, sampleMap))
     {
+        // An error occurred
         return true;
     }
 
@@ -249,7 +244,7 @@ bool MOD::ConvertFrom(const Module* input, const ConversionOptionsPtr& options)
     if (!silent)
         std::cout << "Converting pattern data...\n";
 
-    if (ConvertPatterns(dmf))
+    if (DMFConvertPatterns(dmf, sampleMap))
         return true;
     
     ///////////////// CLEAN UP
@@ -261,20 +256,30 @@ bool MOD::ConvertFrom(const Module* input, const ConversionOptionsPtr& options)
     return false;
 }
 
-///////// CONVERT FROM DMF /////////
+bool MOD::DMFConvertSamples(const DMF& dmf, std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap)
+{
+    std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>> sampleIdLowestHighestNotesMap;
+    DMFCreateSampleMapping(dmf, sampleMap, sampleIdLowestHighestNotesMap);
+    DMFSampleSplittingAndAssignment(sampleMap, sampleIdLowestHighestNotesMap);
+    DMFConvertSampleData(dmf, sampleMap);
+    return false;
+}
 
-bool MOD::CreateSampleMapping(const DMF& dmf)
+bool MOD::DMFCreateSampleMapping(const DMF& dmf, std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap)
 {
     // This function loops through all DMF pattern contents to find the highest and lowest notes 
     //  for each square wave duty cycle and each wavetable. It also finds which SQW duty cycles are 
-    //  used and which wavetables are used and stores this info in m_SampleMap.
-    //  Then it calls the function finalizeSampMap.
+    //  used and which wavetables are used and stores this info in sampleMap.
+    //  This extra processing is needed because Deflemask has roughly twice the pitch range that MOD has, so
+    //  a pair of samples may be needed for MOD to achieve the same pitch range. These extra samples are only
+    //  used when needed.
 
-    m_SampleMap.clear();
-    m_SampleIdLowestHighestNotesMap.clear();
-    m_SilentSampleNeeded = false;
+    sampleMap.clear();
 
-    m_DMFTotalWavetables = dmf.GetTotalWavetables();
+    // Lowest/highest note for each square wave duty cycle or wavetable instrument
+    sampleIdLowestHighestNotesMap.clear();
+
+    const uint8_t dmfTotalWavetables = dmf.GetTotalWavetables();
 
     // The current square wave duty cycle, note volume, and other information that the 
     //      tracker stores for each channel while playing a tracker file.
@@ -357,7 +362,7 @@ bool MOD::CreateSampleMapping(const DMF& dmf)
                 }
                 else if (effectCode == DMF_SETWAVE && state[chan].wavetable != effectValue && chan == DMF_GAMEBOY_WAVE) // If wave channel wavetable needs to change 
                 {
-                    if (effectValue >= 0 && effectValue < m_DMFTotalWavetables)
+                    if (effectValue >= 0 && effectValue < dmfTotalWavetables)
                     {
                         state[chan].wavetable = effectValue;
                         state[chan].sampleChanged = true;
@@ -366,7 +371,9 @@ bool MOD::CreateSampleMapping(const DMF& dmf)
                 
                 if (pat.note.pitch == DMF_NOTE_OFF && state[chan].notePlaying)
                 {
-                    m_SilentSampleNeeded = true;
+                    // Silent sample is needed
+                    if (sampleMap.count(-1) == 0)
+                        sampleMap[-1] = {};
                     state[chan].notePlaying = false;
                 }
 
@@ -378,17 +385,17 @@ bool MOD::CreateSampleMapping(const DMF& dmf)
                     mod_sample_id_t sampleId = chan == DMF_GAMEBOY_WAVE ? state[chan].wavetable + 4 : state[chan].dutyCycle;
 
                     // Mark this square wave or wavetable as used
-                    m_SampleMap[sampleId] = {};
+                    sampleMap[sampleId] = {};
 
                     // Get lowest/highest notes
-                    if (m_SampleIdLowestHighestNotesMap.count(sampleId) == 0) // 1st time
+                    if (sampleIdLowestHighestNotesMap.count(sampleId) == 0) // 1st time
                     {
                         MODNote n = { .pitch = pat.note.pitch, .octave = pat.note.octave };
-                        m_SampleIdLowestHighestNotesMap[sampleId] = std::pair<MODNote, MODNote>(n, n);
+                        sampleIdLowestHighestNotesMap[sampleId] = std::pair<MODNote, MODNote>(n, n);
                     }
                     else
                     {
-                        auto& notePair = m_SampleIdLowestHighestNotesMap[sampleId];
+                        auto& notePair = sampleIdLowestHighestNotesMap[sampleId];
                         if (pat.note > notePair.second)
                         {
                             // Found a new highest note
@@ -407,33 +414,38 @@ bool MOD::CreateSampleMapping(const DMF& dmf)
         }
     }
 
-    return SampleSplittingAndAssignment();
+    return false;
 }
 
-bool MOD::SampleSplittingAndAssignment()
+bool MOD::DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap)
 {
     // This method determines whether a sample will need to be split into low and high ranges, then assigns
     //  MOD sample numbers
     
     mod_sample_id_t currentMODSampleId = 1; // Sample #0 is special in ProTracker
 
-    if (m_SilentSampleNeeded)
-    {
-        // The silent sample will be sample #1
-        // It will be added to the sample map AFTER the loop below, since the loop's logic doesn't pertain to it
-        currentMODSampleId = 2;
-    }
-
     // Only the samples we need will be in this map (+ the silent sample possibly)
-    for (auto& mapPair : m_SampleMap)
+    for (auto& mapPair : sampleMap)
     {
         dmf_sample_id_t sampleId = mapPair.first;
         MODMappedDMFSample& modSampleInfo = mapPair.second;
 
+        // Special handling of silent sample
+        if (sampleId == -1)
+        {
+            modSampleInfo.lowId = 1; // Silent sample is always sample #1 if it is used
+            modSampleInfo.highId = -1;
+            modSampleInfo.lowLength = 8;
+            modSampleInfo.highLength = 0;
+            modSampleInfo.splitPoint = {};
+            currentMODSampleId++;
+            continue;
+        }
+
         modSampleInfo.lowLength = 0;
         modSampleInfo.highLength = 0;
 
-        const auto& lowHighNotes = m_SampleIdLowestHighestNotesMap[sampleId];
+        const auto& lowHighNotes = sampleIdLowestHighestNotesMap.at(sampleId);
         const auto& lowestNote = lowHighNotes.first;
         const auto& highestNote = lowHighNotes.second;
 
@@ -575,17 +587,6 @@ bool MOD::SampleSplittingAndAssignment()
         }
     }
 
-    // Now add the silent sample to the sample map
-    if (m_SilentSampleNeeded)
-    {
-        m_SampleMap[-1] = {};
-        m_SampleMap[-1].lowId = 1; // Silent sample is always sample #1 if it is used
-        m_SampleMap[-1].highId = -1;
-        m_SampleMap[-1].lowLength = 8;
-        m_SampleMap[-1].highLength = 0;
-        m_SampleMap[-1].splitPoint = {};
-    }
-
     m_TotalMODSamples = currentMODSampleId - 1; // Set the number of MOD samples that will be needed. (minus sample #0 which is special)
     
     // TODO: Check if there are too many samples needed here
@@ -593,11 +594,11 @@ bool MOD::SampleSplittingAndAssignment()
     return 0; // Success
 }
 
-bool MOD::ConvertSampleData(const DMF& dmf)
+bool MOD::DMFConvertSampleData(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap)
 {
     // Fill out information needed to define a MOD sample
     m_Samples.clear();
-    for (const auto& mapPair : m_SampleMap)
+    for (const auto& mapPair : sampleMap)
     {
         dmf_sample_id_t modSampleId = mapPair.first;
 
@@ -765,11 +766,12 @@ std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned le
     return sample;
 }
 
-bool MOD::ConvertPatterns(const DMF& dmf)
+bool MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap)
 {
     m_Patterns.assign(m_NumberOfRowsInPatternMatrix, {});
 
-    m_InitialTempo = GetMODTempo(dmf.GetBPM());
+    const uint8_t initialTempo = GetMODTempo(dmf.GetBPM());
+    const uint8_t dmfTotalWavetables = dmf.GetTotalWavetables();
 
     if (m_UsingSetupPattern)
     {
@@ -780,7 +782,7 @@ bool MOD::ConvertPatterns(const DMF& dmf)
         tempoRow.SampleNumber = 0;
         tempoRow.SamplePeriod = 0;
         tempoRow.EffectCode = MOD_SETSPEED;
-        tempoRow.EffectValue = m_InitialTempo;
+        tempoRow.EffectValue = initialTempo;
         SetChannelRow(0, 0, 0, tempoRow);
 
         // Set position jump (once the Pattern Break effect is implemented, it can be used instead.)
@@ -879,7 +881,7 @@ bool MOD::ConvertPatterns(const DMF& dmf)
                 }
                 else if (effectCode == DMF_SETWAVE && state[chan].wavetable != effectValue && chan == DMF_GAMEBOY_WAVE) // If wave channel wavetable needs to change 
                 {
-                    if (effectValue >= 0 && effectValue < m_DMFTotalWavetables)
+                    if (effectValue >= 0 && effectValue < dmfTotalWavetables)
                     {
                         state[chan].wavetable = effectValue;
                         state[chan].sampleChanged = true;
@@ -889,11 +891,9 @@ bool MOD::ConvertPatterns(const DMF& dmf)
 
                 MODChannelRow tempChannelRow;
 
-                if (ConvertChannelRow(dmf, pat, state[chan], tempChannelRow))
+                if (DMFConvertChannelRow(dmf, sampleMap, pat, state[chan], tempChannelRow))
                 {
                     // Error occurred while writing the pattern row
-                    m_SampleIdLowestHighestNotesMap.clear();
-                    m_SampleMap.clear();
                     return true;
                 }
 
@@ -905,11 +905,11 @@ bool MOD::ConvertPatterns(const DMF& dmf)
     return false;
 }
 
-bool MOD::ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelState& state, MODChannelRow& modChannelRow)
+bool MOD::DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const PatternRow& pat, MODChannelState& state, MODChannelRow& modChannelRow)
 {
     // Writes 4 bytes of pattern row information to the .mod file
     uint16_t effectCode, effectValue;
-    if (ConvertEffect(pat, state, effectCode, effectValue))
+    if (DMFConvertEffect(pat, state, effectCode, effectValue))
     {
         return true; // An error occurred
     }
@@ -925,7 +925,7 @@ bool MOD::ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelSta
     {
         state.notePlaying = false;
 
-        modChannelRow.SampleNumber = GetMODSampleId(-1, {}); // Use silent sample
+        modChannelRow.SampleNumber = sampleMap.at(-1).lowId; // Use silent sample
         modChannelRow.SamplePeriod = 214; // C-3; Doesn't really matter
         modChannelRow.EffectCode = effectCode;
         modChannelRow.EffectValue = effectValue;
@@ -944,9 +944,9 @@ bool MOD::ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelSta
                 // The indices for this SQW / WAVE sample's low note range and high note range:
                 dmfSampleId = state.channel == DMF_GAMEBOY_WAVE ? state.wavetable + 4 : state.dutyCycle;
 
-                if (m_SampleMap.count(dmfSampleId) > 0)
+                if (sampleMap.count(dmfSampleId) > 0)
                 {
-                    MODMappedDMFSample& modSampleInfo = m_SampleMap[dmfSampleId];
+                    const MODMappedDMFSample& modSampleInfo = sampleMap.at(dmfSampleId);
                     Note dmfSplitPoint;
                     dmfSplitPoint.octave = modSampleInfo.splitPoint.octave;
                     dmfSplitPoint.pitch = modSampleInfo.splitPoint.pitch;
@@ -1007,8 +1007,8 @@ bool MOD::ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelSta
         }
         else if (state.channel != DMF_GAMEBOY_NOISE) // A MOD sample needs to change
         {
-            MODMappedDMFSample* modSampleInfo = GetMODMappedDMFSample(dmfSampleId);
-            sampleNumber = state.onHighNoteRange ? modSampleInfo->highId : modSampleInfo->lowId;
+            const MODMappedDMFSample& modSampleInfo = sampleMap.at(dmfSampleId);
+            sampleNumber = state.onHighNoteRange ? modSampleInfo.highId : modSampleInfo.lowId;
 
             state.sampleChanged = false; // Just changed the sample, so resetting this for next time.
             
@@ -1041,11 +1041,11 @@ bool MOD::ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelSta
    return 0; // Success
 }
 
-bool MOD::ConvertEffect(const PatternRow& pat, MODChannelState& state, uint16_t& effectCode, uint16_t& effectValue)
+bool MOD::DMFConvertEffect(const PatternRow& pat, MODChannelState& state, uint16_t& effectCode, uint16_t& effectValue)
 {
     if (m_Options->GetEffects() == MODConversionOptions::EffectsEnum::Max) // If using maximum amount of effects
     {
-        ConvertEffectCodeAndValue(pat.effectCode[0], pat.effectValue[0], effectCode, effectValue); // Effects must be in first row
+        DMFConvertEffectCodeAndValue(pat.effectCode[0], pat.effectValue[0], effectCode, effectValue); // Effects must be in first row
         if (pat.volume != state.volume && pat.volume != DMF_NOTE_NOVOLUME && (pat.note.pitch >= 1 && pat.note.pitch <= 12)) // If the note volume changes, and the volume is connected to a note
         {
             if (effectCode != MOD_NOEFFECT_CODE) // If an effect is already being used
@@ -1113,7 +1113,7 @@ bool MOD::ConvertEffect(const PatternRow& pat, MODChannelState& state, uint16_t&
     return false; // Success
 }
 
-void MOD::ConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectValue, uint16_t& modEffectCode, uint16_t& modEffectValue)
+void MOD::DMFConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectValue, uint16_t& modEffectCode, uint16_t& modEffectValue)
 {
     // An effect is represented with 12 bits, which is 3 groups of 4 bits: [e][x][y].
     // The effect code is [e] or [e][x], and the effect value is [x][y] or [y].
@@ -1205,44 +1205,6 @@ void MOD::ConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectValu
 
     modEffectCode = ptEff;
     modEffectValue = ptEffVal;
-}
-
-mod_sample_id_t MOD::GetMODSampleId(dmf_sample_id_t dmfSampleId, const Note& dmfNote)
-{
-    // Must call CreateSampleMapping first.
-    // dmfSampleId == -1 --> Returns silent sample id
-    // 0 <= dmfSampleId <= 3 --> Returns square wave sample id
-    // dmfSampleId >= 4 --> Returns wavetable sample id
-
-    if (IsDMFSampleUsed(dmfSampleId))
-    {
-        MODMappedDMFSample* modSampleInfo = GetMODMappedDMFSample(dmfSampleId);
-
-        // If there's no highId set, there's no high/low versions, just one version stored in lowId
-        if (modSampleInfo->highId == -1)
-            return modSampleInfo->lowId;
-
-        // Use DMF note to check which MOD sample ID to use based on split point
-        if (dmfNote >= modSampleInfo->splitPoint)
-            return modSampleInfo->highId;
-        else
-            return modSampleInfo->lowId;
-    }
-    return -1; // Sample mapping for this DMF sample does not exist. Does not need to be imported.
-}
-
-MODMappedDMFSample* MOD::GetMODMappedDMFSample(dmf_sample_id_t dmfSampleId)
-{
-    if (IsDMFSampleUsed(dmfSampleId))
-    {
-        return &m_SampleMap[dmfSampleId];
-    }
-    return nullptr;
-}
-
-bool MOD::IsDMFSampleUsed(dmf_sample_id_t dmfSampleId)
-{
-    return m_SampleMap.count(dmfSampleId) > 0;
 }
 
 ///////// EXPORT /////////

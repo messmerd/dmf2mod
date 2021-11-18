@@ -173,17 +173,15 @@ private:
     bool ConvertFrom(const Module* input, const ConversionOptionsPtr& options) override;
 
     // Conversion from DMF:
-    bool CreateSampleMapping(const DMF& dmf);
-    bool SampleSplittingAndAssignment();
-    bool ConvertSampleData(const DMF& dmf);
-    bool ConvertPatterns(const DMF& dmf);
-    bool ConvertChannelRow(const DMF& dmf, const PatternRow& pat, MODChannelState& state, MODChannelRow& modChannelRow);
-    bool ConvertEffect(const PatternRow& pat, MODChannelState& state, uint16_t& effectCode, uint16_t& effectValue);
-    void ConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectValue, uint16_t& modEffectCode, uint16_t& modEffectValue);
-    
-    mod_sample_id_t GetMODSampleId(dmf_sample_id_t dmfSampleId, const Note& dmfNote);
-    MODMappedDMFSample* GetMODMappedDMFSample(dmf_sample_id_t dmfSampleId);
-    bool IsDMFSampleUsed(dmf_sample_id_t dmfSampleId);
+    bool ConvertFromDMF(const DMF& dmf, const ConversionOptionsPtr& options);
+    bool DMFConvertSamples(const DMF& dmf, std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
+    bool DMFCreateSampleMapping(const DMF& dmf, std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap);
+    bool DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap);
+    bool DMFConvertSampleData(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
+    bool DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
+    bool DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const PatternRow& pat, MODChannelState& state, MODChannelRow& modChannelRow);
+    bool DMFConvertEffect(const PatternRow& pat, MODChannelState& state, uint16_t& effectCode, uint16_t& effectValue);
+    void DMFConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectValue, uint16_t& modEffectCode, uint16_t& modEffectValue);
 
     // Export:
     void ExportModuleName(std::ofstream& fout) const;
@@ -209,15 +207,7 @@ private:
     MODConversionOptions* m_Options;
 
     //////////// Temporaries used during DMF-->MOD conversion
-    const bool m_UsingSetupPattern = true; // Whether to use a pattern at the start of the module to set up the initial tempo and other stuff. 
-    bool m_SilentSampleNeeded = false;
-    unsigned char m_DMFTotalWavetables; // For effeciency. dmf->GetTotalWavetables()
-    uint8_t m_InitialTempo;
-
-    // Lowest/highest note for each square wave duty cycle or wavetable instrument.
-    std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>> m_SampleIdLowestHighestNotesMap;
-
-    std::map<dmf_sample_id_t, MODMappedDMFSample> m_SampleMap;
+    const bool m_UsingSetupPattern = true; // Whether to use a pattern at the start of the module to set up the initial tempo and other stuff.
 
     //////////// MOD file info
     std::string m_ModuleName;
@@ -227,5 +217,4 @@ private:
     unsigned m_NumberOfRowsInPatternMatrix;
     std::vector<std::vector<MODChannelRow>> m_Patterns; // Per pattern: Vector of channel rows that together contain data for entire pattern
     std::map<mod_sample_id_t, MODSample> m_Samples;
-
 };

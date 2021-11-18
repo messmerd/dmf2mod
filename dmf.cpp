@@ -2,7 +2,8 @@
     dmf.cpp
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Implements the Module-derived class for Deflemask's DMF files.
+    Implements the ModuleInterface-derived class for Deflemask's 
+    DMF files.
 
     DMF file support was written according to the specs at 
     http://www.deflemask.com/DMF_SPECS.txt.
@@ -25,21 +26,23 @@
 const std::vector<std::string> DMFOptions = {};
 REGISTER_MODULE_CPP(DMF, DMFConversionOptions, ModuleType::DMF, "dmf", DMFOptions)
 
-#define DMF_FILE_VERSION 24 // 0x18 - Only DefleMask v0.12.0 files are supported
+#define DMF_FILE_VERSION 22 // 0x16 - Only DefleMask v0.12.0 files and above are supported
 
 // Information about all the systems Deflemask supports
 // Using designated initialization for the array
 const System DMF::m_Systems[] = {
     [SYS_ERROR] = {.id = 0x00, .name = "ERROR", .channels = 0},
-	[SYS_GENESIS] = {.id = 0x02, .name = "GENESIS", .channels = 10},
-	[SYS_GENESIS_CH3] = {.id = 0x12, .name = "GENESIS_CH3", .channels = 13},
-	[SYS_SMS] = {.id = 0x03, .name = "SMS", .channels = 4},
-	[SYS_GAMEBOY] = {.id = 0x04, .name = "GAMEBOY", .channels = 4},
-	[SYS_PCENGINE] = {.id = 0x05, .name = "PCENGINE", .channels = 6},
-	[SYS_NES] = {.id = 0x06, .name = "NES", .channels = 5},
-	[SYS_C64_SID_8580] = {.id = 0x07, .name = "C64_SID_8580", .channels = 3},
-	[SYS_C64_SID_6581] = {.id = 0x17, .name = "C64_SID_6581", .channels = 3},
-	[SYS_YM2151] = {.id = 0x08, .name = "YM2151", .channels = 13}
+    [SYS_GENESIS] = {.id = 0x02, .name = "GENESIS", .channels = 10},
+    [SYS_GENESIS_CH3] = {.id = 0x12, .name = "GENESIS_CH3", .channels = 13},
+    [SYS_SMS] = {.id = 0x03, .name = "SMS", .channels = 4},
+    [SYS_GAMEBOY] = {.id = 0x04, .name = "GAMEBOY", .channels = 4},
+    [SYS_PCENGINE] = {.id = 0x05, .name = "PCENGINE", .channels = 6},
+    [SYS_NES] = {.id = 0x06, .name = "NES", .channels = 5},
+    [SYS_C64_SID_8580] = {.id = 0x07, .name = "C64_SID_8580", .channels = 3},
+    [SYS_C64_SID_6581] = {.id = 0x17, .name = "C64_SID_6581", .channels = 3},
+    [SYS_ARCADE] = {.id = 0x08, .name = "ARCADE", .channels = 13},
+    [SYS_NEOGEO] = {.id = 0x09, .name = "NEOGEO", .channels = 13},
+    [SYS_NEOGEO_CH2] = {.id = 0x49, .name = "NEOGEO_CH2", .channels = 16}
 };
 
 DMF::DMF()
@@ -189,17 +192,17 @@ bool DMF::Import(const std::string& filename)
     }
 
     m_DMFFileVersion = fin.get();
-    if (m_DMFFileVersion != DMF_FILE_VERSION)
+    if (m_DMFFileVersion < DMF_FILE_VERSION)
     {
         std::stringstream stream;
         stream << "0x" << std::setfill('0') << std::setw(2) << std::hex << DMF_FILE_VERSION;
         std::string hex = stream.str();
 
-        std::string errorMsg = "Deflemask file version must be " + std::to_string(DMF_FILE_VERSION) + " (" + hex + ").\n";
+        std::string errorMsg = "Deflemask file version must be " + std::to_string(DMF_FILE_VERSION) + " (" + hex + ") or higher.\n";
         
         stream.clear();
         stream.str("");
-        stream << "0x" << std::setfill('0') << std::setw(2) << std::hex << m_DMFFileVersion;
+        stream << "0x" << std::setfill('0') << std::setw(2) << std::hex << (int)m_DMFFileVersion;
         hex = stream.str();
 
         errorMsg += "The given DMF file is version " + std::to_string(m_DMFFileVersion) + " (" + hex + ").\n";
@@ -303,13 +306,24 @@ void DMF::LoadModuleInfo(zstr::ifstream& fin)
     m_ModuleInfo.customHZValue1 = fin.get();
     m_ModuleInfo.customHZValue2 = fin.get();
     m_ModuleInfo.customHZValue3 = fin.get();
-    m_ModuleInfo.totalRowsPerPattern = fin.get();
-    m_ModuleInfo.totalRowsPerPattern |= fin.get() << 8;
-    m_ModuleInfo.totalRowsPerPattern |= fin.get() << 16;
-    m_ModuleInfo.totalRowsPerPattern |= fin.get() << 24;
+
+    if (m_DMFFileVersion >= 24) // For Version 0.12.0 and onward. DMF version 24 (0x18). TODO: What is 23?
+    {
+        // Newer versions read 4 bytes here
+        m_ModuleInfo.totalRowsPerPattern = fin.get();
+        m_ModuleInfo.totalRowsPerPattern |= fin.get() << 8;
+        m_ModuleInfo.totalRowsPerPattern |= fin.get() << 16;
+        m_ModuleInfo.totalRowsPerPattern |= fin.get() << 24;
+    }
+    else // Version 0.12.0. DMF version 22 (0x16).
+    {
+        // Earlier versions such as 22 (0x16) only read one byte here
+        m_ModuleInfo.totalRowsPerPattern = fin.get();
+    }
+
     m_ModuleInfo.totalRowsInPatternMatrix = fin.get();
 
-    // TODO: In previous DMF versions, arpeggio tick speed is stored here!!!
+    // TODO: Prior to Version 0.11.1, arpeggio tick speed was stored here
 }
 
 void DMF::LoadPatternMatrixValues(zstr::ifstream& fin)
@@ -534,11 +548,7 @@ void DMF::LoadPatternsData(zstr::ifstream& fin)
         m_ChannelEffectsColumnsCount[channel] = fin.get();
 
         m_PatternValues[channel] = new PatternRow*[m_PatternMatrixMaxValues[channel] + 1]();
-        /*
-        for (unsigned i = 0; i < m_PatternMatrixMaxValues[channel] + 1u; i++)
-        {
-            m_PatternValues[channel][i] = nullptr;
-        }*/
+
         for (unsigned rowInPatternMatrix = 0; rowInPatternMatrix < m_ModuleInfo.totalRowsInPatternMatrix; rowInPatternMatrix++)
         {
             patternMatrixNumber = m_PatternMatrixValues[channel][rowInPatternMatrix];
@@ -616,10 +626,19 @@ PCMSample DMF::LoadPCMSample(zstr::ifstream& fin)
     sample.size |= fin.get() << 16;
     sample.size |= fin.get() << 24;
 
-    uint8_t name_size = fin.get();
-    sample.name = new char[name_size];
-    fin.read(sample.name, name_size);
-    sample.name[name_size] = '\0';
+    if (m_DMFFileVersion >= 24) // For Version 0.12.0 and onward. DMF version 24 (0x18). TODO: What is 23?
+    {
+        // Read PCM sample name
+        uint8_t name_size = fin.get();
+        sample.name = new char[name_size];
+        fin.read(sample.name, name_size);
+        sample.name[name_size] = '\0';
+    }
+    else // Version 0.12.0. DMF version 22 (0x16).
+    {
+        // PCM samples don't have names in this DMF version
+        sample.name = nullptr;
+    }
 
     sample.rate = fin.get();
     sample.pitch = fin.get();
@@ -636,9 +655,9 @@ PCMSample DMF::LoadPCMSample(zstr::ifstream& fin)
     return sample;
 }
 
-double DMF::GetBPM() const
+void DMF::GetBPM(unsigned& numerator, unsigned& denominator) const
 {
-    // Returns the initial BPM of the module
+    // Gets the initial BPM of the module
     unsigned int globalTick;
     if (m_ModuleInfo.usingCustomHZ)
     {
@@ -666,7 +685,19 @@ double DMF::GetBPM() const
     }
     
     // Experimentally determined equation for BPM:
-    return (15.0 * globalTick) / ((m_ModuleInfo.timeBase + 1) * (m_ModuleInfo.tickTime1 + m_ModuleInfo.tickTime2));
+    numerator = 15.0 * globalTick;
+    denominator = (m_ModuleInfo.timeBase + 1) * (m_ModuleInfo.tickTime1 + m_ModuleInfo.tickTime2);
+
+    if (denominator == 0)
+        throw std::runtime_error("Tried to divide by zero when calculating BPM.\n");
+}
+
+double DMF::GetBPM() const
+{
+    // Returns the initial BPM of the module
+    unsigned numerator, denominator;
+    GetBPM(numerator, denominator);
+    return numerator * 1.0 / denominator;
 }
 
 bool operator==(const Note& lhs, const Note& rhs)
@@ -702,31 +733,3 @@ bool operator<=(const Note& lhs, const Note& rhs)
 {
     return lhs.octave + lhs.pitch / 13.f <= rhs.octave + rhs.pitch / 13.f;
 }
-
-
-int8_t NoteCompare(const Note& n1, const Note& n2)
-{
-    // Compares notes n1 and n2
-    // Assumes note isn't Note OFF or Empty note
-    // Notes must use the DMF convention where the note C# is the 1st note of an octave rather than C-
-
-    if (n1.octave + n1.pitch / 13.f > n2.octave + n2.pitch / 13.f)
-    {
-        return 1; // n1 > n2 (n1 has a higher pitch than n2)
-    }
-    else if (n1.octave + n1.pitch / 13.f < n2.octave + n2.pitch / 13.f)
-    {
-        return -1; // n1 < n2 (n1 has a lower pitch than n2)
-    }
-    else 
-    {
-        return 0; // Same note
-    }
-}
-
-/*
-int8_t NoteCompare(const Note& n1, Note n2)
-{
-    return NoteCompare(n1, n2);
-}
-*/

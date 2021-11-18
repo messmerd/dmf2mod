@@ -2,7 +2,8 @@
     mod.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Declares the Module-derived class for ProTracker's MOD files.
+    Declares the ModuleInterface-derived class for ProTracker's 
+    MOD files.
 
     Several limitations apply in order to export. For example, 
     for DMF --> MOD, the DMF file must use the Game Boy system, 
@@ -11,7 +12,6 @@
 */
 
 #pragma once
-
 
 #include "modules.h"
 
@@ -182,6 +182,7 @@ private:
     bool DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const PatternRow& pat, MODChannelState& state, MODChannelRow& modChannelRow);
     bool DMFConvertEffect(const PatternRow& pat, MODChannelState& state, uint16_t& effectCode, uint16_t& effectValue);
     void DMFConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectValue, uint16_t& modEffectCode, uint16_t& modEffectValue);
+    void DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed);
 
     // Export:
     void ExportModuleName(std::ofstream& fout) const;

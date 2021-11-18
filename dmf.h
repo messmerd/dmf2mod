@@ -2,7 +2,8 @@
     dmf.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Declares the Module-derived class for Deflemask's DMF files.
+    Declares the ModuleInterface-derived class for Deflemask's 
+    DMF files.
 
     DMF file support was written according to the specs at 
     http://www.deflemask.com/DMF_SPECS.txt.
@@ -87,7 +88,8 @@ typedef struct System
 typedef enum SYSTEM_TYPE
 {
     SYS_ERROR=0, SYS_GENESIS, SYS_GENESIS_CH3, SYS_SMS, SYS_GAMEBOY, 
-    SYS_PCENGINE, SYS_NES, SYS_C64_SID_8580, SYS_C64_SID_6581, SYS_YM2151
+    SYS_PCENGINE, SYS_NES, SYS_C64_SID_8580, SYS_C64_SID_6581, SYS_ARCADE,
+    SYS_NEOGEO, SYS_NEOGEO_CH2
 } SYSTEM_TYPE;
 
 typedef struct VisualInfo
@@ -199,7 +201,8 @@ public:
 
     ////////////
 
-    // Returns the initial BPM of the module when given ModuleInfo
+    // Returns the initial BPM of the module
+    void GetBPM(unsigned& numerator, unsigned& denominator) const;
     double GetBPM() const;
 
     const System& GetSystem() const { return m_System; }
@@ -260,5 +263,3 @@ typedef enum DMF_GAMEBOY_CHANNEL {
 
 // Compares notes n1 and n2. Returns 1 if n1 > n2, -1 if n1 < n2, and 0 if n1 == n2.
 int8_t NoteCompare(const Note& n1, const Note& n2);
-
-//int8_t NoteCompare(const Note& n1, Note n2);

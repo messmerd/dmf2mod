@@ -2,7 +2,8 @@
     mod.cpp
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Implements the Module-derived class for ProTracker's MOD files.
+    Implements the ModuleInterface-derived class for ProTracker's 
+    MOD files.
 
     Several limitations apply in order to export. For example, 
     for DMF --> MOD, the DMF file must use the Game Boy system, 
@@ -39,6 +40,9 @@ static std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsi
 
 static std::string ErrorMessageCreator(Status::Category category, int errorCode, const std::string& arg);
 static std::string GetWarningMessage(MOD::ConvertWarning warning);
+
+static bool GetTempoAndSpeedFromBPM(double desiredBPM, unsigned& tempo, unsigned& speed);
+static unsigned GCD(unsigned u, unsigned v);
 
 // The current square wave duty cycle, note volume, and other information that the 
 //      tracker stores for each channel while playing a tracker file.
@@ -259,9 +263,12 @@ bool MOD::ConvertFromDMF(const DMF& dmf, const ConversionOptionsPtr& options)
 bool MOD::DMFConvertSamples(const DMF& dmf, std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap)
 {
     std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>> sampleIdLowestHighestNotesMap;
-    DMFCreateSampleMapping(dmf, sampleMap, sampleIdLowestHighestNotesMap);
-    DMFSampleSplittingAndAssignment(sampleMap, sampleIdLowestHighestNotesMap);
-    DMFConvertSampleData(dmf, sampleMap);
+    if (DMFCreateSampleMapping(dmf, sampleMap, sampleIdLowestHighestNotesMap))
+        return true;
+    if (DMFSampleSplittingAndAssignment(sampleMap, sampleIdLowestHighestNotesMap))
+        return true;
+    if (DMFConvertSampleData(dmf, sampleMap))
+        return true;
     return false;
 }
 
@@ -770,14 +777,16 @@ bool MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
 {
     m_Patterns.assign(m_NumberOfRowsInPatternMatrix, {});
 
-    const uint8_t initialTempo = GetMODTempo(dmf.GetBPM());
+    unsigned initialTempo, initialSpeed; // Together these will set the initial BPM
+    DMFConvertInitialBPM(dmf, initialTempo, initialSpeed);
+
     const uint8_t dmfTotalWavetables = dmf.GetTotalWavetables();
 
     if (m_UsingSetupPattern)
     {
         m_Patterns[0].assign(64 * m_NumberOfChannels, {0, 0, 0, 0});
 
-        // Set initial tempo (An approximation. ProTracker can only support Deflemask tempo between 16 and 127.5 bpm.)
+        // Set initial tempo
         MODChannelRow tempoRow;
         tempoRow.SampleNumber = 0;
         tempoRow.SamplePeriod = 0;
@@ -785,13 +794,21 @@ bool MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
         tempoRow.EffectValue = initialTempo;
         SetChannelRow(0, 0, 0, tempoRow);
 
+        // Set initial speed
+        MODChannelRow speedRow;
+        speedRow.SampleNumber = 0;
+        speedRow.SamplePeriod = 0;
+        speedRow.EffectCode = MOD_SETSPEED;
+        speedRow.EffectValue = initialSpeed;
+        SetChannelRow(0, 0, 1, speedRow);
+
         // Set position jump (once the Pattern Break effect is implemented, it can be used instead.)
         MODChannelRow posJumpRow;
         posJumpRow.SampleNumber = 0;
         posJumpRow.SamplePeriod = 0;
         posJumpRow.EffectCode = MOD_POSJUMP;
         posJumpRow.EffectValue = 1;
-        SetChannelRow(0, 0, 1, posJumpRow);
+        SetChannelRow(0, 0, 2, posJumpRow);
 
         // All other channel rows in the pattern are already zeroed out so nothing needs to be done for them
     }
@@ -1052,8 +1069,7 @@ bool MOD::DMFConvertEffect(const PatternRow& pat, MODChannelState& state, uint16
             {
                 /* Unlike Deflemask, setting the volume in ProTracker requires the use of 
                     an effect, and only one effect can be used at a time per channel.
-                    Same with turning a note off, which requires the EC0 command as far as I know.
-                    Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
+                    Note that the set duty cycle effect in Deflemask is not implemented as an effect in MOD,
                     so it does not count.
                 */
                 m_Status.SetError(Status::Category::Convert, MOD::ConvertError::EffectVolume);
@@ -1205,6 +1221,201 @@ void MOD::DMFConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectV
 
     modEffectCode = ptEff;
     modEffectValue = ptEffVal;
+}
+
+
+
+void MOD::DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed)
+{
+    // Gets MOD tempo and speed values needed to set initial BPM to the DMF's BPM, or as close as possible.
+
+    tempo = 0;
+    speed = 0;
+
+    unsigned bpmNumerator, bpmDenominator;
+    dmf.GetBPM(bpmNumerator, bpmDenominator);
+
+    unsigned n = bpmNumerator / 3; // Should always divide cleanly for DMF tempos. See DMF::GetBPM(...)
+    unsigned d = bpmDenominator;
+
+    // Simplify the fraction
+    unsigned div;
+    do
+    {
+        div = GCD(n, d);
+        n /= div;
+        d /= div;
+    } while (div != 1 && n != 0 && d != 0);
+
+    enum NUMDENSTATUS {OK=0, NUM_LOW=1, NUM_HIGH=2, DEN_LOW=4, DEN_HIGH=8};
+    unsigned status = OK;
+
+    if (n < 33)
+        status |= NUM_LOW;
+    if (n > 255)
+        status |= NUM_HIGH;
+    // Denominator cannot be too low (0 is lowest value)
+    if (d > 32)
+        status |= DEN_HIGH;
+
+    // Adjust the numerator and denominator to get valid tempo and speed values which
+    //  will produce a BPM in MOD as close to the BPM in Deflemask as possible.
+    switch (status)
+    {
+        case OK:
+        {
+            // OK! BPM can exactly match the BPM in Deflemask.
+            tempo = n;
+            speed = d;
+            break;
+        }
+
+        case NUM_LOW:
+        {
+            unsigned multiplier = 255 / n; // Integer division.
+            
+            // n * multiplier will be <= 255; If the multiplier lowers, n will still be good.
+            // So now we must multiply d by multiplier and check that it will work too:
+            while (multiplier > 1)
+            {
+                if (d * multiplier <= 32)
+                    break;
+                multiplier--;
+            }
+
+            if (multiplier == 1)
+            {
+                // Numerator is too low but cannot raise it without making denominator too high.
+                // Set MOD BPM to lowest value possible, but even that will not be enough to match DMF BPM:
+                tempo = 33;
+                speed = 32;
+                
+                // TODO: Set warning here
+                break;
+            }
+            
+            // Adjustment was possible!
+            tempo = n * multiplier;
+            speed = d * multiplier;
+            break;
+        }
+
+        case NUM_HIGH:
+        {
+            // Matching the DMF BPM exactly will be impossible.
+            // n and d were already divided by their GCD.
+
+            // This might be temporary until I get a better, faster solution:
+            if (GetTempoAndSpeedFromBPM(bpmNumerator * 1.0 / bpmDenominator, tempo, speed))
+            {
+                // If it failed, use highest possible BPM:
+                tempo = 255;
+                speed = 1;
+            }
+
+            // TODO: Set warning here
+            break;
+            
+            /*
+            // TODO: This case is very poor at making the BPM match up closely.
+            //          Small changes to the denominator cause large changes to BPM.
+
+            // Make n the highest valid value. d will still 
+            // be valid after adjustment because d has no minimum value.
+            double divisor = n / 255.0;
+            
+            tempo = 255;
+            speed = d / divisor;
+
+            // TODO: Set warning here
+            break;
+            */
+        }
+
+        case DEN_HIGH:
+        {
+            // Matching the DMF BPM exactly will be impossible.
+            // n and d were already divided by their GCD.
+            
+            // Make d the highest valid value.
+            double divisor = d / 32.0;
+            
+            unsigned newN = n / divisor;
+            if (newN < 33)
+            {
+                // n can't handle the adjustment.
+                // Will have to use lowest possible BPM, which is closest approx. to DMF's BPM:
+                tempo = 33;
+                speed = 32;
+            }
+            else
+            {
+                tempo = newN;
+                speed = 32;
+            }
+
+            // TODO: Set warning here
+            break;
+        }
+
+        case (NUM_LOW | DEN_HIGH):
+        {
+            // Numerator is too low but cannot raise it without making denominator too high.
+            // Set MOD BPM to lowest value possible, but even that will not be enough to 
+            // match DMF BPM exactly:
+            tempo = 33;
+            speed = 32;
+            
+            // TODO: Set warning here
+            break;
+        }
+
+        case (NUM_HIGH | DEN_HIGH):
+        {
+            // DMF BPM is probably within the min and max values allowed by MOD, but it cannot 
+            //  be converted to MOD BPM without losing precision.
+
+            // Make d the highest valid value.
+            double divisorD = d / 32.0;
+            unsigned newN = n / divisorD;
+
+            // Make n the highest valid value.
+            double divisorN = n / 255.0;
+            unsigned newD = d / divisorN;
+
+            // Check which option loses the least precision?
+            if (32 <= newN && newN <= 255)
+            {
+                tempo = newN;
+                speed = 32;
+            }
+            else if (newD <= 32)
+            {
+                tempo = 255;
+                speed = newD;
+            }
+            else
+            {
+                // If d is big enough compared to n, this condition is possible.
+                // Specifically, when: n * 1.0 / d < 33.0 / 32.0
+                // The d value cannot be made small enough without making the n value too small.
+                // Will have to use lowest possible BPM, which is closest approx. to DMF's BPM:
+                tempo = 33;
+                speed = 32;
+            }
+
+            // TODO: Set warning here
+            break;
+        }
+
+        default:
+            // Error!
+            throw std::runtime_error("Unknown error while converting Deflemask tempo to MOD.\n");
+            break;
+    }
+
+    if (speed == 0)
+        speed = 1; // Speed 0 and 1 are identical in ProTracker, but I prefer using 1.
 }
 
 ///////// EXPORT /////////
@@ -1362,7 +1573,7 @@ std::string ErrorMessageCreator(Status::Category category, int errorCode, const 
                     return std::string("Cannot use wavetable instrument #") + arg + std::string(" without loss of information.\n")
                             + std::string("       Try using the '--downsample' option.");
                 case (int)MOD::ConvertError::EffectVolume:
-                    return std::string("An effect and a volume change (or Note OFF) cannot both appear in the same row of the same channel.\n")
+                    return std::string("An effect and a volume change cannot both appear in the same row of the same channel.\n")
                             + std::string("       Try fixing this issue in Deflemask or use the '--effects=min' option.");
                 case (int)MOD::ConvertError::MultipleEffects:
                     return "No more than one Note OFF, Volume Change, or Position Jump can appear in the same row of the same channel.";
@@ -1397,4 +1608,43 @@ uint8_t MOD::GetMODTempo(double bpm)
         // ProTracker tempo is twice the Deflemask bpm.
         return bpm * 2;
     }
+}
+
+bool GetTempoAndSpeedFromBPM(double desiredBPM, unsigned& tempo, unsigned& speed)
+{
+    // Brute force function to get the Tempo/Speed pair which produces a BPM as close as possible to the desired BPM
+    // Returns true if the desired BPM is outside the range of tempos playable by ProTracker.
+
+    tempo = 0;
+    speed = 0;
+    double bestBPMDiff = 9999999.0;
+
+    for (unsigned d = 1; d <= 32; d++)
+    {
+        if (3 * 33.0 / d > desiredBPM || desiredBPM > 3 * 255.0 / d)
+            continue; // Not even possible with this speed value
+        
+        for (unsigned n = 33; n <= 255; n++)
+        {
+            const double bpm = 3.0 * (double)n / d;
+            if (std::abs(desiredBPM - bpm) < bestBPMDiff)
+            {
+                tempo = n;
+                speed = d;
+                bestBPMDiff = desiredBPM - bpm;
+            }
+        }
+    }
+
+    if (tempo == 0) // Never found a tempo/speed pair that approximates the BPM
+        return true;
+
+    return false;
+}
+
+unsigned GCD(unsigned u, unsigned v)
+{
+    if (v == 0)
+        return u;
+    return GCD(v, u % v);
 }

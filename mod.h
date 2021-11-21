@@ -22,37 +22,42 @@
 REGISTER_MODULE_HEADER(MOD, MODConversionOptions)
 
 // Forward defines
-struct Note;
-struct PatternRow;
+struct DMFNote;
+struct DMFChannelRow;
 struct MODChannelState;
 
-// ProTracker effects
-// An effect is represented with 12 bits, which is 3 groups of 4 bits: [e][x][y]. 
-// The effect code is [e] or [e][x], and the effect value is [x][y] or [y]. 
-// Effect codes of the form [e] are stored as [e][0x0] below 
-typedef enum MOD_EFFECT {
-    MOD_NOEFFECT=0x00, MOD_NOEFFECTVAL=0x00, MOD_NOEFFECT_CODE=0x00, /* MOD_NOEFFECT_CODE is the same as ((uint16_t)MOD_NOEFFECT << 4) | MOD_NOEFFECTVAL */
-    MOD_ARP=0x00, MOD_PORTUP=0x10, MOD_PORTDOWN=0x20, MOD_PORT2NOTE=0x30, MOD_VIBRATO=0x40, MOD_PORT2NOTEVOLSLIDE=0x50, MOD_VIBRATOVOLSLIDE=0x60,
-    MOD_TREMOLO=0x70, MOD_PANNING=0x80, MOD_SETSAMPLEOFFSET=0x90, MOD_VOLSLIDE=0xA0, MOD_POSJUMP=0xB0, MOD_SETVOLUME=0xC0, MOD_PATBREAK=0xD0, 
-    MOD_SETFILTER=0xE0, MOD_FINESLIDEUP=0xE1, MOD_FINESLIDEDOWN=0xE2, MOD_SETGLISSANDO=0xE3, MOD_SETVIBRATOWAVEFORM=0xE4, 
-    MOD_SETFINETUNE=0xE5, MOD_LOOPPATTERN=0xE6, MOD_SETTREMOLOWAVEFORM=0xE7, MOD_RETRIGGERSAMPLE=0xE9, MOD_FINEVOLSLIDEUP=0xEA, 
-    MOD_FINEVOLSLIDEDOWN=0xEB, MOD_CUTSAMPLE=0xEC, MOD_DELAYSAMPLE=0xED, MOD_DELAYPATTERN=0xEE, MOD_INVERTLOOP=0xEF,
-    MOD_SETSPEED=0xF0
-} MOD_EFFECT;
+// MOD effects:
+// An effect is represented with 12 bits, which is 3 groups of 4 bits: [a][x][y] or [a][b][x]
+// The effect code is [a] or [a][b], and the effect value is [x][y] or [x]. [x][y] codes are the
+// extended effects. All effect codes are stored below. Non-extended effects have 0x0 in the right-most
+// nibble in order to line up with the extended effects:
+namespace MODEffect
+{
+    enum MODEffect
+    {
+        NoEffect=0x00, NoEffectVal=0x00, NoEffectCode=0x00, /* NoEffect is the same as ((uint16_t)NoEffectCode << 4) | NoEffectVal */
+        Arp=0x00, PortUp=0x10, PortDown=0x20, Port2Note=0x30, Vibrato=0x40, Port2NoteVolSlide=0x50, VibratoVolSlide=0x60,
+        Tremolo=0x70, Panning=0x80, SetSampleOffset=0x90, VolSlide=0xA0, PosJump=0xB0, SetVolume=0xC0, PatBreak=0xD0,
+        SetFilter=0xE0, FineSlideUp=0xE1, FineSlideDown=0xE2, SetGlissando=0xE3, SetVibratoWaveform=0xE4,
+        SetFinetune=0xE5, LoopPattern=0xE6, SetTremoloWaveform=0xE7, RetriggerSample=0xE9, FineVolSlideUp=0xEA,
+        FineVolSlideDown=0xEB, CutSample=0xEC, DelaySample=0xED, DelayPattern=0xEE, InvertLoop=0xEF,
+        SetSpeed=0xF0
+    };
+}
 
 struct MODNote
 {
     uint16_t pitch;
     uint16_t octave;
 
-    operator Note() const;
+    operator DMFNote() const;
 };
 
 struct MODChannelRow
 {
     uint8_t SampleNumber;
     uint16_t SamplePeriod;
-    uint8_t EffectCode;
+    unsigned EffectCode;
     uint8_t EffectValue;
 };
 
@@ -166,8 +171,13 @@ public:
         PitchHigh,
         TempoLow,
         TempoHigh,
+        TempoPrecision,
         EffectIgnored
     };
+
+    
+
+    static constexpr unsigned VolumeMax = 64u; // Yes, there are 65 different values for the volume
 
 private:
     bool ConvertFrom(const Module* input, const ConversionOptionsPtr& options) override;
@@ -179,8 +189,8 @@ private:
     bool DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap);
     bool DMFConvertSampleData(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
     bool DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
-    bool DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const PatternRow& pat, MODChannelState& state, MODChannelRow& modChannelRow);
-    bool DMFConvertEffect(const PatternRow& pat, MODChannelState& state, uint16_t& effectCode, uint16_t& effectValue);
+    bool DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const DMFChannelRow& pat, MODChannelState& state, MODChannelRow& modChannelRow);
+    bool DMFConvertEffect(const DMFChannelRow& pat, MODChannelState& state, uint16_t& effectCode, uint16_t& effectValue);
     void DMFConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectValue, uint16_t& modEffectCode, uint16_t& modEffectValue);
     void DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed);
 

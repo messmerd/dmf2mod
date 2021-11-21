@@ -21,6 +21,7 @@
 #include <iomanip>
 #include <string>
 #include <fstream>
+#include <map>
 
 // Finish setup
 const std::vector<std::string> DMFOptions = {};
@@ -29,21 +30,23 @@ REGISTER_MODULE_CPP(DMF, DMFConversionOptions, ModuleType::DMF, "dmf", DMFOption
 #define DMF_FILE_VERSION 22 // 0x16 - Only DefleMask v0.12.0 files and above are supported
 
 // Information about all the systems Deflemask supports
-// Using designated initialization for the array
-const System DMF::m_Systems[] = {
-    [SYS_ERROR] = {.id = 0x00, .name = "ERROR", .channels = 0},
-    [SYS_GENESIS] = {.id = 0x02, .name = "GENESIS", .channels = 10},
-    [SYS_GENESIS_CH3] = {.id = 0x12, .name = "GENESIS_CH3", .channels = 13},
-    [SYS_SMS] = {.id = 0x03, .name = "SMS", .channels = 4},
-    [SYS_GAMEBOY] = {.id = 0x04, .name = "GAMEBOY", .channels = 4},
-    [SYS_PCENGINE] = {.id = 0x05, .name = "PCENGINE", .channels = 6},
-    [SYS_NES] = {.id = 0x06, .name = "NES", .channels = 5},
-    [SYS_C64_SID_8580] = {.id = 0x07, .name = "C64_SID_8580", .channels = 3},
-    [SYS_C64_SID_6581] = {.id = 0x17, .name = "C64_SID_6581", .channels = 3},
-    [SYS_ARCADE] = {.id = 0x08, .name = "ARCADE", .channels = 13},
-    [SYS_NEOGEO] = {.id = 0x09, .name = "NEOGEO", .channels = 13},
-    [SYS_NEOGEO_CH2] = {.id = 0x49, .name = "NEOGEO_CH2", .channels = 16}
+static const std::map<DMF::SystemType, DMFSystem> DMFSystems =
+{
+    {DMF::SystemType::Error, {.id = 0x00, .name = "ERROR", .channels = 0}},
+    {DMF::SystemType::Genesis, {.id = 0x02, .name = "GENESIS", .channels = 10}},
+    {DMF::SystemType::Genesis_CH3, {.id = 0x42, .name = "GENESIS_CH3", .channels = 13}},
+    {DMF::SystemType::SMS, {.id = 0x03, .name = "SMS", .channels = 4}},
+    {DMF::SystemType::GameBoy, {.id = 0x04, .name = "GAMEBOY", .channels = 4}},
+    {DMF::SystemType::PCEngine, {.id = 0x05, .name = "PCENGINE", .channels = 6}},
+    {DMF::SystemType::NES, {.id = 0x06, .name = "NES", .channels = 5}},
+    {DMF::SystemType::C64_SID_8580, {.id = 0x07, .name = "C64_SID_8580", .channels = 3}},
+    {DMF::SystemType::C64_SID_6581, {.id = 0x47, .name = "C64_SID_6581", .channels = 3}},
+    {DMF::SystemType::Arcade, {.id = 0x08, .name = "ARCADE", .channels = 13}},
+    {DMF::SystemType::NeoGeo, {.id = 0x09, .name = "NEOGEO", .channels = 13}},
+    {DMF::SystemType::NeoGeo_CH2, {.id = 0x49, .name = "NEOGEO_CH2", .channels = 16}}
 };
+
+const DMFSystem DMF::Systems(DMF::SystemType systemType) { return DMFSystems.at(systemType); }
 
 DMF::DMF()
 {
@@ -213,8 +216,9 @@ bool DMF::Import(const std::string& filename)
     }
 
     ///////////////// SYSTEM SET
-    m_System = GetSystem(fin.get());
     
+    m_System = GetSystem(fin.get());
+
     if (!silent)
         std::cout << "System: " << m_System.name << " (channels: " << std::to_string(m_System.channels) << ")\n";
 
@@ -269,15 +273,14 @@ bool DMF::Export(const std::string& filename)
     return false;
 }
 
-System DMF::GetSystem(uint8_t systemByte)
+DMFSystem DMF::GetSystem(uint8_t systemByte) const
 {
-    const size_t size = sizeof(m_Systems) / sizeof(m_Systems[0]);
-    for (unsigned i = 1; i < size; i++)
+    for (const auto& mapPair : DMFSystems)
     {
-        if (m_Systems[i].id == systemByte)
-            return m_Systems[i];
+        if (mapPair.second.id == systemByte)
+            return mapPair.second;
     }
-    return m_Systems[SYS_ERROR]; // Error: System byte invalid
+    return DMFSystems.at(DMF::SystemType::Error); // Error: System byte invalid
 }
 
 void DMF::LoadVisualInfo(zstr::ifstream& fin)
@@ -352,7 +355,7 @@ void DMF::LoadPatternMatrixValues(zstr::ifstream& fin)
 void DMF::LoadInstrumentsData(zstr::ifstream& fin)
 {
     m_TotalInstruments = fin.get();
-    m_Instruments = new Instrument[m_TotalInstruments];
+    m_Instruments = new DMFInstrument[m_TotalInstruments];
 
     for (int i = 0; i < m_TotalInstruments; i++)
     {
@@ -360,9 +363,9 @@ void DMF::LoadInstrumentsData(zstr::ifstream& fin)
     }
 }
 
-Instrument DMF::LoadInstrument(zstr::ifstream& fin, System systemType)
+DMFInstrument DMF::LoadInstrument(zstr::ifstream& fin, DMFSystem systemType)
 {
-    Instrument inst;
+    DMFInstrument inst;
 
     uint8_t name_size = fin.get();
     inst.name = new char[name_size + 1];
@@ -403,7 +406,7 @@ Instrument DMF::LoadInstrument(zstr::ifstream& fin, System systemType)
     }
     else if (inst.mode == 0) // Standard instrument
     {
-        if (systemType.id != m_Systems[SYS_GAMEBOY].id)  // Not a Game Boy
+        if (systemType.id != DMFSystems.at(DMF::SystemType::GameBoy).id) // Not a Game Boy
         {
             // Volume macro
             inst.stdVolEnvSize = fin.get();
@@ -473,7 +476,7 @@ Instrument DMF::LoadInstrument(zstr::ifstream& fin, System systemType)
             inst.stdWavetableEnvLoopPos = fin.get();
 
         // Per system data
-        if (systemType.id == m_Systems[SYS_C64_SID_8580].id || systemType.id == m_Systems[SYS_C64_SID_6581].id) // Using Commodore 64
+        if (systemType.id == DMFSystems.at(DMF::SystemType::C64_SID_8580).id || systemType.id == DMFSystems.at(DMF::SystemType::C64_SID_6581).id) // Using Commodore 64
         {
             inst.stdC64TriWaveEn = fin.get();
             inst.stdC64SawWaveEn = fin.get();
@@ -497,7 +500,7 @@ Instrument DMF::LoadInstrument(zstr::ifstream& fin, System systemType)
             inst.stdC64FilterLowPass = fin.get();
             inst.stdC64FilterCH2Off = fin.get();
         }
-        else if (systemType.id == m_Systems[SYS_GAMEBOY].id) // Using Game Boy
+        else if (systemType.id == DMFSystems.at(DMF::SystemType::GameBoy).id) // Using Game Boy
         {
             inst.stdGBEnvVol = fin.get();
             inst.stdGBEnvDir = fin.get();
@@ -538,7 +541,7 @@ void DMF::LoadWavetablesData(zstr::ifstream& fin)
 void DMF::LoadPatternsData(zstr::ifstream& fin)
 {
     // patternValues[channel][pattern number][pattern row number]
-    m_PatternValues = new PatternRow**[m_System.channels];
+    m_PatternValues = new DMFChannelRow**[m_System.channels];
     m_ChannelEffectsColumnsCount = new uint8_t[m_System.channels];
     
     uint8_t patternMatrixNumber;
@@ -547,7 +550,7 @@ void DMF::LoadPatternsData(zstr::ifstream& fin)
     {
         m_ChannelEffectsColumnsCount[channel] = fin.get();
 
-        m_PatternValues[channel] = new PatternRow*[m_PatternMatrixMaxValues[channel] + 1]();
+        m_PatternValues[channel] = new DMFChannelRow*[m_PatternMatrixMaxValues[channel] + 1]();
 
         for (unsigned rowInPatternMatrix = 0; rowInPatternMatrix < m_ModuleInfo.totalRowsInPatternMatrix; rowInPatternMatrix++)
         {
@@ -565,7 +568,7 @@ void DMF::LoadPatternsData(zstr::ifstream& fin)
                 continue;
             }
 
-            m_PatternValues[channel][patternMatrixNumber] = new PatternRow[m_ModuleInfo.totalRowsPerPattern];
+            m_PatternValues[channel][patternMatrixNumber] = new DMFChannelRow[m_ModuleInfo.totalRowsPerPattern];
 
             for (uint32_t row = 0; row < m_ModuleInfo.totalRowsPerPattern; row++)
             {
@@ -575,9 +578,9 @@ void DMF::LoadPatternsData(zstr::ifstream& fin)
     }
 }
 
-PatternRow DMF::LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount)
+DMFChannelRow DMF::LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount)
 {
-    PatternRow pat;
+    DMFChannelRow pat;
     pat.note.pitch = fin.get();
     pat.note.pitch |= fin.get() << 8; // Unused byte. Storing it anyway.
     pat.note.octave = fin.get();
@@ -609,7 +612,7 @@ PatternRow DMF::LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount)
 void DMF::LoadPCMSamplesData(zstr::ifstream& fin)
 {
     m_TotalPCMSamples = fin.get();
-    m_PCMSamples = new PCMSample[m_TotalPCMSamples];
+    m_PCMSamples = new DMFPCMSample[m_TotalPCMSamples];
 
     for (unsigned sample = 0; sample < m_TotalPCMSamples; sample++)
     {
@@ -617,9 +620,9 @@ void DMF::LoadPCMSamplesData(zstr::ifstream& fin)
     }
 }
 
-PCMSample DMF::LoadPCMSample(zstr::ifstream& fin)
+DMFPCMSample DMF::LoadPCMSample(zstr::ifstream& fin)
 {
-    PCMSample sample;
+    DMFPCMSample sample;
 
     sample.size = fin.get();
     sample.size |= fin.get() << 8;
@@ -700,12 +703,12 @@ double DMF::GetBPM() const
     return numerator * 1.0 / denominator;
 }
 
-bool operator==(const Note& lhs, const Note& rhs)
+bool operator==(const DMFNote& lhs, const DMFNote& rhs)
 {
     return lhs.octave == rhs.octave && lhs.pitch == rhs.pitch;
 }
 
-bool operator!=(const Note& lhs, const Note& rhs)
+bool operator!=(const DMFNote& lhs, const DMFNote& rhs)
 {
     return lhs.octave != rhs.octave || lhs.pitch != rhs.pitch;
 }
@@ -714,22 +717,22 @@ bool operator!=(const Note& lhs, const Note& rhs)
 // Assumes note isn't Note OFF or Empty note
 // Notes must use the DMF convention where the note C# is the 1st note of an octave rather than C-
 
-bool operator>(const Note& lhs, const Note& rhs)
+bool operator>(const DMFNote& lhs, const DMFNote& rhs)
 {
     return lhs.octave + lhs.pitch / 13.f > rhs.octave + rhs.pitch / 13.f;
 }
 
-bool operator<(const Note& lhs, const Note& rhs)
+bool operator<(const DMFNote& lhs, const DMFNote& rhs)
 {
     return lhs.octave + lhs.pitch / 13.f < rhs.octave + rhs.pitch / 13.f;
 }
 
-bool operator>=(const Note& lhs, const Note& rhs)
+bool operator>=(const DMFNote& lhs, const DMFNote& rhs)
 {
     return lhs.octave + lhs.pitch / 13.f >= rhs.octave + rhs.pitch / 13.f;
 }
 
-bool operator<=(const Note& lhs, const Note& rhs)
+bool operator<=(const DMFNote& lhs, const DMFNote& rhs)
 {
     return lhs.octave + lhs.pitch / 13.f <= rhs.octave + rhs.pitch / 13.f;
 }

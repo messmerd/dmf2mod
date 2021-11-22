@@ -592,15 +592,15 @@ DMFChannelRow DMF::LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount)
 
     if (pat.note.pitch == 0 && pat.note.octave == 0)
     {
-        pat.note.pitch = DMF_NOTE_EMPTY;
+        pat.note.pitch = static_cast<uint16_t>(DMFNotePitch::Empty);
     }
 
     for (int col = 0; col < effectsColumnsCount; col++)
     {
-        pat.effectCode[col] = fin.get();
-        pat.effectCode[col] |= fin.get() << 8;
-        pat.effectValue[col] = fin.get();
-        pat.effectValue[col] |= fin.get() << 8;
+        pat.effect[col].code = fin.get();
+        pat.effect[col].code |= fin.get() << 8;
+        pat.effect[col].value = fin.get();
+        pat.effect[col].value |= fin.get() << 8;
     }
 
     pat.instrument = fin.get();
@@ -703,6 +703,16 @@ double DMF::GetBPM() const
     return numerator * 1.0 / denominator;
 }
 
+DMFNote DMFMakeNote(DMFNotePitch pitch, uint16_t octave)
+{
+    return (DMFNote){ static_cast<uint16_t>(pitch), octave };
+}
+
+bool DMFNoteHasPitch(const DMFNote& dmfNote)
+{
+    return static_cast<int>(dmfNote.pitch) >= 1 && static_cast<int>(dmfNote.pitch) <= 12;
+}
+
 bool operator==(const DMFNote& lhs, const DMFNote& rhs)
 {
     return lhs.octave == rhs.octave && lhs.pitch == rhs.pitch;
@@ -719,20 +729,20 @@ bool operator!=(const DMFNote& lhs, const DMFNote& rhs)
 
 bool operator>(const DMFNote& lhs, const DMFNote& rhs)
 {
-    return lhs.octave + lhs.pitch / 13.f > rhs.octave + rhs.pitch / 13.f;
+    return lhs.octave + static_cast<int>(lhs.pitch) / 13.f > rhs.octave + static_cast<int>(rhs.pitch) / 13.f;
 }
 
 bool operator<(const DMFNote& lhs, const DMFNote& rhs)
 {
-    return lhs.octave + lhs.pitch / 13.f < rhs.octave + rhs.pitch / 13.f;
+    return lhs.octave + static_cast<int>(lhs.pitch) / 13.f < rhs.octave + static_cast<int>(rhs.pitch) / 13.f;
 }
 
 bool operator>=(const DMFNote& lhs, const DMFNote& rhs)
 {
-    return lhs.octave + lhs.pitch / 13.f >= rhs.octave + rhs.pitch / 13.f;
+    return lhs.octave + static_cast<int>(lhs.pitch) / 13.f >= rhs.octave + static_cast<int>(rhs.pitch) / 13.f;
 }
 
 bool operator<=(const DMFNote& lhs, const DMFNote& rhs)
 {
-    return lhs.octave + lhs.pitch / 13.f <= rhs.octave + rhs.pitch / 13.f;
+    return lhs.octave + static_cast<int>(lhs.pitch) / 13.f <= rhs.octave + static_cast<int>(rhs.pitch) / 13.f;
 }

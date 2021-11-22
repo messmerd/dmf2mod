@@ -22,44 +22,47 @@ REGISTER_MODULE_HEADER(DMF, DMFConversionOptions)
 // Deflemask allows four effects columns per channel regardless of the system 
 #define MAX_EFFECTS_COLUMN_COUNT 4
 
-typedef enum DMF_NOTE {
-    DMF_NOTE_EMPTY=101, 
-    DMF_NOTE_CS=1, 
-    DMF_NOTE_D=2, 
-    DMF_NOTE_DS=3, 
-    DMF_NOTE_E=4, 
-    DMF_NOTE_F=5, 
-    DMF_NOTE_FS=6, 
-    DMF_NOTE_G=7, 
-    DMF_NOTE_GS=8, 
-    DMF_NOTE_A=9, 
-    DMF_NOTE_AS=10, 
-    DMF_NOTE_B=11, 
-    DMF_NOTE_C=12, 
-    DMF_NOTE_OFF=100, 
-    
-    DMF_NOTE_NOINSTRUMENT=-1,
-    DMF_NOTE_NOVOLUME=-1,
-    DMF_NOTE_VOLUMEMAX=15 /* ??? */
-} DMF_NOTE;
+enum class DMFNotePitch
+{
+    Empty=101,
+    CS=1,
+    D=2,
+    DS=3,
+    E=4,
+    F=5,
+    FS=6,
+    G=7,
+    GS=8,
+    A=9,
+    AS=10,
+    B=11,
+    C=12,
+    Off=100
+};
 
-// Deflemask effects shared by all systems: 
-enum DMF_EFFECT {
-    DMF_NOEFFECT=-1, DMF_NOEFFECTVAL=-1,
-    DMF_ARP=0x0, DMF_PORTUP=0x1, DMF_PORTDOWN=0x2, DMF_PORT2NOTE=0x3, DMF_VIBRATO=0x4, DMF_PORT2NOTEVOLSLIDE=0x5, DMF_VIBRATOVOLSLIDE=0x6,
-    DMF_TREMOLO=0x7, DMF_PANNING=0x8, DMF_SETSPEEDVAL1=0x9, DMF_VOLSLIDE=0xA, DMF_POSJUMP=0xB, DMF_RETRIG=0xC, DMF_PATBREAK=0xD, 
-    DMF_ARPTICKSPEED=0xE0, DMF_NOTESLIDEUP=0xE1, DMF_NOTESLIDEDOWN=0xE2, DMF_SETVIBRATOMODE=0xE3, DMF_SETFINEVIBRATODEPTH=0xE4, 
-    DMF_SETFINETUNE=0xE5, DMF_SETSAMPLESBANK=0xEB, DMF_NOTECUT=0xEC, DMF_NOTEDELAY=0xED, DMF_SYNCSIGNAL=0xEE, DMF_SETGLOBALFINETUNE=0xEF, 
-    DMF_SETSPEEDVAL2=0xF
+static const int DMFNoInstrument = -1;
+static const int DMFNoVolume = -1;
+static const int DMFVolumeMax = 15; /* ??? */
+
+// Deflemask effects shared by all systems:
+enum class DMFEffectCode
+{
+    NoEffect=-1, NoEffectVal=-1,
+    Arp=0x0, PortUp=0x1, PortDown=0x2, Port2Note=0x3, Vibrato=0x4, Port2NoteVolSlide=0x5, VibratoVolSlide=0x6,
+    Tremolo=0x7, Panning=0x8, SetSpeedVal1=0x9, VolSlide=0xA, PosJump=0xB, Retrig=0xC, PatBreak=0xD,
+    ArpTickSpeed=0xE0, NoteSlideUp=0xE1, NoteSlideDown=0xE2, SetVibratoMode=0xE3, SetFineVibratoDepth=0xE4,
+    SetFinetune=0xE5, SetSamplesBank=0xEB, NoteCut=0xEC, NoteDelay=0xED, SyncSignal=0xEE, SetGlobalFinetune=0xEF,
+    SetSpeedVal2=0xF
 };
 
 // Deflemask effects exclusive to the Game Boy system:
-enum DMF_GAMEBOY_EFFECT {
-    DMF_SETWAVE=0x10, 
-    DMF_SETNOISEPOLYCOUNTERMODE=0x11, 
-    DMF_SETDUTYCYCLE=0x12, 
-    DMF_SETSWEEPTIMESHIFT=0x13, 
-    DMF_SETSWEEPDIR=0x14
+enum class DMFGameBoyEffectCode
+{
+    SetWave=0x10,
+    SetNoisePolyCounterMode=0x11,
+    SetDutyCycle=0x12,
+    SetSweepTimeShift=0x13,
+    SetSweepDir=0x14
 };
 
 // To do: Add enums for effects exclusive to the rest of Deflemask's systems.
@@ -70,12 +73,32 @@ struct DMFNote
     uint16_t octave;
 };
 
+DMFNote DMFMakeNote(DMFNotePitch pitch, uint16_t octave);
+bool DMFNoteHasPitch(const DMFNote& dmfNote);
+
 bool operator==(const DMFNote& lhs, const DMFNote& rhs);
 bool operator!=(const DMFNote& lhs, const DMFNote& rhs);
 bool operator>(const DMFNote& lhs, const DMFNote& rhs);
 bool operator<(const DMFNote& lhs, const DMFNote& rhs);
 bool operator>=(const DMFNote& lhs, const DMFNote& rhs);
 bool operator<=(const DMFNote& lhs, const DMFNote& rhs);
+
+// Comparison operators for enums
+template <typename T,
+    class = typename std::enable_if<std::is_enum<T>{} &&
+    std::is_same<std::underlying_type_t<T>, int>{}>>
+bool operator==(int lhs, const T& rhs)
+{
+    return lhs == static_cast<uint16_t>(rhs);
+}
+
+template <typename T,
+    class = typename std::enable_if<std::is_enum<T>{} &&
+    std::is_same<std::underlying_type_t<T>, int>{}>>
+bool operator!=(int lhs, const T& rhs)
+{
+    return lhs != static_cast<uint16_t>(rhs);
+}
 
 struct DMFSystem
 {
@@ -137,23 +160,22 @@ struct DMFPCMSample
 
 struct DMFEffect
 {
-    int16_t effectCode;
-    int16_t effectValue;
+    int16_t code;
+    int16_t value;
 };
 
 struct DMFChannelRow
 {
     DMFNote note;
     int16_t volume;
-    int16_t effectCode[MAX_EFFECTS_COLUMN_COUNT];
-    int16_t effectValue[MAX_EFFECTS_COLUMN_COUNT];
+    DMFEffect effect[MAX_EFFECTS_COLUMN_COUNT];
     int16_t instrument;
 };
 
-enum DMF_IMPORT_ERROR
+// Deflemask Game Boy channels
+enum class DMFGameBoyChannel
 {
-    IMPORT_ERROR_SUCCESS=0,
-    IMPORT_ERROR_FAIL=1
+    SQW1=0, SQW2=1, WAVE=2, NOISE=3
 };
 
 class DMFConversionOptions : public ConversionOptionsInterface<DMFConversionOptions>
@@ -223,6 +245,10 @@ public:
     uint32_t GetWavetableValue(unsigned wavetable, unsigned index) const { return m_WavetableValues[wavetable][index]; }
 
     DMFChannelRow*** GetPatternValues() const { return m_PatternValues; }
+    DMFChannelRow GetChannelRow(unsigned channel, unsigned patternMatrixRow, unsigned patternRow) const
+    {
+        return m_PatternValues[channel][m_PatternMatrixValues[channel][patternMatrixRow]][patternRow];
+    }
 
 private:
     bool ConvertFrom(const Module* input, const ConversionOptionsPtr& options) override
@@ -262,7 +288,4 @@ private:
     //static const DMFSystem m_Systems[];
 };
 
-// Deflemask Game Boy channels
-enum DMF_GAMEBOY_CHANNEL {
-    DMF_GAMEBOY_SQW1=0, DMF_GAMEBOY_SQW2=1, DMF_GAMEBOY_WAVE=2, DMF_GAMEBOY_NOISE=3
-};
+

@@ -379,12 +379,6 @@ bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType
 
 // Status class
 
-void Status::PrintError()
-{
-    if (ErrorOccurred())
-        std::cerr << m_ErrorMessage << "\n\n";
-}
-
 void Status::PrintWarnings(bool useStdErr)
 {
     if (!m_WarningMessages.empty())
@@ -403,20 +397,14 @@ void Status::PrintWarnings(bool useStdErr)
     }
 }
 
-void Status::PrintAll(bool useStdErrWarnings)
-{
-    PrintError();
-    PrintWarnings(useStdErrWarnings);
-}
-
-std::string Status::CommonErrorMessageCreator(Category category, int errorCode, const std::string& arg)
+std::string ModuleException::CommonErrorMessageCreator(Category category, int errorCode, const std::string& arg)
 {
     switch (category)
     {
         case Category::Import:
             switch (errorCode)
             {
-                case (int)Status::ImportError::Success:
+                case (int)ImportError::Success:
                     return "No error.";
                 default:
                     return "";
@@ -425,9 +413,9 @@ std::string Status::CommonErrorMessageCreator(Category category, int errorCode, 
         case Category::Export:
             switch (errorCode)
             {
-                case (int)Status::ExportError::Success:
+                case (int)ExportError::Success:
                     return "No error.";
-                case (int)Status::ExportError::FileOpen:
+                case (int)ExportError::FileOpen:
                     return "Failed to open file for writing.";
                 default:
                     return "";
@@ -436,11 +424,11 @@ std::string Status::CommonErrorMessageCreator(Category category, int errorCode, 
         case Category::Convert:
             switch (errorCode)
             {
-                case (int)Status::ConvertError::Success:
+                case (int)ConvertError::Success:
                     return "No error.";
-                case (int)Status::ConvertError::InvalidArgument:
+                case (int)ConvertError::InvalidArgument:
                     return "Invalid argument.";
-                case (int)Status::ConvertError::UnsupportedInputType:
+                case (int)ConvertError::UnsupportedInputType:
                     return "Input type '" + arg + "' is unsupported for this module.";
                 default:
                     return "";
@@ -448,6 +436,11 @@ std::string Status::CommonErrorMessageCreator(Category category, int errorCode, 
             break;
     }
     return "";
+}
+
+void ModuleException::Print() const
+{
+    std::cerr << m_ErrorMessage << "\n\n";
 }
 
 // ModuleStatic class

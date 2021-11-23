@@ -217,8 +217,8 @@ public:
     ~DMF();
     void CleanUp();
 
-    bool Import(const std::string& filename) override;
-    bool Export(const std::string& filename) override;
+    void Import(const std::string& filename) override;
+    void Export(const std::string& filename) override;
 
     std::string GetName() const override
     {
@@ -251,10 +251,10 @@ public:
     }
 
 private:
-    bool ConvertFrom(const Module* input, const ConversionOptionsPtr& options) override
+    void ConvertFrom(const Module* input, const ConversionOptionsPtr& options) override
     {
-        return true; // Not implemented
-    };
+        // Not implemented
+    }
 
     DMFSystem GetSystem(uint8_t systemByte) const;
     void LoadVisualInfo(zstr::ifstream& fin);

@@ -104,6 +104,23 @@ struct MODSample
     std::vector<int8_t> data;
 };
 
+class MODException : public ModuleException
+{
+public:
+    template <class T, 
+        class = typename std::enable_if<
+        (std::is_enum<T>{} || std::is_integral<T>{}) &&
+        (!std::is_enum<T>{} || std::is_convertible<std::underlying_type_t<T>, int>{})
+        >::type>
+    MODException(Category category, T errorCode, const std::string errorMessage = "")
+        : ModuleException(category, errorCode, CreateErrorMessage(category, (int)errorCode, errorMessage))
+    {}
+
+private:
+    // Creates module-specific error message from an error code and string argument
+    std::string CreateErrorMessage(Category category, int errorCode, const std::string& arg);
+};
+
 class MODConversionOptions : public ConversionOptionsInterface<MODConversionOptions>
 {
 public:
@@ -138,13 +155,12 @@ public:
     ~MOD() {};
     void CleanUp() {};
 
-    bool Import(const std::string& filename) override
+    void Import(const std::string& filename) override
     {
         m_Status.Clear();
-        return true;
     }
 
-    bool Export(const std::string& filename) override;
+    void Export(const std::string& filename) override;
 
     std::string GetName() const override { return m_ModuleName; }
 
@@ -180,17 +196,17 @@ public:
     static constexpr unsigned VolumeMax = 64u; // Yes, there are 65 different values for the volume
 
 private:
-    bool ConvertFrom(const Module* input, const ConversionOptionsPtr& options) override;
+    void ConvertFrom(const Module* input, const ConversionOptionsPtr& options) override;
 
     // Conversion from DMF:
-    bool ConvertFromDMF(const DMF& dmf, const ConversionOptionsPtr& options);
-    bool DMFConvertSamples(const DMF& dmf, std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
-    bool DMFCreateSampleMapping(const DMF& dmf, std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap);
-    bool DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap);
-    bool DMFConvertSampleData(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
-    bool DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
-    bool DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const DMFChannelRow& pat, MODChannelState& state, MODChannelRow& modChannelRow);
-    bool DMFConvertEffect(const DMFChannelRow& pat, MODChannelState& state, uint16_t& effectCode, uint16_t& effectValue);
+    void ConvertFromDMF(const DMF& dmf, const ConversionOptionsPtr& options);
+    void DMFConvertSamples(const DMF& dmf, std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
+    void DMFCreateSampleMapping(const DMF& dmf, std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap);
+    void DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap);
+    void DMFConvertSampleData(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
+    void DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
+    void DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const DMFChannelRow& pat, MODChannelState& state, MODChannelRow& modChannelRow);
+    void DMFConvertEffect(const DMFChannelRow& pat, MODChannelState& state, uint16_t& effectCode, uint16_t& effectValue);
     void DMFConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectValue, uint16_t& modEffectCode, uint16_t& modEffectValue);
     void DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed);
 

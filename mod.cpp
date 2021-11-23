@@ -38,7 +38,6 @@ static const unsigned int MOD_NOTE_VOLUMEMAX = 64u; // Yes, there are 65 differe
 static std::vector<int8_t> GenerateSquareWaveSample(unsigned dutyCycle, unsigned length);
 static std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned length);
 
-static std::string ErrorMessageCreator(Status::Category category, int errorCode, const std::string& arg);
 static std::string GetWarningMessage(MOD::ConvertWarning warning);
 
 static bool GetTempoAndSpeedFromBPM(double desiredBPM, unsigned& tempo, unsigned& speed);
@@ -129,63 +128,32 @@ void MODConversionOptions::PrintHelp()
     std::cout << std::setw(30) << "  --effects=[min,max]" << "The number of ProTracker effects to use. (Default: max)\n";
 }
 
-MOD::MOD()
-{
-    m_Status.SetErrorMessageCreator(&ErrorMessageCreator);
-}
+MOD::MOD() {}
 
-bool MOD::Export(const std::string& filename)
-{
-    m_Status.Clear();
-    std::ofstream outFile(filename, std::ios::binary);
-    if (!outFile.is_open())
-    {
-        m_Status.SetError(Status::Category::Export, Status::ExportError::FileOpen);
-        return true;
-    }
-
-    ExportModuleName(outFile);
-    ExportSampleInfo(outFile);
-    ExportModuleInfo(outFile);
-    ExportPatterns(outFile);
-    ExportSampleData(outFile);
-
-    outFile.close();
-
-    if (!ModuleUtils::GetCoreOptions().silent)
-        std::cout << "Saved MOD file to disk.\n\n";
-
-    return false;
-}
-
-bool MOD::ConvertFrom(const Module* input, const ConversionOptionsPtr& options)
+void MOD::ConvertFrom(const Module* input, const ConversionOptionsPtr& options)
 {
     m_Status.Clear();
 
     if (!input)
     {
-        m_Status.SetError(Status::Category::Convert, Status::ConvertError::InvalidArgument);
-        return true;
+        throw MODException(ModuleException::Category::Convert, ModuleException::ConvertError::InvalidArgument);
     }
 
     switch (input->GetType())
     {
         case ModuleType::DMF:
-            return ConvertFromDMF(*(input->Cast<DMF>()), options);
+            ConvertFromDMF(*(input->Cast<DMF>()), options);
             break;
         // Add other input types here if support is added
         default:
             // Unsupported input type for conversion to MOD
-            m_Status.SetError(Status::Category::Convert, Status::ConvertError::UnsupportedInputType, input->GetFileExtension());
-            return true;
+            throw MODException(ModuleException::Category::Convert, ModuleException::ConvertError::UnsupportedInputType, input->GetFileExtension());
     }
-
-    return true;
 }
 
 ///////// CONVERT FROM DMF /////////
 
-bool MOD::ConvertFromDMF(const DMF& dmf, const ConversionOptionsPtr& options)
+void MOD::ConvertFromDMF(const DMF& dmf, const ConversionOptionsPtr& options)
 {
     m_Options = reinterpret_cast<MODConversionOptions*>(options.get());
 
@@ -196,22 +164,19 @@ bool MOD::ConvertFromDMF(const DMF& dmf, const ConversionOptionsPtr& options)
     
     if (dmf.GetSystem().id != DMF::Systems(DMF::SystemType::GameBoy).id) // If it's not a Game Boy
     {
-        m_Status.SetError(Status::Category::Convert, MOD::ConvertError::NotGameBoy);
-        return true;
+        throw MODException(ModuleException::Category::Convert, MOD::ConvertError::NotGameBoy);
     }
 
     const DMFModuleInfo& moduleInfo = dmf.GetModuleInfo();
     m_NumberOfRowsInPatternMatrix = moduleInfo.totalRowsInPatternMatrix + (int)m_UsingSetupPattern;
-    if (m_NumberOfRowsInPatternMatrix > 64) // totalRowsInPatternMatrix is 1 more than it actually is 
+    if (m_NumberOfRowsInPatternMatrix > 64) // totalRowsInPatternMatrix is 1 more than it actually is
     {
-        m_Status.SetError(Status::Category::Convert, MOD::ConvertError::TooManyPatternMatrixRows);
-        return true;
+        throw MODException(ModuleException::Category::Convert, MOD::ConvertError::TooManyPatternMatrixRows);
     }
 
     if (moduleInfo.totalRowsPerPattern != 64)
-    { 
-        m_Status.SetError(Status::Category::Convert, MOD::ConvertError::Not64RowPattern);
-        return true;
+    {
+        throw MODException(ModuleException::Category::Convert, MOD::ConvertError::Not64RowPattern);
     }
 
     m_NumberOfChannels = DMF::Systems(DMF::SystemType::GameBoy).channels;
@@ -237,42 +202,30 @@ bool MOD::ConvertFromDMF(const DMF& dmf, const ConversionOptionsPtr& options)
         std::cout << "Converting samples...\n";
 
     std::map<dmf_sample_id_t, MODMappedDMFSample> sampleMap;
-    if (DMFConvertSamples(dmf, sampleMap))
-    {
-        // An error occurred
-        return true;
-    }
+    DMFConvertSamples(dmf, sampleMap);
 
     ///////////////// CONVERT PATTERN DATA
 
     if (!silent)
         std::cout << "Converting pattern data...\n";
 
-    if (DMFConvertPatterns(dmf, sampleMap))
-        return true;
+    DMFConvertPatterns(dmf, sampleMap);
     
     ///////////////// CLEAN UP
 
     if (!silent)
         std::cout << "Done converting to MOD.\n\n";
-
-    // Success
-    return false;
 }
 
-bool MOD::DMFConvertSamples(const DMF& dmf, std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap)
+void MOD::DMFConvertSamples(const DMF& dmf, std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap)
 {
     std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>> sampleIdLowestHighestNotesMap;
-    if (DMFCreateSampleMapping(dmf, sampleMap, sampleIdLowestHighestNotesMap))
-        return true;
-    if (DMFSampleSplittingAndAssignment(sampleMap, sampleIdLowestHighestNotesMap))
-        return true;
-    if (DMFConvertSampleData(dmf, sampleMap))
-        return true;
-    return false;
+    DMFCreateSampleMapping(dmf, sampleMap, sampleIdLowestHighestNotesMap);
+    DMFSampleSplittingAndAssignment(sampleMap, sampleIdLowestHighestNotesMap);
+    DMFConvertSampleData(dmf, sampleMap);
 }
 
-bool MOD::DMFCreateSampleMapping(const DMF& dmf, std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap)
+void MOD::DMFCreateSampleMapping(const DMF& dmf, std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap)
 {
     // This function loops through all DMF pattern contents to find the highest and lowest notes 
     //  for each square wave duty cycle and each wavetable. It also finds which SQW duty cycles are 
@@ -418,11 +371,9 @@ bool MOD::DMFCreateSampleMapping(const DMF& dmf, std::map<dmf_sample_id_t, MODMa
             }
         }
     }
-
-    return false;
 }
 
-bool MOD::DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap)
+void MOD::DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap)
 {
     // This method determines whether a sample will need to be split into low and high ranges, then assigns
     //  MOD sample numbers
@@ -484,8 +435,7 @@ bool MOD::DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMF
                 // If between C-4 and B-6 (Deflemask tracker note format) and none of the above options work
                 if (sampleId >= 4 && !m_Options->GetDownsample()) // If on a wavetable instrument and can't downsample it
                 {
-                    m_Status.SetError(Status::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(sampleId - 4));
-                    return true;
+                    throw MODException(ModuleException::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(sampleId - 4));
                 }
 
                 noSplittingIsNeeded = true;
@@ -498,8 +448,7 @@ bool MOD::DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMF
                 // If between C-5 and B-7 (Deflemask tracker note format)
                 if (sampleId >= 4 && !m_Options->GetDownsample()) // If on a wavetable instrument and can't downsample it
                 {
-                    m_Status.SetError(Status::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(sampleId - 4));
-                    return true;
+                    throw MODException(ModuleException::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(sampleId - 4));
                 }
                 
                 noSplittingIsNeeded = true;
@@ -512,8 +461,7 @@ bool MOD::DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMF
                 // If between C#5 and C-8 (highest note) (Deflemask tracker note format):
                 if (sampleId >= 4 && !m_Options->GetDownsample()) // If on a wavetable instrument and can't downsample it
                 {
-                    m_Status.SetError(Status::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(sampleId - 4));
-                    return true;
+                    throw MODException(ModuleException::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(sampleId - 4));
                 }
                 
                 // TODO: This note is currently unsupported. Should fail here.
@@ -558,8 +506,7 @@ bool MOD::DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMF
                 // If it cannot be downsampled (square waves can always be downsampled w/o permission):
                 if (!m_Options->GetDownsample())
                 {
-                    m_Status.SetError(Status::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(sampleId - 4));
-                    return true;
+                    throw MODException(ModuleException::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(sampleId - 4));
                 }
             }
 
@@ -595,11 +542,9 @@ bool MOD::DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMF
     m_TotalMODSamples = currentMODSampleId - 1; // Set the number of MOD samples that will be needed. (minus sample #0 which is special)
     
     // TODO: Check if there are too many samples needed here
-
-    return 0; // Success
 }
 
-bool MOD::DMFConvertSampleData(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap)
+void MOD::DMFConvertSampleData(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap)
 {
     // Fill out information needed to define a MOD sample
     m_Samples.clear();
@@ -693,8 +638,6 @@ bool MOD::DMFConvertSampleData(const DMF& dmf, const std::map<dmf_sample_id_t, M
             m_Samples[si.id] = si;
         }
     }
-
-    return false;
 }
 
 std::vector<int8_t> GenerateSquareWaveSample(unsigned dutyCycle, unsigned length)
@@ -771,7 +714,7 @@ std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned le
     return sample;
 }
 
-bool MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap)
+void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap)
 {
     m_Patterns.assign(m_NumberOfRowsInPatternMatrix, {});
 
@@ -902,29 +845,18 @@ bool MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
                 #pragma endregion
 
                 MODChannelRow tempChannelRow;
-
-                if (DMFConvertChannelRow(dmf, sampleMap, chanRow, state[chan], tempChannelRow))
-                {
-                    // Error occurred while writing the pattern row
-                    return true;
-                }
-
+                DMFConvertChannelRow(dmf, sampleMap, chanRow, state[chan], tempChannelRow);
                 SetChannelRow(patMatRow + (int)m_UsingSetupPattern, patRow, chan, tempChannelRow);
             }
         }
     }
-
-    return false;
 }
 
-bool MOD::DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const DMFChannelRow& pat, MODChannelState& state, MODChannelRow& modChannelRow)
+void MOD::DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const DMFChannelRow& pat, MODChannelState& state, MODChannelRow& modChannelRow)
 {
     // Writes 4 bytes of pattern row information to the .mod file
     uint16_t effectCode, effectValue;
-    if (DMFConvertEffect(pat, state, effectCode, effectValue))
-    {
-        return true; // An error occurred
-    }
+    DMFConvertEffect(pat, state, effectCode, effectValue);
 
     if (pat.note.pitch == DMFNotePitch::Empty) // No note is playing. Only handle effects.
     {
@@ -1049,11 +981,9 @@ bool MOD::DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, M
         
         state.notePlaying = true;
     }
-
-   return 0; // Success
 }
 
-bool MOD::DMFConvertEffect(const DMFChannelRow& pat, MODChannelState& state, uint16_t& effectCode, uint16_t& effectValue)
+void MOD::DMFConvertEffect(const DMFChannelRow& pat, MODChannelState& state, uint16_t& effectCode, uint16_t& effectValue)
 {
     if (m_Options->GetEffects() == MODConversionOptions::EffectsEnum::Max) // If using maximum amount of effects
     {
@@ -1067,8 +997,7 @@ bool MOD::DMFConvertEffect(const DMFChannelRow& pat, MODChannelState& state, uin
                     Note that the set duty cycle effect in Deflemask is not implemented as an effect in MOD,
                     so it does not count.
                 */
-                m_Status.SetError(Status::Category::Convert, MOD::ConvertError::EffectVolume);
-                return true;
+                throw MODException(ModuleException::Category::Convert, MOD::ConvertError::EffectVolume);
             }
             else // Only the volume changed
             {
@@ -1112,8 +1041,7 @@ bool MOD::DMFConvertEffect(const DMFChannelRow& pat, MODChannelState& state, uin
                 Note that the set duty cycle effect in Deflemask is not implemented as an effect in PT, 
                 so it does not count.
             */
-            m_Status.SetError(Status::Category::Convert, MOD::ConvertError::MultipleEffects);
-            return true;
+            throw MODException(ModuleException::Category::Convert, MOD::ConvertError::MultipleEffects);
         }
         else if (total_effects == 0)
         {
@@ -1121,7 +1049,6 @@ bool MOD::DMFConvertEffect(const DMFChannelRow& pat, MODChannelState& state, uin
             effectValue = 0;
         }
     }
-    return false; // Success
 }
 
 void MOD::DMFConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectValue, uint16_t& modEffectCode, uint16_t& modEffectValue)
@@ -1224,8 +1151,6 @@ void MOD::DMFConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectV
     modEffectCode = ptEff;
     modEffectValue = ptEffVal;
 }
-
-
 
 void MOD::DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed)
 {
@@ -1428,6 +1353,27 @@ void MOD::DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed)
 
 ///////// EXPORT /////////
 
+void MOD::Export(const std::string& filename)
+{
+    m_Status.Clear();
+    std::ofstream outFile(filename, std::ios::binary);
+    if (!outFile.is_open())
+    {
+        throw MODException(ModuleException::Category::Export, ModuleException::ExportError::FileOpen);
+    }
+
+    ExportModuleName(outFile);
+    ExportSampleInfo(outFile);
+    ExportModuleInfo(outFile);
+    ExportPatterns(outFile);
+    ExportSampleData(outFile);
+
+    outFile.close();
+
+    if (!ModuleUtils::GetCoreOptions().silent)
+        std::cout << "Saved MOD file to disk.\n\n";
+}
+
 void MOD::ExportModuleName(std::ofstream& fout) const
 {
     // Print module name, truncating or padding with zeros as needed
@@ -1559,15 +1505,15 @@ static std::string GetWarningMessage(MOD::ConvertWarning warning)
     }
 }
 
-std::string ErrorMessageCreator(Status::Category category, int errorCode, const std::string& arg)
+std::string MODException::CreateErrorMessage(Category category, int errorCode, const std::string& arg)
 {
     switch (category)
     {
-        case Status::Category::Import:
+        case Category::Import:
             return "No error.";
-        case Status::Category::Export:
+        case Category::Export:
             return "No error.";
-        case Status::Category::Convert:
+        case Category::Convert:
             switch (errorCode)
             {
                 case (int)MOD::ConvertError::Success:

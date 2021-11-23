@@ -156,7 +156,7 @@ void DMFConversionOptions::PrintHelp()
     std::cout << "DMF files have no conversion options.\n";
 }
 
-bool DMF::Import(const std::string& filename)
+void DMF::Import(const std::string& filename)
 {
     CleanUp();
     m_Status.Clear();
@@ -168,8 +168,7 @@ bool DMF::Import(const std::string& filename)
 
     if (ModuleUtils::GetTypeFromFilename(filename) != ModuleType::DMF)
     {
-        m_Status.SetError(Status::Category::Import, DMF::ImportError::UnspecifiedError, "Input file has the wrong file extension.\nPlease use a DMF file.");
-        return true;
+        throw ModuleException(ModuleException::Category::Import, DMF::ImportError::UnspecifiedError, "Input file has the wrong file extension.\nPlease use a DMF file.");
     }
 
     if (!silent)
@@ -178,8 +177,7 @@ bool DMF::Import(const std::string& filename)
     zstr::ifstream fin(filename, std::ios_base::binary);
     if (fin.fail())
     {
-        m_Status.SetError(Status::Category::Import, DMF::ImportError::UnspecifiedError, "Failed to open DMF file.");
-        return true;
+        throw ModuleException(ModuleException::Category::Import, DMF::ImportError::UnspecifiedError, "Failed to open DMF file.");
     }
 
     ///////////////// FORMAT FLAGS
@@ -190,8 +188,7 @@ bool DMF::Import(const std::string& filename)
     
     if (std::string(header) != ".DelekDefleMask.")
     {
-        m_Status.SetError(Status::Category::Import, DMF::ImportError::UnspecifiedError, "DMF format header is bad.");
-        return true;
+        throw ModuleException(ModuleException::Category::Import, DMF::ImportError::UnspecifiedError, "DMF format header is bad.");
     }
 
     m_DMFFileVersion = fin.get();
@@ -211,8 +208,7 @@ bool DMF::Import(const std::string& filename)
         errorMsg += "The given DMF file is version " + std::to_string(m_DMFFileVersion) + " (" + hex + ").\n";
         errorMsg += "       You can convert older DMF files to a supported version by opening them in a newer version of DefleMask and then saving them.";
         
-        m_Status.SetError(Status::Category::Import, DMF::ImportError::UnspecifiedError, errorMsg);
-        return true;
+        throw ModuleException(ModuleException::Category::Import, DMF::ImportError::UnspecifiedError, errorMsg);
     }
 
     ///////////////// SYSTEM SET
@@ -263,14 +259,11 @@ bool DMF::Import(const std::string& filename)
 
     if (!silent)
         std::cout << "Done importing DMF file.\n\n";
-
-    return false;
 }
 
-bool DMF::Export(const std::string& filename)
+void DMF::Export(const std::string& filename)
 {
     // Not implemented
-    return false;
 }
 
 DMFSystem DMF::GetSystem(uint8_t systemByte) const

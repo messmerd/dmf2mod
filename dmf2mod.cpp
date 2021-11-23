@@ -26,54 +26,68 @@ int main(int argc, char *argv[])
     if (!options)
         return 0;
 
-    // Import the input file by inferring module type:
-    ModulePtr input = Module::CreateAndImport(io.InputFile);
-    if (!input)
+    ////////// IMPORT //////////
+    ModulePtr input;
+    try
     {
-        std::cerr << "ERROR: The input module type is not registered.\n";
+        // Import the input file by inferring module type:
+        input = Module::CreateAndImport(io.InputFile);
+        if (!input)
+        {
+            std::cerr << "ERROR: The input module type is not registered.\n";
+            return 1;
+        }
+    }
+    catch (const ModuleException& e)
+    {
+        // Error occurred during import
+        e.Print();
         return 1;
     }
     
-    if (input->GetStatus().Failed())
-    {
-        // Error occurred during import
-        input->GetStatus().PrintAll();
-        return 1;
-    }
-
     if (input->GetStatus().WarningsIssued())
     {
         std::cout << "Warning(s) issued during load:\n";
         input->GetStatus().PrintWarnings();
     }
 
-    // Convert the input module to the output module type:
-    ModulePtr output = input->Convert(io.OutputType, options);
-    if (!output)
+    ////////// CONVERT //////////
+    ModulePtr output;
+    try
     {
-        std::cerr << "ERROR: The output module type is not registered.\n";
+        // Convert the input module to the output module type:
+        output = input->Convert(io.OutputType, options);
+        if (!output)
+        {
+            std::cerr << "ERROR: The output module type is not registered.\n";
+            return 1;
+        }
+    }
+    catch (const ModuleException& e)
+    {
+        // Error occurred during conversion
+        e.Print();
         return 1;
     }
-
-    if (!output || output->GetStatus().Failed())
-    {
-        // Error/warnings occurred during conversion
-        output->GetStatus().PrintAll();
-        return 1;
-    }
-
+    
     if (output->GetStatus().WarningsIssued())
     {
         std::cout << "Warning(s) issued during conversion:\n";
         output->GetStatus().PrintWarnings();
     }
 
-    // Export the converted module to disk:
-    if (output->Export(io.OutputFile))
+    ////////// EXPORT //////////
+    try
     {
-        std::cerr << "ERROR: Failed to export the module to disk.\n";
-        return 1; // Error occurred while exporting
+        // Export the converted module to disk:
+        output->Export(io.OutputFile);
     }
-
+    catch (const ModuleException& e)
+    {
+        // Error occurred while exporting
+        e.Print();
+        return 1;
+    }
+    
     return 0;
 }

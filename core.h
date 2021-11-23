@@ -84,8 +84,35 @@ struct CommonFlags
     // More to be added later
 };
 
-// Provides error/warning information after module importing/exporting/converting
+// Provides warning information after module importing/converting/exporting
 class Status
+{
+public:
+    Status()
+    {
+        Clear();
+    }
+
+    void AddWarning(const std::string& warningMessage)
+    {
+        m_WarningMessages.push_back("WARNING: " + warningMessage);
+    }
+
+    bool WarningsIssued() const { return !m_WarningMessages.empty(); }
+    
+    void PrintWarnings(bool useStdErr = false);
+
+    void Clear()
+    {
+        m_WarningMessages.clear();
+    }
+
+private:
+    std::vector<std::string> m_WarningMessages;
+};
+
+// Used whenever an error occurs during import/converting/exporting. Can derive from this class.
+class ModuleException : public std::exception
 {
 public:
 
@@ -109,6 +136,7 @@ public:
         UnsupportedInputType=-2
     };
 
+    // The type of error
     enum class Category
     {
         Import,
@@ -117,23 +145,12 @@ public:
     };
 
 public:
-    Status()
-    {
-        Clear();
-        m_ErrorMessageCreator = nullptr;
-    }
-
-    bool ErrorOccurred() const { return m_ErrorCode != 0; }
-    bool Failed() const { return ErrorOccurred(); }
-    bool AnyMessages() const { return ErrorOccurred() || WarningsIssued(); }
-    int GetLastErrorCode() const { return m_ErrorCode; }
-    
     template <class T, 
         class = typename std::enable_if<
         (std::is_enum<T>{} || std::is_integral<T>{}) &&
         (!std::is_enum<T>{} || std::is_convertible<std::underlying_type_t<T>, int>{})
         >::type>
-    void SetError(Category category, T errorCode, const std::string errorMessage = "")
+    ModuleException(Category category, T errorCode, const std::string errorMessage = "") throw()
     {
         m_ErrorCode = static_cast<int>(errorCode);
 
@@ -150,10 +167,7 @@ public:
 
         if (m_ErrorCode > 0)
         {
-            if (m_ErrorMessageCreator)
-                m_ErrorMessage = "ERROR: " + categoryString + m_ErrorMessageCreator(category, m_ErrorCode, errorMessage);
-            else
-                m_ErrorMessage = "ERROR: " + categoryString + errorMessage;
+            m_ErrorMessage = "ERROR: " + categoryString + errorMessage;
         }
         else
         {
@@ -161,40 +175,22 @@ public:
         }
     }
 
-    bool WarningsIssued() const { return !m_WarningMessages.empty(); }
-    void AddWarning(const std::string& warningMessage)
-    {
-        m_WarningMessages.push_back("WARNING: " + warningMessage);
-    }
-    
-    void PrintError();
-    void PrintWarnings(bool useStdErr = false);
-    void PrintAll(bool useStdErrWarnings = false);
+    ModuleException() = delete;
+    ~ModuleException() = default;
 
-    void Clear()
+    void Print() const;
+
+    const char* what() const throw() override
     {
-        m_ErrorCode = 0;
-        m_ErrorMessage.clear();
-        m_WarningMessages.clear();
+        return "Module exception";
     }
 
-    operator bool() const { return ErrorOccurred(); }
-
-    void SetErrorMessageCreator(const std::function<std::string(Category, int, const std::string&)>& func)
-    {
-        m_ErrorMessageCreator = func;
-    }
-
-private:
+protected:
     int m_ErrorCode;
     std::string m_ErrorMessage;
 
-    std::vector<std::string> m_WarningMessages;
-
+private:
     std::string CommonErrorMessageCreator(Category category, int errorCode, const std::string& arg);
-
-    // Creates module-specific error message from an error code and string argument
-    std::function<std::string(Category, int, const std::string&)> m_ErrorMessageCreator;
 };
 
 
@@ -353,8 +349,7 @@ public:
         ModulePtr m = Module::Create(type);
         if (!m)
             return nullptr;
-        if (m->Import(filename))
-            return m;
+        m->Import(filename);
         return m;
     }
 
@@ -362,13 +357,13 @@ public:
      * Import the specified module file
      * Returns true upon failure
      */
-    virtual bool Import(const std::string& filename) = 0;
+    virtual void Import(const std::string& filename) = 0;
 
     /*
      * Export module to the specified file
      * Returns true upon failure
      */
-    virtual bool Export(const std::string& filename) = 0;
+    virtual void Export(const std::string& filename) = 0;
 
     /*
      * Converts the module to the specified type using the provided conversion options
@@ -388,8 +383,6 @@ public:
         output->ConvertFrom(this, options);
         return output;
     }
-
-    bool ErrorOccurred() const { return m_Status.ErrorOccurred(); }
 
     Status GetStatus() const { return m_Status; }
 
@@ -440,7 +433,7 @@ public:
     virtual std::string GetName() const = 0;
 
 protected:
-    virtual bool ConvertFrom(const Module* input, const ConversionOptionsPtr& options) = 0;
+    virtual void ConvertFrom(const Module* input, const ConversionOptionsPtr& options) = 0;
 
     Status m_Status;
 };

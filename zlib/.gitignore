@@ -23,4 +23,8 @@
 /zlib.pc
 /configure.log
 
+/configure
+/Makefile
+/zconf.h
+
 .DS_Store

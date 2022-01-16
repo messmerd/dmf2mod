@@ -812,10 +812,10 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
                 }
 
                 #pragma region UPDATE_STATE
-                // If a Position Jump command was found and it's not in a section skipped by another Position Jump:
-                if (effectCode == DMFEffectCode::PosJump && !stateSuspended)
+                // If a Position Jump or Pattern Break command was found and it's not in a section skipped by another Position Jump / Pattern Break:
+                if ((effectCode == DMFEffectCode::PosJump || (effectCode == DMFEffectCode::PatBreak && effectValue == 0)) && !stateSuspended)
                 {
-                    if (effectValue >= patMatRow) // If not a loop
+                    if (effectValue + (int)m_UsingSetupPattern >= patMatRow || effectCode == DMFEffectCode::PatBreak) // If not a loop
                     {
                         // Save copies of states
                         for (unsigned v = 0; v < m_NumberOfChannels; v++)
@@ -823,7 +823,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
                             stateJumpCopy[v] = state[v];
                         }
                         stateSuspended = true;
-                        jumpDestination = effectValue;
+                        jumpDestination = effectValue + (int)m_UsingSetupPattern;
                     }
                 }
                 else if (effectCode == DMFGameBoyEffectCode::SetDutyCycle && state[chan].dutyCycle != effectValue && chan <= static_cast<int>(DMFGameBoyChannel::SQW2)) // If sqw channel duty cycle needs to change 
@@ -1024,10 +1024,19 @@ void MOD::DMFConvertEffect(const DMFChannelRow& pat, MODChannelState& state, uin
             total_effects++;
         }
 
-        if (pat.effect[0].code == DMFEffectCode::PosJump) // Position Jump. Has priority over volume changes and note cuts.
+        if (pat.effect[0].code == DMFEffectCode::PosJump) // Position Jump. Has priority over volume changes.
         {
             effectCode = MODEffect::PosJump;
             effectValue = pat.effect[0].value + (int)m_UsingSetupPattern;
+            
+            state.volume = volumeCopy; // Cancel volume change if it occurred above.
+            total_effects++;
+        }
+
+        if (pat.effect[0].code == DMFEffectCode::PatBreak && pat.effect[0].value == 0) // Pattern break - Only the 0D0 effect/value is supported at this time
+        {
+            effectCode = MODEffect::PatBreak;
+            effectValue = 0;
             
             state.volume = volumeCopy; // Cancel volume change if it occurred above.
             total_effects++;
@@ -1100,7 +1109,9 @@ void MOD::DMFConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectV
         case DMFEffectCode::Retrig:
             ptEff = MODEffect::RetriggerSample; break;  // ?
         case DMFEffectCode::PatBreak:
-            ptEff = MODEffect::PatBreak; break;
+            ptEff = MODEffect::PatBreak;
+            ptEffVal = 0;
+            break;
         case DMFEffectCode::ArpTickSpeed:
             break; // ?
         case DMFEffectCode::NoteSlideUp:

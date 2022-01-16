@@ -1,5 +1,7 @@
 # Ignore everything
 /**
+/zlib/**
+/zstr/**
 
 # Un-ignore
 !/.gitignore

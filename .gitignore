@@ -4,7 +4,9 @@
 # Un-ignore
 !/.gitignore
 !/.gitattributes
+!/.github/
 !/.github/**
+!/LICENSE
 !/Makefile
 !/*.md
 
@@ -21,6 +23,7 @@
 /webapp/dmf2mod.js
 
 # zlib - Ignore only the files produced by build process
+!/zlib/
 !/zlib/**
 /zlib/Makefile
 /zlib/configure

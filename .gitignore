@@ -1,12 +1,12 @@
 # Ignore everything
 /**
-/zlib/**
-/zstr/**
 
 # Un-ignore
 !/.gitignore
 !/.gitattributes
 !/.github/**
+!/Makefile
+!/*.md
 
 # Un-ignore source code
 !/*.cpp
@@ -14,8 +14,36 @@
 
 # Un-ignore web app source files
 !/webapp/
+!/webapp/*.cpp
+!/webapp/*.h
 !/webapp/*.js
 !/webapp/*.html
 /webapp/dmf2mod.js
+
+# zlib - Ignore only the files produced by build process
+!/zlib/**
+/zlib/Makefile
+/zlib/configure
+/zlib/zconf.h
+/zlib/objs/**
+/zlib/*.o
+/zlib/*.lo
+/zlib/*.a
+/zlib/example
+/zlib/examplesh
+/zlib/example64
+/zlib/minigzip
+/zlib/minigzipsh
+/zlib/minigzip64
+/zlib/infcover
+/zlib/libz.*
+/zlib/foo.gz
+/zlib/so_locations
+/zlib/_match.s
+/zlib/maketree
+/zlib/contrib/infback9/**
+/zlib/*.gcda
+/zlib/*.gcno
+/zlib/*.gcov
 
 # TODO: Move source code to "src" directory, documents to "doc", and sample file and tests to "testing"

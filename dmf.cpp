@@ -27,12 +27,13 @@
 const std::vector<std::string> DMFOptions = {};
 REGISTER_MODULE_CPP(DMF, DMFConversionOptions, ModuleType::DMF, "dmf", DMFOptions)
 
-#define DMF_FILE_VERSION 22 // 0x16 - Only DefleMask v0.12.0 files and above are supported
+#define DMF_FILE_VERSION 17 // DMF files as old as version 17 (0x11) are supported
 
 // Information about all the systems Deflemask supports
 static const std::map<DMF::SystemType, DMFSystem> DMFSystems =
 {
     {DMF::SystemType::Error, {.id = 0x00, .name = "ERROR", .channels = 0}},
+    {DMF::SystemType::YMU759, {.id = 0x01, .name = "YMU759", .channels = 17}}, // Removed since DMF version 19 (0x13)
     {DMF::SystemType::Genesis, {.id = 0x02, .name = "GENESIS", .channels = 10}},
     {DMF::SystemType::Genesis_CH3, {.id = 0x42, .name = "GENESIS_CH3", .channels = 13}},
     {DMF::SystemType::SMS, {.id = 0x03, .name = "SMS", .channels = 4}},
@@ -51,8 +52,8 @@ const DMFSystem DMF::Systems(DMF::SystemType systemType) { return DMFSystems.at(
 DMF::DMF()
 {
     // Initialize pointers to nullptr to prevent segfault when freeing memory if the import fails:
-    m_VisualInfo.songName = nullptr;
-    m_VisualInfo.songAuthor = nullptr;
+    m_VisualInfo.songName = "";
+    m_VisualInfo.songAuthor = "";
     m_PatternValues = nullptr;
     m_ChannelEffectsColumnsCount = nullptr;
     m_PatternMatrixValues = nullptr;
@@ -60,7 +61,6 @@ DMF::DMF()
     m_Instruments = nullptr;
     m_WavetableSizes = nullptr;
     m_WavetableValues = nullptr;
-    m_ChannelEffectsColumnsCount = nullptr;
     m_PCMSamples = nullptr;
 }
 
@@ -72,12 +72,6 @@ DMF::~DMF()
 void DMF::CleanUp()
 {
     // Free memory allocated for members
-    delete[] m_VisualInfo.songName;
-    m_VisualInfo.songName = nullptr;
-
-    delete[] m_VisualInfo.songAuthor;
-    m_VisualInfo.songAuthor = nullptr;
-
     if (m_PatternMatrixMaxValues)
     {
         for (int channel = 0; channel < m_System.channels; channel++)
@@ -112,7 +106,6 @@ void DMF::CleanUp()
     {
         for (int i = 0; i < m_TotalInstruments; i++) 
         {
-            delete[] m_Instruments[i].name;
             delete[] m_Instruments[i].stdArpEnvValue;
             delete[] m_Instruments[i].stdDutyNoiseEnvValue;
             delete[] m_Instruments[i].stdVolEnvValue;
@@ -143,7 +136,6 @@ void DMF::CleanUp()
     {
         for (int sample = 0; sample < m_TotalPCMSamples; sample++) 
         {
-            delete[] m_PCMSamples[sample].name;
             delete[] m_PCMSamples[sample].data;
         }
         delete[] m_PCMSamples;
@@ -209,6 +201,14 @@ void DMF::Import(const std::string& filename)
         errorMsg += "       You can convert older DMF files to a supported version by opening them in a newer version of DefleMask and then saving them.";
         
         throw ModuleException(ModuleException::Category::Import, DMF::ImportError::UnspecifiedError, errorMsg);
+    }
+    else if (!silent)
+    {
+        std::stringstream stream;
+        stream << "0x" << std::setfill('0') << std::setw(2) << std::hex << (int)m_DMFFileVersion;
+        std::string hex = stream.str();
+
+        std::cout << "DMF version " + std::to_string(m_DMFFileVersion) + " (" + hex + ")\n";
     }
 
     ///////////////// SYSTEM SET
@@ -279,14 +279,20 @@ DMFSystem DMF::GetSystem(uint8_t systemByte) const
 void DMF::LoadVisualInfo(zstr::ifstream& fin)
 {
     m_VisualInfo.songNameLength = fin.get();
-    m_VisualInfo.songName = new char[m_VisualInfo.songNameLength + 1];
-    fin.read(m_VisualInfo.songName, m_VisualInfo.songNameLength);
-    m_VisualInfo.songName[m_VisualInfo.songNameLength] = '\0';
+
+    char* tempStr = new char[m_VisualInfo.songNameLength + 1];
+    fin.read(tempStr, m_VisualInfo.songNameLength);
+    tempStr[m_VisualInfo.songNameLength] = '\0';
+    m_VisualInfo.songName = tempStr;
+    delete[] tempStr;
 
     m_VisualInfo.songAuthorLength = fin.get();
-    m_VisualInfo.songAuthor = new char[m_VisualInfo.songAuthorLength + 1];
-    fin.read(m_VisualInfo.songAuthor, m_VisualInfo.songAuthorLength);
-    m_VisualInfo.songAuthor[m_VisualInfo.songAuthorLength] = '\0';
+
+    tempStr = new char[m_VisualInfo.songAuthorLength + 1];
+    fin.read(tempStr, m_VisualInfo.songAuthorLength);
+    tempStr[m_VisualInfo.songAuthorLength] = '\0';
+    m_VisualInfo.songAuthor = tempStr;
+    delete[] tempStr;
 
     m_VisualInfo.highlightAPatterns = fin.get();
     m_VisualInfo.highlightBPatterns = fin.get();
@@ -303,7 +309,7 @@ void DMF::LoadModuleInfo(zstr::ifstream& fin)
     m_ModuleInfo.customHZValue2 = fin.get();
     m_ModuleInfo.customHZValue3 = fin.get();
 
-    if (m_DMFFileVersion >= 24) // For Version 0.12.0 and onward. DMF version 24 (0x18). TODO: What is 23?
+    if (m_DMFFileVersion >= 24) // DMF version 24 (0x18) and newer.
     {
         // Newer versions read 4 bytes here
         m_ModuleInfo.totalRowsPerPattern = fin.get();
@@ -311,7 +317,7 @@ void DMF::LoadModuleInfo(zstr::ifstream& fin)
         m_ModuleInfo.totalRowsPerPattern |= fin.get() << 16;
         m_ModuleInfo.totalRowsPerPattern |= fin.get() << 24;
     }
-    else // Version 0.12.0. DMF version 22 (0x16).
+    else // DMF version 23 (0x17) and older. WARNING: I don't have the specs for version 23 (0x17), so this may be wrong.
     {
         // Earlier versions such as 22 (0x16) only read one byte here
         m_ModuleInfo.totalRowsPerPattern = fin.get();
@@ -319,7 +325,13 @@ void DMF::LoadModuleInfo(zstr::ifstream& fin)
 
     m_ModuleInfo.totalRowsInPatternMatrix = fin.get();
 
-    // TODO: Prior to Version 0.11.1, arpeggio tick speed was stored here
+    // Prior to Deflemask Version 0.11.1, arpeggio tick speed was stored here
+    // I don't have the specs for DMF version 20 (0x14), but based on a real DMF file of that version, it is the first DMF version 
+    //      to NOT contain the arpeggio tick speed byte.
+    if (m_DMFFileVersion <= 19) // DMF version 19 (0x13) and older
+    {
+        fin.get(); // arpTickSpeed: Discard for now
+    }
 }
 
 void DMF::LoadPatternMatrixValues(zstr::ifstream& fin)
@@ -361,9 +373,12 @@ DMFInstrument DMF::LoadInstrument(zstr::ifstream& fin, DMFSystem systemType)
     DMFInstrument inst;
 
     uint8_t name_size = fin.get();
-    inst.name = new char[name_size + 1];
-    fin.read(inst.name, name_size);
-    inst.name[name_size] = '\0';
+
+    char* tempStr = new char[name_size + 1];
+    fin.read(tempStr, name_size);
+    tempStr[name_size] = '\0';
+    inst.name = tempStr;
+    delete[] tempStr;
 
     inst.mode = fin.get(); // 1 = FM; 0 = Standard
 
@@ -375,31 +390,92 @@ DMFInstrument DMF::LoadInstrument(zstr::ifstream& fin, DMFSystem systemType)
 
     if (inst.mode == 1) // FM instrument
     {
-        inst.fmALG = fin.get();
-        inst.fmFB = fin.get();
-        inst.fmLFO = fin.get();
-        inst.fmLFO2 = fin.get();
+        int totalOperators;
 
-        constexpr int TOTAL_OPERATORS = 4;
-        for (int i = 0; i < TOTAL_OPERATORS; i++)
+        if (m_DMFFileVersion > 18) // Newer than DMF version 18 (0x12)
         {
-            inst.fmAM = fin.get();
-            inst.fmAR = fin.get();
-            inst.fmDR = fin.get();
-            inst.fmMULT = fin.get();
-            inst.fmRR = fin.get();
-            inst.fmSL = fin.get();
-            inst.fmTL = fin.get();
-            inst.fmDT2 = fin.get();
-            inst.fmRS = fin.get();
-            inst.fmDT = fin.get();
-            inst.fmD2R = fin.get();
-            inst.fmSSGMODE = fin.get();
+            inst.fmALG = fin.get();
+            inst.fmFB = fin.get();
+            inst.fmLFO = fin.get();
+            inst.fmLFO2 = fin.get();
+            totalOperators = 4;
+        }
+        else
+        {
+            inst.fmALG = fin.get();
+            fin.get(); // Reserved byte (must be 0)
+            inst.fmFB = fin.get();
+            fin.get(); // Reserved byte (must be 0)
+            inst.fmLFO = fin.get();
+            fin.get(); // Reserved byte (must be 0)
+
+            const bool totalOperatorsBool = fin.get();
+            totalOperators = totalOperatorsBool ? 4 : 2;
+
+            inst.fmLFO2 = fin.get();
+        }
+
+        for (int i = 0; i < totalOperators; i++)
+        {
+            if (m_DMFFileVersion > 18) // Newer than DMF version 18 (0x12)
+            {
+                inst.fmAM = fin.get();
+                inst.fmAR = fin.get();
+                inst.fmDR = fin.get();
+                inst.fmMULT = fin.get();
+                inst.fmRR = fin.get();
+                inst.fmSL = fin.get();
+                inst.fmTL = fin.get();
+                inst.fmDT2 = fin.get();
+                inst.fmRS = fin.get();
+                inst.fmDT = fin.get();
+                inst.fmD2R = fin.get();
+                inst.fmSSGMODE = fin.get();
+            }
+            else // DMF version 17 (0x11) or older
+            {
+                inst.fmAM = fin.get();
+                inst.fmAR = fin.get();
+                inst.fmDAM = fin.get();
+                inst.fmDR = fin.get();
+                inst.fmDVB = fin.get();
+                inst.fmEGT = fin.get();
+                inst.fmKSL = fin.get();
+                inst.fmMULT = fin.get();
+                inst.fmRR = fin.get();
+                inst.fmSL = fin.get();
+                inst.fmSUS = fin.get();
+                inst.fmTL = fin.get();
+                inst.fmVIB = fin.get();
+                inst.fmWS = fin.get();
+                inst.fmKSR = fin.get(); // RS on SEGA Genesis
+                inst.fmDT = fin.get();
+                inst.fmD2R = fin.get();
+                inst.fmSSGMODE = fin.get();
+            }
         }
     }
     else if (inst.mode == 0) // Standard instrument
     {
-        if (systemType.id != DMFSystems.at(DMF::SystemType::GameBoy).id) // Not a Game Boy
+        if (m_DMFFileVersion <= 17) // DMF version 17 (0x11) or older
+        {
+            // Volume macro
+            inst.stdVolEnvSize = fin.get();
+            inst.stdVolEnvValue = new int32_t[inst.stdVolEnvSize];
+            
+            for (int i = 0; i < inst.stdVolEnvSize; i++)
+            {
+                // 4 bytes, little-endian
+                inst.stdVolEnvValue[i] = fin.get();
+                inst.stdVolEnvValue[i] |= fin.get() << 8;
+                inst.stdVolEnvValue[i] |= fin.get() << 16;
+                inst.stdVolEnvValue[i] |= fin.get() << 24;
+            }
+
+            // Always get envelope loop position byte regardless of envelope size
+            inst.stdVolEnvLoopPos = fin.get();
+        }
+        else if (systemType.id != DMFSystems.at(DMF::SystemType::GameBoy).id) // Not a Game Boy and DMF version 18 (0x12) or newer
         {
             // Volume macro
             inst.stdVolEnvSize = fin.get();
@@ -431,7 +507,7 @@ DMFInstrument DMF::LoadInstrument(zstr::ifstream& fin, DMFSystem systemType)
             inst.stdArpEnvValue[i] |= fin.get() << 24;
         }
 
-        if (inst.stdArpEnvSize > 0)
+        if (inst.stdArpEnvSize > 0 || m_DMFFileVersion <= 17) // DMF version 17 and older always gets envelope loop position byte
             inst.stdArpEnvLoopPos = fin.get();
         
         inst.stdArpMacroMode = fin.get();
@@ -449,7 +525,7 @@ DMFInstrument DMF::LoadInstrument(zstr::ifstream& fin, DMFSystem systemType)
             inst.stdDutyNoiseEnvValue[i] |= fin.get() << 24;
         }
 
-        if (inst.stdDutyNoiseEnvSize > 0)
+        if (inst.stdDutyNoiseEnvSize > 0 || m_DMFFileVersion <= 17) // DMF version 17 and older always gets envelope loop position byte
             inst.stdDutyNoiseEnvLoopPos = fin.get();
 
         // Wavetable macro
@@ -465,7 +541,7 @@ DMFInstrument DMF::LoadInstrument(zstr::ifstream& fin, DMFSystem systemType)
             inst.stdWavetableEnvValue[i] |= fin.get() << 24;
         }
 
-        if (inst.stdWavetableEnvSize > 0)
+        if (inst.stdWavetableEnvSize > 0 || m_DMFFileVersion <= 17) // DMF version 17 and older always gets envelope loop position byte
             inst.stdWavetableEnvLoopPos = fin.get();
 
         // Per system data
@@ -493,7 +569,7 @@ DMFInstrument DMF::LoadInstrument(zstr::ifstream& fin, DMFSystem systemType)
             inst.stdC64FilterLowPass = fin.get();
             inst.stdC64FilterCH2Off = fin.get();
         }
-        else if (systemType.id == DMFSystems.at(DMF::SystemType::GameBoy).id) // Using Game Boy
+        else if (systemType.id == DMFSystems.at(DMF::SystemType::GameBoy).id && m_DMFFileVersion >= 18) // Using Game Boy and DMF version is 18 or newer
         {
             inst.stdGBEnvVol = fin.get();
             inst.stdGBEnvDir = fin.get();
@@ -622,24 +698,31 @@ DMFPCMSample DMF::LoadPCMSample(zstr::ifstream& fin)
     sample.size |= fin.get() << 16;
     sample.size |= fin.get() << 24;
 
-    if (m_DMFFileVersion >= 24) // For Version 0.12.0 and onward. DMF version 24 (0x18). TODO: What is 23?
+    if (m_DMFFileVersion >= 24) // DMF version 24 (0x18)
     {
         // Read PCM sample name
         uint8_t name_size = fin.get();
-        sample.name = new char[name_size];
-        fin.read(sample.name, name_size);
-        sample.name[name_size] = '\0';
+
+        char* tempStr = new char[name_size];
+        fin.read(tempStr, name_size);
+        tempStr[name_size] = '\0';
+        sample.name = tempStr;
+        delete[] tempStr;
     }
-    else // Version 0.12.0. DMF version 22 (0x16).
+    else // DMF version 23 (0x17) and older. WARNING: I don't have the specs for version 23 (0x17), so this may be wrong.
     {
         // PCM samples don't have names in this DMF version
-        sample.name = nullptr;
+        sample.name = "";
     }
 
     sample.rate = fin.get();
     sample.pitch = fin.get();
     sample.amp = fin.get();
-    sample.bits = fin.get();
+
+    if (m_DMFFileVersion >= 22) // DMF version 22 (0x16) and newer
+    {
+        sample.bits = fin.get();
+    }
 
     sample.data = new uint16_t[sample.size];
     for (uint32_t i = 0; i < sample.size; i++)

@@ -16,6 +16,8 @@
 #include "modules.h"
 #include "zstr/zstr.hpp"
 
+#include <string>
+
 // Begin setup
 REGISTER_MODULE_HEADER(DMF, DMFConversionOptions)
 
@@ -110,9 +112,9 @@ struct DMFSystem
 struct DMFVisualInfo
 {
     uint8_t songNameLength;
-    char *songName;
+    std::string songName;
     uint8_t songAuthorLength;
-    char *songAuthor;
+    std::string songAuthor;
     uint8_t highlightAPatterns;
     uint8_t highlightBPatterns;
 };
@@ -126,12 +128,13 @@ struct DMFModuleInfo
 
 struct DMFInstrument
 {
-    char *name;
+    std::string name;
     uint8_t mode;
 
     // FM Instruments
     uint8_t fmALG, fmFB, fmLFO, fmLFO2;
     uint8_t fmAM, fmAR, fmDR, fmMULT, fmRR, fmSL, fmTL, fmDT2, fmRS, fmDT, fmD2R, fmSSGMODE;
+    uint8_t fmDAM, fmDVB, fmEGT, fmKSL, fmSUS, fmVIB, fmWS, fmKSR; // Exclusive to DMF version 18 (0x12) and older
 
     // Standard Instruments
     uint8_t stdVolEnvSize, stdArpEnvSize, stdDutyNoiseEnvSize, stdWavetableEnvSize;
@@ -153,7 +156,7 @@ struct DMFInstrument
 struct DMFPCMSample
 {
     uint32_t size;
-    char *name;
+    std::string name;
     uint8_t rate, pitch, amp, bits;
     uint16_t *data;
 };
@@ -205,7 +208,7 @@ public:
 
     enum class SystemType
     {
-        Error=0, Genesis, Genesis_CH3, SMS, GameBoy,
+        Error=0, YMU759, Genesis, Genesis_CH3, SMS, GameBoy,
         PCEngine, NES, C64_SID_8580, C64_SID_6581, Arcade,
         NeoGeo, NeoGeo_CH2
     };
@@ -220,12 +223,7 @@ public:
     void Import(const std::string& filename) override;
     void Export(const std::string& filename) override;
 
-    std::string GetName() const override
-    {
-        if (!m_VisualInfo.songName)
-            return "";
-        return m_VisualInfo.songName;
-    }
+    std::string GetName() const override { return m_VisualInfo.songName; }
 
     ////////////
 

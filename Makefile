@@ -16,7 +16,7 @@ endif
 CC	 = g++
 
 # Compiler and linker flags
-FLAGS	= -c -std=c++17 -Izlib -Izstr -Wall -Wno-unknown-pragmas
+FLAGS	= -std=c++17 -Izlib -Izstr -Wall -Wno-unknown-pragmas
 LFLAGS	= -lm zlib/libz.a
 
 # Emscripten compiler and linker flags
@@ -36,7 +36,7 @@ cmd_program: core dmf2mod.o
 	@echo "Done building dmf2mod"
 
 dmf2mod.o: dmf2mod.cpp
-	$(CC) $(FLAGS) dmf2mod.cpp
+	$(CC) -c -g $(FLAGS) dmf2mod.cpp
 
 # Web App, WASM version:
 webapp: core_wasm webapp.cpp
@@ -51,7 +51,7 @@ core: zlib $(CORE_OBJS)
 	@echo "Done building core"
 
 %.o : %.cpp
-	$(CC) -c $(FLAGS) $< -o $@
+	$(CC) -c -g $(FLAGS) $< -o $@
 
 # Dmf2mod WebAssembly core:
 core_wasm: $(WASM_CORE_OBJS)

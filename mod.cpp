@@ -28,6 +28,8 @@
 #include <cstdio>
 #include <set>
 
+#include <cassert>
+
 // Finish setup
 const std::vector<std::string> MODOptions = {"--downsample", "--effects=[min,max]"};
 REGISTER_MODULE_CPP(MOD, MODConversionOptions, ModuleType::MOD, "mod", MODOptions)
@@ -731,7 +733,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
         MODChannelRow tempoRow;
         tempoRow.SampleNumber = 0;
         tempoRow.SamplePeriod = 0;
-        tempoRow.EffectCode = MODEffect::SetSpeed;
+        tempoRow.EffectCode = MODEffectCode::SetSpeed;
         tempoRow.EffectValue = initialTempo;
         SetChannelRow(0, 0, 0, tempoRow);
 
@@ -739,7 +741,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
         MODChannelRow speedRow;
         speedRow.SampleNumber = 0;
         speedRow.SamplePeriod = 0;
-        speedRow.EffectCode = MODEffect::SetSpeed;
+        speedRow.EffectCode = MODEffectCode::SetSpeed;
         speedRow.EffectValue = initialSpeed;
         SetChannelRow(0, 0, 1, speedRow);
 
@@ -747,7 +749,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
         MODChannelRow posJumpRow;
         posJumpRow.SampleNumber = 0;
         posJumpRow.SamplePeriod = 0;
-        posJumpRow.EffectCode = MODEffect::PosJump;
+        posJumpRow.EffectCode = MODEffectCode::PosJump;
         posJumpRow.EffectValue = 1;
         SetChannelRow(0, 0, 2, posJumpRow);
 
@@ -792,6 +794,8 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
         // Loop through rows in a pattern:
         for (unsigned patRow = 0; patRow < 64; patRow++)
         {
+            MODEffect noiseChannelEffect {MODEffectCode::NoEffectCode, MODEffectCode::NoEffectVal};
+
             // Loop through channels:
             for (unsigned chan = 0; chan < m_NumberOfChannels; chan++)
             {
@@ -845,15 +849,108 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
                 #pragma endregion
 
                 MODChannelRow tempChannelRow;
-                DMFConvertChannelRow(dmf, sampleMap, chanRow, state[chan], tempChannelRow);
+                DMFConvertChannelRow(dmf, sampleMap, chanRow, state[chan], tempChannelRow, noiseChannelEffect);
                 SetChannelRow(patMatRow + (int)m_UsingSetupPattern, patRow, chan, tempChannelRow);
             }
         }
     }
 }
 
-void MOD::DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const DMFChannelRow& pat, MODChannelState& state, MODChannelRow& modChannelRow)
+void MOD::DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const DMFChannelRow& pat, MODChannelState& state, MODChannelRow& modChannelRow, MODEffect& noiseChannelEffect)
 {
+    auto modEffects = DMFConvertEffects(state, pat);
+
+    mod_sample_id_t modSampleId;
+    uint16_t period;
+    bool volumeChangeNeeded;
+
+    DMFConvertNote(state, pat, sampleMap, modEffects, modSampleId, period, volumeChangeNeeded);
+    
+    modChannelRow.SampleNumber = modSampleId;
+    modChannelRow.SamplePeriod = period;
+    modChannelRow.EffectCode = 0; // Will be set below
+    modChannelRow.EffectValue = 0; // Will be set below
+
+    // If no effects are being used here and a pat break or jump effect needs to be used, it can be done here
+    if (modEffects.size() == 0)
+    {
+        if (noiseChannelEffect.effect != MODEffectCode::NoEffectCode)
+        {
+            // It's free real estate
+            modChannelRow.EffectCode = noiseChannelEffect.effect;
+            modChannelRow.EffectValue = noiseChannelEffect.value;
+
+            noiseChannelEffect.effect = MODEffectCode::NoEffectCode;
+            noiseChannelEffect.value = 0;
+        }
+    }
+    else // There are effect(s) which need to be applied
+    {
+        bool effectUsed = false; // Whether an effect has been chosen to be used for this channel's effect slot
+
+        // Get iterator to effect(s) after the pat break or jump effects
+        std::multimap<int, MODEffect>::iterator iter = modEffects.upper_bound(0);
+        
+        // If a pat break or jump is used
+        if (modEffects.find(0) != modEffects.end())
+        {
+            // If there are effects besides pat break or jump, and the noise channel effect slot is free
+            if (iter != modEffects.end() && noiseChannelEffect.effect == MODEffectCode::NoEffectCode)
+            {
+                --iter; // To last pat break or jump effect
+
+                assert(iter->first == 0 && "Must be pat break or jump effect");
+
+                // Use the pat break / jump effect later
+                noiseChannelEffect.effect = iter->second.effect;
+                noiseChannelEffect.value = iter->second.value;
+            }
+            else // Use the pat break or jump effect now
+            {
+                --iter; // To last pat break or jump effect
+
+                assert(iter->first == 0 && "Must be pat break or jump effect");
+
+                modChannelRow.EffectCode = iter->second.effect;
+                modChannelRow.EffectValue = iter->second.value;
+                effectUsed = true;
+            }
+            ++iter; // Back to effect(s) after the pat break or jump effects
+        }
+
+        if (effectUsed && iter != modEffects.end())
+        {
+            // ERROR: If max effects were desired, it cannot be done. At least one effect cannot be used.
+        }
+
+        if (!effectUsed && iter != modEffects.end() && iter->first != 99)
+        {
+            modChannelRow.EffectCode = iter->second.effect;
+            modChannelRow.EffectValue = iter->second.value;
+            effectUsed = true;
+            ++iter;
+        }
+
+        if (effectUsed && iter != modEffects.end())
+        {
+            // ERROR: If max effects were desired, it cannot be done. At least one effect cannot be used.
+        }
+    }
+
+    return;
+
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     // Writes 4 bytes of pattern row information to the .mod file
     uint16_t effectCode, effectValue;
     DMFConvertEffect(pat, state, effectCode, effectValue);
@@ -876,7 +973,7 @@ void MOD::DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, M
     }
     else  // A note is playing
     {
-        uint8_t dmfSampleId;
+        dmf_sample_id_t dmfSampleId;
         uint16_t period = 0;
 
         uint16_t modOctave = 0; // The note's octave to export to the MOD file.
@@ -956,14 +1053,14 @@ void MOD::DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, M
 
             state.sampleChanged = false; // Just changed the sample, so resetting this for next time.
             
-            if (effectCode == MODEffect::NoEffectCode)
+            if (effectCode == MODEffectCode::NoEffectCode)
             {
                 // When you change PT samples, the channel volume resets, so 
                 //  if there are still no effects being used on this pattern row, 
                 //  use a volume change effect to set the volume to where it needs to be.
                 uint8_t newVolume = std::round(state.volume / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
 
-                effectCode = MODEffect::SetVolume;
+                effectCode = MODEffectCode::SetVolume;
                 effectValue = newVolume;
                 
                 // TODO: If the default volume of the sample is selected in a smart way, we could potentially skip having to use a volume effect sometimes
@@ -990,7 +1087,7 @@ void MOD::DMFConvertEffect(const DMFChannelRow& pat, MODChannelState& state, uin
         DMFConvertEffectCodeAndValue(pat.effect[0].code, pat.effect[0].value, effectCode, effectValue); // Effects must be in first row
         if (pat.volume != state.volume && pat.volume != DMFNoVolume && DMFNoteHasPitch(pat.note)) // If the note volume changes, and the volume is connected to a note
         {
-            if (effectCode != MODEffect::NoEffectCode) // If an effect is already being used
+            if (effectCode != MODEffectCode::NoEffectCode) // If an effect is already being used
             {
                 /* Unlike Deflemask, setting the volume in ProTracker requires the use of 
                     an effect, and only one effect can be used at a time per channel.
@@ -1002,7 +1099,7 @@ void MOD::DMFConvertEffect(const DMFChannelRow& pat, MODChannelState& state, uin
             else // Only the volume changed
             {
                 uint8_t newVolume = std::round(pat.volume / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
-                effectCode = MODEffect::SetVolume;
+                effectCode = MODEffectCode::SetVolume;
                 effectValue = newVolume;
 
                 state.volume = pat.volume; // Update the state
@@ -1017,7 +1114,7 @@ void MOD::DMFConvertEffect(const DMFChannelRow& pat, MODChannelState& state, uin
         {
             uint8_t newVolume = round(pat.volume / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
             
-            effectCode = MODEffect::SetVolume;
+            effectCode = MODEffectCode::SetVolume;
             effectValue = newVolume;
 
             state.volume = pat.volume; // Update the state
@@ -1026,7 +1123,7 @@ void MOD::DMFConvertEffect(const DMFChannelRow& pat, MODChannelState& state, uin
 
         if (pat.effect[0].code == DMFEffectCode::PosJump) // Position Jump. Has priority over volume changes.
         {
-            effectCode = MODEffect::PosJump;
+            effectCode = MODEffectCode::PosJump;
             effectValue = pat.effect[0].value + (int)m_UsingSetupPattern;
             
             state.volume = volumeCopy; // Cancel volume change if it occurred above.
@@ -1035,7 +1132,7 @@ void MOD::DMFConvertEffect(const DMFChannelRow& pat, MODChannelState& state, uin
 
         if (pat.effect[0].code == DMFEffectCode::PatBreak && pat.effect[0].value == 0) // Pattern break - Only the 0D0 effect/value is supported at this time
         {
-            effectCode = MODEffect::PatBreak;
+            effectCode = MODEffectCode::PatBreak;
             effectValue = 0;
             
             state.volume = volumeCopy; // Cancel volume change if it occurred above.
@@ -1054,7 +1151,7 @@ void MOD::DMFConvertEffect(const DMFChannelRow& pat, MODChannelState& state, uin
         }
         else if (total_effects == 0)
         {
-            effectCode = MODEffect::NoEffectCode; // No effect
+            effectCode = MODEffectCode::NoEffectCode; // No effect
             effectValue = 0;
         }
     }
@@ -1065,51 +1162,51 @@ void MOD::DMFConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectV
     // An effect is represented with 12 bits, which is 3 groups of 4 bits: [e][x][y].
     // The effect code is [e] or [e][x], and the effect value is [x][y] or [y].
     // Effect codes of the form [e] are stored as [e][0x0].
-    unsigned ptEff = MODEffect::NoEffectCode;
-    unsigned ptEffVal = MODEffect::NoEffectVal;
+    unsigned ptEff = MODEffectCode::NoEffectCode;
+    unsigned ptEffVal = MODEffectCode::NoEffectVal;
 
     switch (DMFEffectCode(dmfEffectCode))
     {
         case DMFEffectCode::NoEffect:
-            ptEff = MODEffect::NoEffectCode; break; // ?
+            ptEff = MODEffectCode::NoEffectCode; break; // ?
         case DMFEffectCode::Arp:
-            ptEff = MODEffect::Arp;
+            ptEff = MODEffectCode::Arp;
             ptEffVal = dmfEffectValue;
             break;
         case DMFEffectCode::PortUp:
-            ptEff = MODEffect::PortUp;
+            ptEff = MODEffectCode::PortUp;
             ptEffVal = dmfEffectValue;
             break;
         case DMFEffectCode::PortDown:
-            ptEff = MODEffect::PortDown;
+            ptEff = MODEffectCode::PortDown;
             ptEffVal = dmfEffectValue;
             break;
         case DMFEffectCode::Port2Note:
-            ptEff = MODEffect::Port2Note;
+            ptEff = MODEffectCode::Port2Note;
             ptEffVal = dmfEffectValue; //CLAMP(dmfEffectValue + 6, 0x00, 0xFF); // ???
             break;
         case DMFEffectCode::Vibrato:
-            ptEff = MODEffect::Vibrato; break;
+            ptEff = MODEffectCode::Vibrato; break;
         case DMFEffectCode::Port2NoteVolSlide:
-            ptEff = MODEffect::Port2NoteVolSlide; break;
+            ptEff = MODEffectCode::Port2NoteVolSlide; break;
         case DMFEffectCode::VibratoVolSlide:
-            ptEff = MODEffect::VibratoVolSlide; break;
+            ptEff = MODEffectCode::VibratoVolSlide; break;
         case DMFEffectCode::Tremolo:
-            ptEff = MODEffect::Tremolo; break;
+            ptEff = MODEffectCode::Tremolo; break;
         case DMFEffectCode::Panning:
-            ptEff = MODEffect::Panning; break;
+            ptEff = MODEffectCode::Panning; break;
         case DMFEffectCode::SetSpeedVal1:
             break; // ?
         case DMFEffectCode::VolSlide:
-            ptEff = MODEffect::VolSlide; break;
+            ptEff = MODEffectCode::VolSlide; break;
         case DMFEffectCode::PosJump:
-            ptEff = MODEffect::PosJump;
+            ptEff = MODEffectCode::PosJump;
             ptEffVal = dmfEffectValue + (int)m_UsingSetupPattern;
             break;
         case DMFEffectCode::Retrig:
-            ptEff = MODEffect::RetriggerSample; break;  // ?
+            ptEff = MODEffectCode::RetriggerSample; break;  // ?
         case DMFEffectCode::PatBreak:
-            ptEff = MODEffect::PatBreak;
+            ptEff = MODEffectCode::PatBreak;
             ptEffVal = 0;
             break;
         case DMFEffectCode::ArpTickSpeed:
@@ -1127,15 +1224,15 @@ void MOD::DMFConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectV
         case DMFEffectCode::SetSamplesBank:
             break; // ? 
         case DMFEffectCode::NoteCut:
-            ptEff = MODEffect::CutSample;
+            ptEff = MODEffectCode::CutSample;
             ptEffVal = dmfEffectValue; // ??
             break;
         case DMFEffectCode::NoteDelay:
-            ptEff = MODEffect::DelaySample; break; // ?
+            ptEff = MODEffectCode::DelaySample; break; // ?
         case DMFEffectCode::SyncSignal:
             break; // This is only used when exporting as VGM in Deflemask
         case DMFEffectCode::SetGlobalFinetune:
-            ptEff = MODEffect::SetFinetune; break; // ?
+            ptEff = MODEffectCode::SetFinetune; break; // ?
         case DMFEffectCode::SetSpeedVal2:
             break; // ?
         default:
@@ -1162,6 +1259,256 @@ void MOD::DMFConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectV
     modEffectCode = ptEff;
     modEffectValue = ptEffVal;
 }
+
+
+
+std::multimap<int, MODEffect> MOD::DMFConvertEffects(MODChannelState& state, const DMFChannelRow& pat)
+{
+    /*
+     * Lower number = higher priority effect:
+     * 0 = Important song structure related effect such as Pattern break or Jump (Can always be performed)
+     * 1 = Sample change (Can always be performed)
+     * 2 = Tempo change (Not always usable)
+     * 3 = Volume change (Not always usable)
+     * 4 and higher = Other effects
+     * 99 = unsupported effect
+     */
+
+    using EffectPair = std::pair<int, MODEffect>;
+    std::multimap<int, MODEffect> modEffects;
+    
+    // Add volume change effect if needed. TODO: Use volume optimization later
+    if (state.sampleChanged || (pat.volume != state.volume && pat.volume != DMFNoVolume)) // If volume changed
+    {
+        if (DMFNoteHasPitch(pat.note) || state.notePlaying) // If a note is playing
+        {
+            uint8_t newVolume = std::round(pat.volume / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
+
+            modEffects.insert({3, {MODEffectCode::SetVolume, newVolume}});
+
+            state.volume = pat.volume; // Update the state
+        }
+    }
+
+    // Add other effects
+    for (const auto& dmfEffect : pat.effect)
+    {
+        EffectPair effectPair {99, {MODEffectCode::NoEffectCode, MODEffectCode::NoEffectVal}};
+
+        switch (DMFEffectCode(dmfEffect.code))
+        {
+        case DMFEffectCode::NoEffect:
+            continue;
+        case DMFEffectCode::NoteCut:
+            if (dmfEffect.value == 0)
+            {
+                effectPair.first = 1; // Can be implemented as silent sample
+                effectPair.second = {MODEffectCode::CutSample, 0};
+            }
+            break;
+        case DMFEffectCode::PatBreak:
+            if (dmfEffect.value == 0)
+            {
+                effectPair.first = 0; // Only 0D0 is supported at the moment
+                effectPair.second = {MODEffectCode::PatBreak, 0};
+            }
+            break;
+        case DMFEffectCode::PosJump:
+        {
+            effectPair.first = 0;
+            uint16_t dest = dmfEffect.value + (int)m_UsingSetupPattern;
+            effectPair.second = {MODEffectCode::PosJump, dest};
+            break;
+        }
+            
+        default:
+            break; // Unsupported. priority remains 99
+        }
+
+        switch (DMFGameBoyEffectCode(dmfEffect.code))
+        {
+        case DMFGameBoyEffectCode::SetDutyCycle:
+            if (state.channel != DMFGameBoyChannel::SQW1 && state.channel != DMFGameBoyChannel::SQW2)
+                break; // Must be a square wave channel
+
+            if (dmfEffect.value != state.dutyCycle && (0 <= dmfEffect.value && dmfEffect.value <= 3))
+            {
+                // Update state
+                state.dutyCycle = dmfEffect.value;
+
+                continue; // No MOD effect exists for this
+            }
+            break;
+        case DMFGameBoyEffectCode::SetWave:
+            if (state.channel != DMFGameBoyChannel::WAVE)
+                break; // Must be the wave channel
+
+            if (dmfEffect.value != state.wavetable)
+            {
+                // Update state
+                state.wavetable = dmfEffect.value;
+
+                continue; // No MOD effect exists for this
+            }
+            break;
+        default:
+            break; // Unsupported. priority remains 10
+        }
+
+        modEffects.insert(effectPair);
+    }
+
+    return modEffects;
+}
+
+
+MODNote MOD::DMFConvertNote(MODChannelState& state, const DMFChannelRow& pat, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, std::multimap<int, MODEffect>& modEffects, mod_sample_id_t& sampleId, uint16_t& period, bool& volumeChangeNeeded)
+{
+    MODNote modNote {0, 0};
+
+    sampleId = 0;
+    period = 0;
+    volumeChangeNeeded = false;
+
+    // Convert note - Note cut effect
+    auto sampleChangeEffects = modEffects.find(1);
+    if (sampleChangeEffects != modEffects.end()) // If sample change occurred (duty cycle, wave, or note cut effect)
+    {
+        MODEffect modEffect = sampleChangeEffects->second;
+        if (modEffect.effect == MODEffectCode::CutSample) // Note cut
+        {
+            sampleId = sampleMap.at(-1).lowId; // Use silent sample
+            period = 0; // Don't need a note for the silent sample to work
+            state.notePlaying = false;
+            return modNote;
+        }
+    }
+
+    // Convert note - No note playing
+    if (pat.note.pitch == DMFNotePitch::Empty) // No note is playing. Only handle effects.
+    {
+        sampleId = 0;
+        period = 0;
+        return modNote;
+    }
+    
+    // Convert note - Note OFF
+    if (pat.note.pitch == DMFNotePitch::Off) // Note OFF. Use silent sample and handle effects.
+    {
+        sampleId = sampleMap.at(-1).lowId; // Use silent sample
+        period = 0; // Don't need a note for the silent sample to work
+        state.notePlaying = false;
+        return modNote;
+    }
+
+    // Note is playing
+
+    // The indices for this SQW / WAVE sample's low note range and high note range:
+    dmf_sample_id_t dmfSampleId = state.channel == DMFGameBoyChannel::WAVE ? state.wavetable + 4 : state.dutyCycle;
+    
+    // If we are on the NOISE channel, dmfSampleId will go unused
+
+    uint16_t modOctave = 0; // The note's octave to export to the MOD file.
+
+    if (DMFNoteHasPitch(pat.note)) // A note
+    {
+        if (state.channel != DMFGameBoyChannel::NOISE)
+        {
+            if (sampleMap.count(dmfSampleId) > 0)
+            {
+                const MODMappedDMFSample& modSampleInfo = sampleMap.at(dmfSampleId);
+                DMFNote dmfSplitPoint;
+                dmfSplitPoint.octave = modSampleInfo.splitPoint.octave;
+                dmfSplitPoint.pitch = modSampleInfo.splitPoint.pitch;
+
+                // If using high note range:
+                if (modSampleInfo.highId != -1)
+                {
+                    // If the current note is in the high note range
+                    if (pat.note >= dmfSplitPoint)
+                    {
+                        // Find the note's octave in MOD format:
+                        modOctave = pat.note.octave - dmfSplitPoint.octave;
+                        if (!state.onHighNoteRange)
+                        {
+                            // Switching to a different note range requires the use of a different MOD sample.
+                            state.sampleChanged = true;
+                        }
+                        state.onHighNoteRange = true;
+                    }
+                    else // If current note is in the low note range
+                    {
+                        // Find the note's octave in MOD format:
+                        modOctave = pat.note.octave - dmfSplitPoint.octave + 3;
+                        if (state.onHighNoteRange)
+                        {
+                            // Switching to a different note range requires the use of a different MOD sample.
+                            state.sampleChanged = true;
+                        }
+                        state.onHighNoteRange = false;
+                    }
+                }
+                else // Only one MOD note range for this DMF sample
+                {
+                    // Find the note's octave in MOD format:
+                    modOctave = pat.note.octave - dmfSplitPoint.octave;
+                }
+            }
+            else
+            {
+                // Throw error
+            }
+        }
+    }
+
+    // C# is the start of next octave in .dmf, not C- like in PT / .mod / Deflemask GUI, 
+    //      so the note C- needs adjusted for exporting to mod:
+    if (pat.note.pitch == DMFNotePitch::C)
+    {
+        modOctave++;
+    }
+
+    modNote.octave = modOctave;
+    modNote.pitch = pat.note.pitch;
+
+    period = proTrackerPeriodTable[modOctave][pat.note.pitch % 12];
+
+    if (!state.sampleChanged && state.notePlaying) // Sample hasn't changed (same duty cycle or wavetable as before) and a note was playing 
+    {
+        sampleId = 0; // No sample. Keeps the previous sample number and prevents channel volume from being reset.
+        state.notePlaying = true;
+        return modNote;
+    }
+    else if (state.channel != DMFGameBoyChannel::NOISE) // A MOD sample needs to change
+    {
+        if (sampleMap.count(dmfSampleId) > 0)
+        {
+            const MODMappedDMFSample& modSampleInfo = sampleMap.at(dmfSampleId);
+            sampleId = state.onHighNoteRange ? modSampleInfo.highId : modSampleInfo.lowId;
+
+            state.sampleChanged = false; // Just changed the sample, so resetting this for next time.
+            
+            volumeChangeNeeded = true; // Volume change might be needed
+        }
+        else
+        {
+            // Error
+        }
+    }
+    else // Noise channel
+    {
+        sampleId = 0; // Keep noise channel quiet since it isn't implemented yet.
+    }
+
+    state.notePlaying = true;
+    return modNote;
+}
+
+
+
+
+
+
 
 void MOD::DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed)
 {

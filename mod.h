@@ -17,6 +17,7 @@
 
 #include <string>
 #include <sstream>
+#include <map>
 
 // Begin setup
 REGISTER_MODULE_HEADER(MOD, MODConversionOptions)
@@ -31,9 +32,9 @@ struct MODChannelState;
 // The effect code is [a] or [a][b], and the effect value is [x][y] or [x]. [x][y] codes are the
 // extended effects. All effect codes are stored below. Non-extended effects have 0x0 in the right-most
 // nibble in order to line up with the extended effects:
-namespace MODEffect
+namespace MODEffectCode
 {
-    enum MODEffect
+    enum MODEffectCode
     {
         NoEffect=0x00, NoEffectVal=0x00, NoEffectCode=0x00, /* NoEffect is the same as ((uint16_t)NoEffectCode << 4) | NoEffectVal */
         Arp=0x00, PortUp=0x10, PortDown=0x20, Port2Note=0x30, Vibrato=0x40, Port2NoteVolSlide=0x50, VibratoVolSlide=0x60,
@@ -44,6 +45,12 @@ namespace MODEffect
         SetSpeed=0xF0
     };
 }
+
+struct MODEffect
+{
+    uint16_t effect;
+    uint16_t value;
+};
 
 struct MODNote
 {
@@ -192,7 +199,6 @@ public:
     };
 
     
-
     static constexpr unsigned VolumeMax = 64u; // Yes, there are 65 different values for the volume
 
 private:
@@ -205,10 +211,16 @@ private:
     void DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap);
     void DMFConvertSampleData(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
     void DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
-    void DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const DMFChannelRow& pat, MODChannelState& state, MODChannelRow& modChannelRow);
+    void DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const DMFChannelRow& pat, MODChannelState& state, MODChannelRow& modChannelRow, MODEffect& noiseChannelEffect);
     void DMFConvertEffect(const DMFChannelRow& pat, MODChannelState& state, uint16_t& effectCode, uint16_t& effectValue);
     void DMFConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectValue, uint16_t& modEffectCode, uint16_t& modEffectValue);
     void DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed);
+
+    //void DMFConvertEffects(MODChannelState& state, DMFChannelRow dmfChannelRow, std::vector<MODEffect>& modEffects, bool& sampleChangeNeeded, mod_sample_id_t& sampleId, bool volumeChangeNeeded, MODEffect& volumeEffect);
+    //void DMFConvertNote(MODChannelState& state, DMFNote& dmfNote, mod_sample_id_t sampleId, MODNote& modNote, bool& usingHighNoteRange, mod_sample_id_t& modSampleId, bool& volumeChangeNeeded, MODEffect& volumeEffect);
+
+    std::multimap<int, MODEffect> DMFConvertEffects(MODChannelState& state, const DMFChannelRow& pat);
+    MODNote DMFConvertNote(MODChannelState& state, const DMFChannelRow& pat, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, std::multimap<int, MODEffect>& modEffects, mod_sample_id_t& sampleId, uint16_t& period, bool& volumeChangeNeeded);
 
     // Export:
     void ExportModuleName(std::ofstream& fout) const;

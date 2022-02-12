@@ -672,6 +672,12 @@ DMFChannelRow DMF::LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount)
         pat.effect[col].value |= fin.get() << 8;
     }
 
+    // Initialize the rest to zero
+    for (int col = effectsColumnsCount; col < MAX_EFFECTS_COLUMN_COUNT; col++)
+    {
+        pat.effect[col] = {(int16_t)DMFEffectCode::NoEffect, (int16_t)DMFEffectCode::NoEffectVal};
+    }
+
     pat.instrument = fin.get();
     pat.instrument |= fin.get() << 8;
 

@@ -52,6 +52,17 @@ struct MODEffect
     uint16_t value;
 };
 
+// Lower enum value = higher priority
+enum MODEffectPriority
+{
+    EffectPriorityStructureRelated, /* Can always be performed */
+    EffectPrioritySampleChange, /* Can always be performed */
+    EffectPriorityTempoChange,
+    EffectPriorityVolumeChange,
+    EffectPriorityOtherEffect,
+    EffectPriorityUnsupportedEffect
+};
+
 struct MODNote
 {
     uint16_t pitch;
@@ -212,16 +223,10 @@ private:
     void DMFConvertSampleData(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
     void DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
     void DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const DMFChannelRow& pat, MODChannelState& state, MODChannelRow& modChannelRow, MODEffect& noiseChannelEffect);
-    void DMFConvertEffect(const DMFChannelRow& pat, MODChannelState& state, uint16_t& effectCode, uint16_t& effectValue);
-    void DMFConvertEffectCodeAndValue(int16_t dmfEffectCode, int16_t dmfEffectValue, uint16_t& modEffectCode, uint16_t& modEffectValue);
+    std::multimap<MODEffectPriority, MODEffect> DMFConvertEffects(MODChannelState& state, const DMFChannelRow& pat);
+    MODNote DMFConvertNote(MODChannelState& state, const DMFChannelRow& pat, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, std::multimap<MODEffectPriority, MODEffect>& modEffects, mod_sample_id_t& sampleId, uint16_t& period, bool& volumeChangeNeeded);
     void DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed);
-
-    //void DMFConvertEffects(MODChannelState& state, DMFChannelRow dmfChannelRow, std::vector<MODEffect>& modEffects, bool& sampleChangeNeeded, mod_sample_id_t& sampleId, bool volumeChangeNeeded, MODEffect& volumeEffect);
-    //void DMFConvertNote(MODChannelState& state, DMFNote& dmfNote, mod_sample_id_t sampleId, MODNote& modNote, bool& usingHighNoteRange, mod_sample_id_t& modSampleId, bool& volumeChangeNeeded, MODEffect& volumeEffect);
-
-    std::multimap<int, MODEffect> DMFConvertEffects(MODChannelState& state, const DMFChannelRow& pat);
-    MODNote DMFConvertNote(MODChannelState& state, const DMFChannelRow& pat, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, std::multimap<int, MODEffect>& modEffects, mod_sample_id_t& sampleId, uint16_t& period, bool& volumeChangeNeeded);
-
+    
     // Export:
     void ExportModuleName(std::ofstream& fout) const;
     void ExportSampleInfo(std::ofstream& fout) const;

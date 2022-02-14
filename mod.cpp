@@ -7,8 +7,8 @@
 
     Several limitations apply in order to export. For example, 
     for DMF --> MOD, the DMF file must use the Game Boy system, 
-    patterns must have 64 rows, only one effect column is allowed 
-    per channel, etc.
+    patterns must have 64 or fewer rows, only one effect column is
+    allowed per channel, etc.
 */
 
 // TODO: Right now, only effect column 0 is used. But two dmf effects 
@@ -175,9 +175,9 @@ void MOD::ConvertFromDMF(const DMF& dmf, const ConversionOptionsPtr& options)
         throw MODException(ModuleException::Category::Convert, MOD::ConvertError::TooManyPatternMatrixRows);
     }
 
-    if (moduleInfo.totalRowsPerPattern != 64)
+    if (moduleInfo.totalRowsPerPattern > 64)
     {
-        throw MODException(ModuleException::Category::Convert, MOD::ConvertError::Not64RowPattern);
+        throw MODException(ModuleException::Category::Convert, MOD::ConvertError::Over64RowPattern);
     }
 
     m_NumberOfChannels = DMF::Systems(DMF::SystemType::GameBoy).channels;
@@ -279,7 +279,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, std::map<dmf_sample_id_t, MODMa
         for (int patMatRow = 0; patMatRow < moduleInfo.totalRowsInPatternMatrix; patMatRow++)
         {
             // Row within pattern
-            for (int patRow = 0; patRow < 64; patRow++)
+            for (unsigned patRow = 0; patRow < moduleInfo.totalRowsPerPattern; patRow++)
             {
                 DMFChannelRow chanRow = dmf.GetChannelRow(chan, patMatRow, patRow);
                 effectCode = chanRow.effect[0].code;
@@ -300,7 +300,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, std::map<dmf_sample_id_t, MODMa
                 // If a Position Jump / Pattern Break command was found and it's not in a section skipped by another Position Jump / Pattern Break:
                 if ((effectCode == DMFEffectCode::PosJump || (effectCode == DMFEffectCode::PatBreak && effectValue == 0)) && !stateSuspended)
                 {
-                    const int dest = effectCode == DMFEffectCode::PosJump ? effectCode : patMatRow + 1;
+                    const int dest = effectCode == DMFEffectCode::PosJump ? effectValue : patMatRow + 1;
                     if (dest < 0 || dest >= moduleInfo.totalRowsInPatternMatrix)
                         throw std::invalid_argument("Invalid Position Jump or Pattern Break effect");
 
@@ -788,6 +788,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
     int8_t jumpDestination = -1; // Pattern matrix row where you are jumping to. Not a loop.
 
     const int dmfTotalRowsInPatternMatrix = dmf.GetModuleInfo().totalRowsInPatternMatrix;
+    const unsigned dmfTotalRowsPerPattern = dmf.GetModuleInfo().totalRowsPerPattern;
 
     // Loop through ProTracker pattern matrix rows (corresponds to DMF pattern numbers):
     for (int patMatRow = 0; patMatRow < dmfTotalRowsInPatternMatrix; patMatRow++)
@@ -796,9 +797,13 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
         m_Patterns[patMatRow + (int)m_UsingSetupPattern].assign(64 * m_NumberOfChannels, {});
 
         // Loop through rows in a pattern:
-        for (unsigned patRow = 0; patRow < 64; patRow++)
+        for (unsigned patRow = 0; patRow < dmfTotalRowsPerPattern; patRow++)
         {
             MODEffect noiseChannelEffect {MODEffectCode::NoEffectCode, MODEffectCode::NoEffectVal};
+
+            // Use Pattern Break effect to allow for patterns that are less than 64 rows
+            if (dmfTotalRowsPerPattern < 64 && patRow + 1 == dmfTotalRowsPerPattern /*&& !stateSuspended*/)
+                noiseChannelEffect = {MODEffectCode::PatBreak, 0};
 
             // Loop through channels:
             for (unsigned chan = 0; chan < m_NumberOfChannels; chan++)
@@ -823,7 +828,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
                 // If a Position Jump / Pattern Break command was found and it's not in a section skipped by another Position Jump / Pattern Break:
                 if ((effectCode == DMFEffectCode::PosJump || (effectCode == DMFEffectCode::PatBreak && effectValue == 0)) && !stateSuspended)
                 {
-                    const int dest = effectCode == DMFEffectCode::PosJump ? effectCode : patMatRow + 1;
+                    const int dest = effectCode == DMFEffectCode::PosJump ? effectValue : patMatRow + 1;
                     if (dest < 0 || dest >= dmfTotalRowsInPatternMatrix)
                         throw std::invalid_argument("Invalid Position Jump or Pattern Break effect");
 
@@ -858,6 +863,17 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
 
                 MODChannelRow tempChannelRow;
                 DMFConvertChannelRow(dmf, sampleMap, chanRow, state[chan], tempChannelRow, noiseChannelEffect);
+                SetChannelRow(patMatRow + (int)m_UsingSetupPattern, patRow, chan, tempChannelRow);
+            }
+        }
+
+        // If the DMF has less than 64 rows per pattern, there will be extra MOD rows which will need to be blank
+        for (unsigned patRow = dmfTotalRowsPerPattern; patRow < 64; patRow++)
+        {
+            // Loop through channels:
+            for (unsigned chan = 0; chan < m_NumberOfChannels; chan++)
+            {
+                MODChannelRow tempChannelRow = {0, 0, 0, 0};
                 SetChannelRow(patMatRow + (int)m_UsingSetupPattern, patRow, chan, tempChannelRow);
             }
         }
@@ -1597,8 +1613,8 @@ std::string MODException::CreateErrorMessage(Category category, int errorCode, c
                     return "Only the Game Boy system is currently supported.";
                 case (int)MOD::ConvertError::TooManyPatternMatrixRows:
                     return "Too many rows of patterns in the pattern matrix. 64 is the maximum. (63 if using Setup Pattern.)";
-                case (int)MOD::ConvertError::Not64RowPattern:
-                    return std::string("Patterns must have 64 rows.\n")
+                case (int)MOD::ConvertError::Over64RowPattern:
+                    return std::string("Patterns must have 64 or fewer rows.\n")
                             + std::string("       A workaround for this issue is planned for a future update to dmf2mod.");
                 case (int)MOD::ConvertError::WaveDownsample:
                     return std::string("Cannot use wavetable instrument #") + arg + std::string(" without loss of information.\n")

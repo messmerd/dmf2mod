@@ -193,7 +193,7 @@ public:
         Success=0,
         NotGameBoy,
         TooManyPatternMatrixRows,
-        Not64RowPattern,
+        Over64RowPattern,
         WaveDownsample,
         EffectVolume,
         MultipleEffects

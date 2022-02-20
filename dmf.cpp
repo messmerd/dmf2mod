@@ -657,12 +657,14 @@ DMFChannelRow DMF::LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount)
     pat.volume = fin.get();
     pat.volume |= fin.get() << 8;
 
-    // NOTE: C# is considered the 1st note of an octave rather than C- like in the Deflemask program.
-
-    if (pat.note.pitch == 0 && pat.note.octave == 0)
+    // Apparently, the note pitch for C- can be either 0 or 12. I'm setting it to 0 always.
+    if (pat.note.pitch == DMFNotePitch::C_Alt)
     {
-        pat.note.pitch = static_cast<uint16_t>(DMFNotePitch::Empty);
+        pat.note.pitch = (uint16_t)DMFNotePitch::C;
+        pat.note.octave++;
     }
+
+    // NOTE: C# is considered the 1st note of an octave rather than C- like in the Deflemask program.
 
     for (int col = 0; col < effectsColumnsCount; col++)
     {
@@ -785,14 +787,14 @@ double DMF::GetBPM() const
     return numerator * 1.0 / denominator;
 }
 
-DMFNote DMFMakeNote(DMFNotePitch pitch, uint16_t octave)
+int DMFGetNoteRange(const DMFNote& low, const DMFNote& high)
 {
-    return (DMFNote){ static_cast<uint16_t>(pitch), octave };
-}
-
-bool DMFNoteHasPitch(const DMFNote& dmfNote)
-{
-    return static_cast<int>(dmfNote.pitch) >= 1 && static_cast<int>(dmfNote.pitch) <= 12;
+    // Returns range in semitones. -1 if an error occurred
+    
+    if (!low.HasPitch() || !high.HasPitch())
+        return -1;
+    
+    return high.octave * 12 + high.pitch - low.octave * 12 - low.pitch;
 }
 
 bool operator==(const DMFNote& lhs, const DMFNote& rhs)
@@ -828,3 +830,5 @@ bool operator<=(const DMFNote& lhs, const DMFNote& rhs)
 {
     return lhs.octave + static_cast<int>(lhs.pitch) / 13.f <= rhs.octave + static_cast<int>(rhs.pitch) / 13.f;
 }
+
+

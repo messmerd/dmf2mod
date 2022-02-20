@@ -26,7 +26,8 @@ REGISTER_MODULE_HEADER(DMF, DMFConversionOptions)
 
 enum class DMFNotePitch
 {
-    Empty=101,
+    Empty=0,
+    C=0,
     CS=1,
     D=2,
     DS=3,
@@ -38,7 +39,7 @@ enum class DMFNotePitch
     A=9,
     AS=10,
     B=11,
-    C=12,
+    C_Alt=12,
     Off=100
 };
 
@@ -73,10 +74,37 @@ struct DMFNote
 {
     uint16_t pitch;
     uint16_t octave;
+
+    DMFNote() = default;
+    DMFNote(uint16_t p, uint16_t o)
+        : pitch(p), octave(o)
+    {}
+
+    DMFNote(DMFNotePitch p, uint16_t o)
+        : pitch((uint16_t)p), octave(o)
+    {}
+
+    inline bool HasPitch() const
+    {
+        if (pitch == 0 && octave == 0)
+            return false; // Empty note
+        return pitch >= 0 && pitch <= 12;
+        // Contrary to specs, pitch == 0 means C-. I'm not sure if pitch == 12 is also used for C-.
+    }
+
+    inline bool IsOff() const
+    {
+        return pitch == (int)DMFNotePitch::Off;
+    }
+
+    inline bool IsEmpty() const
+    {
+        return pitch == 0 && octave == 0;
+    }
+
 };
 
-DMFNote DMFMakeNote(DMFNotePitch pitch, uint16_t octave);
-bool DMFNoteHasPitch(const DMFNote& dmfNote);
+int DMFGetNoteRange(const DMFNote& low, const DMFNote& high);
 
 bool operator==(const DMFNote& lhs, const DMFNote& rhs);
 bool operator!=(const DMFNote& lhs, const DMFNote& rhs);

@@ -26,6 +26,7 @@ REGISTER_MODULE_HEADER(MOD, MODConversionOptions)
 struct DMFNote;
 struct DMFChannelRow;
 struct MODChannelState;
+struct MODState;
 
 // MOD effects:
 // An effect is represented with 12 bits, which is 3 groups of 4 bits: [a][x][y] or [a][b][x]
@@ -41,8 +42,10 @@ namespace MODEffectCode
         Tremolo=0x70, Panning=0x80, SetSampleOffset=0x90, VolSlide=0xA0, PosJump=0xB0, SetVolume=0xC0, PatBreak=0xD0,
         SetFilter=0xE0, FineSlideUp=0xE1, FineSlideDown=0xE2, SetGlissando=0xE3, SetVibratoWaveform=0xE4,
         SetFinetune=0xE5, LoopPattern=0xE6, SetTremoloWaveform=0xE7, RetriggerSample=0xE9, FineVolSlideUp=0xEA,
-        FineVolSlideDown=0xEB, CutSample=0xEC, DelaySample=0xED, DelayPattern=0xEE, InvertLoop=0xEF,
-        SetSpeed=0xF0
+        FineVolSlideDown=0xEB, CutSample=0xEC, DelaySample=0xED, DelayPattern=0xEE, InvertLoop=0xEF, SetSpeed=0xF0,
+
+        /* The following are not actual MOD effects, but they are useful during conversions */
+        DutyCycleChange=0xFF0, WavetableChange=0xFF1 
     };
 }
 
@@ -60,7 +63,7 @@ enum MODEffectPriority
     EffectPriorityTempoChange,
     EffectPriorityVolumeChange,
     EffectPriorityOtherEffect,
-    EffectPriorityUnsupportedEffect
+    EffectPriorityUnsupportedEffect /* Must be the last enum value */
 };
 
 struct MODNote
@@ -68,8 +71,47 @@ struct MODNote
     uint16_t pitch;
     uint16_t octave;
 
-    operator DMFNote() const;
+    MODNote() = default;
+    MODNote(uint16_t p, uint16_t o)
+        : pitch(p), octave(o)
+    {}
+
+    bool operator>(const MODNote& rhs)
+    {
+        return (this->octave << 4) + this->pitch > (rhs.octave << 4) + rhs.pitch;
+    }
+
+    bool operator>=(const MODNote& rhs)
+    {
+        return (this->octave << 4) + this->pitch >= (rhs.octave << 4) + rhs.pitch;
+    }
+
+    bool operator<(const MODNote& rhs)
+    {
+        return (this->octave << 4) + this->pitch < (rhs.octave << 4) + rhs.pitch;
+    }
+
+    bool operator<=(const MODNote& rhs)
+    {
+        return (this->octave << 4) + this->pitch <= (rhs.octave << 4) + rhs.pitch;
+    }
+
+    bool operator==(const MODNote& rhs)
+    {
+        return this->octave == rhs.octave && this->pitch == rhs.pitch;
+    }
+
+    bool operator!=(const MODNote& rhs)
+    {
+        return !(*this == rhs);
+    }
+
+    MODNote(const DMFNote& dmfNote);
+    MODNote& operator=(const DMFNote& dmfNote);
+    operator DMFNote() const;    
 };
+
+
 
 struct MODChannelRow
 {
@@ -212,19 +254,31 @@ public:
     
     static constexpr unsigned VolumeMax = 64u; // Yes, there are 65 different values for the volume
 
+    
+
 private:
+    using SampleMap = std::map<dmf_sample_id_t, MODMappedDMFSample>;
+    using PriorityEffectsMap = std::multimap<MODEffectPriority, MODEffect>;
+    
+
     void ConvertFrom(const Module* input, const ConversionOptionsPtr& options) override;
 
     // Conversion from DMF:
     void ConvertFromDMF(const DMF& dmf, const ConversionOptionsPtr& options);
-    void DMFConvertSamples(const DMF& dmf, std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
-    void DMFCreateSampleMapping(const DMF& dmf, std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap);
-    void DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap);
-    void DMFConvertSampleData(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
-    void DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap);
-    void DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const DMFChannelRow& pat, MODChannelState& state, MODChannelRow& modChannelRow, MODEffect& noiseChannelEffect);
-    std::multimap<MODEffectPriority, MODEffect> DMFConvertEffects(MODChannelState& state, const DMFChannelRow& pat);
-    MODNote DMFConvertNote(MODChannelState& state, const DMFChannelRow& pat, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, std::multimap<MODEffectPriority, MODEffect>& modEffects, mod_sample_id_t& sampleId, uint16_t& period, bool& volumeChangeNeeded);
+    void DMFConvertSamples(const DMF& dmf, SampleMap& sampleMap);
+    void DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap);
+    void DMFSampleSplittingAndAssignment(SampleMap& sampleMap, const std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap);
+    void DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap);
+    
+    void DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap);
+    PriorityEffectsMap DMFConvertEffects(const DMFChannelRow& pat);
+    PriorityEffectsMap DMFConvertEffects_NoiseChannel(const DMFChannelRow& pat);
+    void UpdateStatePre(const DMF& dmf, MODState& state, const PriorityEffectsMap& modEffects);
+    PriorityEffectsMap DMFGetAdditionalEffects(MODState& state, const DMFChannelRow& pat);
+    //void UpdateStatePost(const DMF& dmf, MODState& state, const PriorityEffectsMap& modEffects);
+    MODNote DMFConvertNote(MODState& state, const DMFChannelRow& pat, const SampleMap& sampleMap, PriorityEffectsMap& modEffects, mod_sample_id_t& sampleId, uint16_t& period);
+    MODChannelRow ApplyNoteAndEffect(MODState& state, const PriorityEffectsMap& modEffects, mod_sample_id_t modSampleId, uint16_t period);
+    
     void DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed);
     
     // Export:
@@ -244,7 +298,7 @@ private:
 
     inline void SetChannelRow(unsigned pattern, unsigned row, unsigned channel, MODChannelRow& channelRow)
     {
-        m_Patterns.at(pattern).at((row << m_NumberOfChannelsPowOfTwo) + channel) = std::move(channelRow);
+        m_Patterns.at(pattern).at((row << m_NumberOfChannelsPowOfTwo) + channel) = channelRow;
     }
 
 private:

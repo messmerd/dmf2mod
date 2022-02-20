@@ -16,7 +16,7 @@ endif
 CC	 = g++
 
 # Compiler and linker flags
-FLAGS	= -std=c++17 -Izlib -Izstr -Wall -Wno-unknown-pragmas
+FLAGS	= -std=c++14 -Izlib -Izstr -Wall -Wno-unknown-pragmas
 LFLAGS	= -lm zlib/libz.a
 
 # Emscripten compiler and linker flags
@@ -24,8 +24,8 @@ WASM_LDFLAGS	= -O3
 WASM_DEFINES	= -s USE_ZLIB=1 -s INLINING_LIMIT=1
 WASM_LDEFINES	= $(WASM_DEFINES) -s ASSERTIONS=1 -s MODULARIZE=0 -s AGGRESSIVE_VARIABLE_ELIMINATION=1 -s NO_EXIT_RUNTIME=1 -s FORCE_FILESYSTEM=1 -s EXPORTED_FUNCTIONS="['_main']" -s EXPORTED_RUNTIME_METHODS='["FS"]' -s NO_DISABLE_EXCEPTION_CATCHING
 
-WASM_FLAGS	= -c -std=c++17 -Izstr -Wall -Wno-unknown-pragmas $(WASM_LDFLAGS) $(WASM_DEFINES)
-WASM_LFLAGS	= -std=c++17 --bind -lidbfs.js -Izstr -Wall -Wno-unknown-pragmas $(WASM_LDFLAGS) $(WASM_LDEFINES)
+WASM_FLAGS	= -c -std=c++14 -Izstr -Wall -Wno-unknown-pragmas $(WASM_LDFLAGS) $(WASM_DEFINES)
+WASM_LFLAGS	= -std=c++14 --bind -lidbfs.js -Izstr -Wall -Wno-unknown-pragmas $(WASM_LDFLAGS) $(WASM_LDEFINES)
 
 # Build command-line program by default
 all: cmd_program

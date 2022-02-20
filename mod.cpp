@@ -49,14 +49,78 @@ static unsigned GCD(unsigned u, unsigned v);
 //      tracker stores for each channel while playing a tracker file.
 struct MODChannelState
 {
-    DMFGameBoyChannel channel;
     uint8_t dutyCycle;
     uint8_t wavetable;
     bool sampleChanged; // True if dutyCycle or wavetable just changed
     int16_t volume;
     bool notePlaying;
     bool onHighNoteRange;
-    bool needToSetVolume;
+};
+
+struct MODState
+{
+    struct global
+    {
+        bool suspended;      // true == currently in part that a Position Jump skips over
+        int jumpDestination; // MOD pattern matrix row where you are jumping to. Not a loop.
+        MODEffect channelIndependentEffect;
+        unsigned channel;    // The current channel in DMF or MOD
+        unsigned order;      // The current pattern matrix row in DMF
+        unsigned patternRow; // The current pattern row in MOD?
+    } global;
+    
+    MODChannelState channel[4];
+    MODChannelState channelCopy[4];
+
+    MODState()
+    {
+        Init();
+    }
+
+    void Init()
+    {
+        global.suspended = false;
+        global.jumpDestination = -1; 
+        global.channelIndependentEffect = {MODEffectCode::NoEffectCode, MODEffectCode::NoEffectVal};
+        
+        global.channel = 0;         
+        global.order = 0;
+        global.patternRow = 0;
+
+        for (int i = 0; i < 4; i++)
+        {
+            channel[i].dutyCycle = 0; // Default is 0 or a 12.5% duty cycle square wave.
+            channel[i].wavetable = 0; // Default is wavetable #0.
+            channel[i].sampleChanged = true; // Whether dutyCycle or wavetable recently changed
+            channel[i].volume = DMFVolumeMax; // The max volume for a channel (in DMF units)
+            channel[i].notePlaying = false; // Whether a note is currently playing on a channel
+            channel[i].onHighNoteRange = false; // Whether a note is using the PT sample for the high note range.
+
+            channelCopy[i] = channel[i];
+        }
+    }
+
+    void Save()
+    {
+        // Save copy of channel states
+        for (int i = 0; i < 4; i++)
+        {
+            channelCopy[i] = channel[i];
+        }
+        global.suspended = true;
+    }
+
+    void Restore()
+    {
+        // Restore channel states from copy
+        for (int i = 0; i < 4; i++)
+        {
+            channel[i] = channelCopy[i];
+        }
+        global.suspended = false;
+        global.jumpDestination = -1;
+    }
+
 };
 
 /*
@@ -240,33 +304,15 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, std::map<dmf_sample_id_t, MODMa
     // Lowest/highest note for each square wave duty cycle or wavetable instrument
     sampleIdLowestHighestNotesMap.clear();
 
-    const uint8_t dmfTotalWavetables = dmf.GetTotalWavetables();
-
     // The current square wave duty cycle, note volume, and other information that the 
     //      tracker stores for each channel while playing a tracker file.
-    MODChannelState state[m_NumberOfChannels], stateJumpCopy[m_NumberOfChannels];
-    for (unsigned i = 0; i < m_NumberOfChannels; i++)
-    {
-        state[i].channel = DMFGameBoyChannel(i);   // Set channel types: SQ1, SQ2, WAVE, NOISE.
-        state[i].dutyCycle = 0; // Default is 0 or a 12.5% duty cycle square wave.
-        state[i].wavetable = 0; // Default is wavetable #0.
-        state[i].sampleChanged = true; // Whether dutyCycle or wavetable recently changed
-        state[i].volume = DMFVolumeMax; // The max volume for a channel (in DMF units)
-        state[i].notePlaying = false; // Whether a note is currently playing on a channel
-        state[i].onHighNoteRange = false; // Whether a note is using the PT sample for the high note range.
-        state[i].needToSetVolume = false; // Whether the volume needs to be set (can happen after sample changes).
-
-        stateJumpCopy[i] = state[i]; // Shallow copy, but it's ok since there are no pointers to anything.
-    }
+    MODState state;
+    state.Init();
 
     // The main MODChannelState structs should NOT update during patterns or parts of 
     //   patterns that the Position Jump (Bxx) effect skips over. (Ignore loops)
     //   Keep a copy of the main state for each channel, and once it reaches the 
     //   jump destination, overwrite the current state with the copied state.
-    bool stateSuspended = false; // true == currently in part that a Position Jump skips over
-    int8_t jumpDestination = -1; // Pattern matrix row where you are jumping to. Not a loop.
-
-    int16_t effectCode, effectValue;
 
     const DMFModuleInfo& moduleInfo = dmf.GetModuleInfo();
     
@@ -275,78 +321,90 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, std::map<dmf_sample_id_t, MODMa
     // Loop through SQ1, SQ2, and WAVE channels:
     for (int chan = static_cast<int>(DMFGameBoyChannel::SQW1); chan <= static_cast<int>(DMFGameBoyChannel::WAVE); chan++)
     {
+        state.global.channel = chan;
+
         // Loop through Deflemask patterns
         for (int patMatRow = 0; patMatRow < moduleInfo.totalRowsInPatternMatrix; patMatRow++)
         {
+            state.global.order = patMatRow;
+
             // Row within pattern
             for (unsigned patRow = 0; patRow < moduleInfo.totalRowsPerPattern; patRow++)
             {
+                state.global.patternRow = patRow;
+
+                MODChannelState& chanState = state.channel[chan];
+
                 DMFChannelRow chanRow = dmf.GetChannelRow(chan, patMatRow, patRow);
-                effectCode = chanRow.effect[0].code;
-                effectValue = chanRow.effect[0].value;
 
                 // If just arrived at jump destination:
-                if (patMatRow == jumpDestination && patRow == 0 && stateSuspended)
-                { 
+                if (patMatRow == state.global.jumpDestination && patRow == 0 && state.global.suspended)
+                {
                     // Restore state copies
-                    for (unsigned v = 0; v < m_NumberOfChannels; v++)
-                    {
-                        state[v] = stateJumpCopy[v];
-                    }
-                    stateSuspended = false;
-                    jumpDestination = -1;
+                    state.Restore();
                 }
-                
-                // If a Position Jump / Pattern Break command was found and it's not in a section skipped by another Position Jump / Pattern Break:
-                if ((effectCode == DMFEffectCode::PosJump || (effectCode == DMFEffectCode::PatBreak && effectValue == 0)) && !stateSuspended)
-                {
-                    const int dest = effectCode == DMFEffectCode::PosJump ? effectValue : patMatRow + 1;
-                    if (dest < 0 || dest >= moduleInfo.totalRowsInPatternMatrix)
-                        throw std::invalid_argument("Invalid Position Jump or Pattern Break effect");
 
-                    if (dest >= patMatRow) // If not a loop
-                    {
-                        // Save copies of states
-                        for (unsigned v = 0; v < m_NumberOfChannels; v++)
-                        {
-                            stateJumpCopy[v] = state[v];
-                        }
-                        stateSuspended = true;
-                        jumpDestination = dest;
-                    }
-                }
-                else if (effectCode == DMFGameBoyEffectCode::SetDutyCycle && state[chan].dutyCycle != effectValue && chan <= static_cast<int>(DMFGameBoyChannel::SQW2)) // If sqw channel duty cycle needs to change 
+                PriorityEffectsMap modEffects;
+                //mod_sample_id_t modSampleId = 0;
+                //uint16_t period = 0;
+
+                if (chan == DMFGameBoyChannel::NOISE)
                 {
-                    if (effectValue >= 0 && effectValue <= 3)
-                    {
-                        state[chan].dutyCycle = effectValue;
-                        state[chan].sampleChanged = true;
-                    }
+                    modEffects = DMFConvertEffects_NoiseChannel(chanRow);
+                    UpdateStatePre(dmf, state, modEffects);
+                    continue;
                 }
-                else if (effectCode == DMFGameBoyEffectCode::SetWave && state[chan].wavetable != effectValue && chan == static_cast<int>(DMFGameBoyChannel::WAVE)) // If wave channel wavetable needs to change 
+
+                modEffects = DMFConvertEffects(chanRow);
+                UpdateStatePre(dmf, state, modEffects);
+                auto extraModEffects = DMFGetAdditionalEffects(state, chanRow);
+                for (const auto& effectsPair : extraModEffects)
                 {
-                    if (effectValue >= 0 && effectValue < dmfTotalWavetables)
-                    {
-                        state[chan].wavetable = effectValue;
-                        state[chan].sampleChanged = true;
-                    }
+                    modEffects.insert(effectsPair);
                 }
+
+                //DMFConvertNote(state, chanRow, sampleMap, modEffects, modSampleId, period);
+
+                // TODO: More state-related stuff could be extracted from DMFConvertNote and put into separate 
+                //  method so that I don't have to copy code from it to put here.
                 
-                // If OFF or Note Cut effect with a value of 0 are used, and a note is playing, then a silent sample is needed
-                if ((chanRow.note.pitch == DMFNotePitch::Off || (effectCode == DMFEffectCode::NoteCut && effectValue == 0)) && state[chan].notePlaying)
+                // Convert note - Note cut effect
+                auto sampleChangeEffects = modEffects.equal_range(EffectPrioritySampleChange);
+                if (sampleChangeEffects.first != sampleChangeEffects.second) // If sample change occurred (duty cycle, wave, or note cut effect)
+                {
+                    for (auto& iter = sampleChangeEffects.first; iter != sampleChangeEffects.second; ++iter)
+                    {
+                        MODEffect& modEffect = iter->second;
+                        if (modEffect.effect == MODEffectCode::CutSample) // Note cut
+                        {
+                            // Silent sample is needed
+                            if (sampleMap.count(-1) == 0)
+                                sampleMap[-1] = {};
+
+                            chanState.notePlaying = false;
+                            modEffects.erase(iter); // Consume the effect
+                        }
+                    }   
+                }
+
+                // Convert note - Note OFF
+                if (chanRow.note.IsOff()) // Note OFF. Use silent sample and handle effects.
                 {
                     // Silent sample is needed
                     if (sampleMap.count(-1) == 0)
                         sampleMap[-1] = {};
-                    state[chan].notePlaying = false;
+                    
+                    chanState.notePlaying = false;
                 }
 
                 // A note on the SQ1, SQ2, or WAVE channels:
-                if (DMFNoteHasPitch(chanRow.note) && chan != DMFGameBoyChannel::NOISE)
+                if (chanRow.note.HasPitch() && chan != DMFGameBoyChannel::NOISE)
                 {
-                    state[chan].notePlaying = true;
+                    chanState.notePlaying = true;
 
-                    mod_sample_id_t sampleId = chan == DMFGameBoyChannel::WAVE ? state[chan].wavetable + 4 : state[chan].dutyCycle;
+                    MODNote modNote(chanRow.note);
+
+                    mod_sample_id_t sampleId = chan == DMFGameBoyChannel::WAVE ? chanState.wavetable + 4 : chanState.dutyCycle;
 
                     // Mark this square wave or wavetable as used
                     sampleMap[sampleId] = {};
@@ -354,23 +412,20 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, std::map<dmf_sample_id_t, MODMa
                     // Get lowest/highest notes
                     if (sampleIdLowestHighestNotesMap.count(sampleId) == 0) // 1st time
                     {
-                        MODNote n = { .pitch = chanRow.note.pitch, .octave = chanRow.note.octave };
-                        sampleIdLowestHighestNotesMap[sampleId] = std::pair<MODNote, MODNote>(n, n);
+                        sampleIdLowestHighestNotesMap[sampleId] = std::pair<MODNote, MODNote>(modNote, modNote);
                     }
                     else
                     {
                         auto& notePair = sampleIdLowestHighestNotesMap[sampleId];
-                        if (chanRow.note > notePair.second)
+                        if (modNote > notePair.second)
                         {
                             // Found a new highest note
-                            notePair.second.pitch = chanRow.note.pitch;
-                            notePair.second.octave = chanRow.note.octave;
+                            notePair.second = chanRow.note;
                         }
-                        if (chanRow.note < notePair.first)
+                        if (modNote < notePair.first)
                         {
                             // Found a new lowest note
-                            notePair.first.pitch = chanRow.note.pitch;
-                            notePair.first.octave = chanRow.note.octave;
+                            notePair.first = chanRow.note;
                         }
                     }
                 }
@@ -399,7 +454,7 @@ void MOD::DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMF
             modSampleInfo.highId = -1;
             modSampleInfo.lowLength = 8;
             modSampleInfo.highLength = 0;
-            modSampleInfo.splitPoint = {};
+            modSampleInfo.splitPoint = MODNote();
             currentMODSampleId++;
             continue;
         }
@@ -415,28 +470,31 @@ void MOD::DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMF
         bool noSplittingIsNeeded = false;
 
         // If the range is 3 octaves or less:
-        if (highestNote.octave*12 + highestNote.pitch - lowestNote.octave*12 - lowestNote.pitch <= 36)
+        if (DMFGetNoteRange(lowestNote, highestNote) <= 36)
         {
             // (Note: The note C-n in the Deflemask tracker is called C-(n-1) in DMF format because the 1st note of an octave is C# in DMF files.)
 
-            if (lowestNote >= DMFMakeNote(DMFNotePitch::C, 1) && highestNote <= DMFMakeNote(DMFNotePitch::B, 4))
+            if (lowestNote < DMFNote(DMFNotePitch::C, 2))
+                assert(false && "Lowest note is too low!");
+
+            if (lowestNote >= DMFNote(DMFNotePitch::C, 2) && highestNote <= DMFNote(DMFNotePitch::B, 4))
             {
                 noSplittingIsNeeded = true;
 
                 // If between C-2 and B-4 (Deflemask tracker note format)
-                modSampleInfo.splitPoint = { (unsigned)DMFNotePitch::C, 1 };
+                modSampleInfo.splitPoint = DMFNote(DMFNotePitch::C, 2);
                 modSampleInfo.lowLength = 64; // Use sample length: 64 (Double length)
             }
 
-            if (lowestNote >= DMFMakeNote(DMFNotePitch::C, 2) && highestNote <= DMFMakeNote(DMFNotePitch::B, 5))
+            if (lowestNote >= DMFNote(DMFNotePitch::C, 3) && highestNote <= DMFNote(DMFNotePitch::B, 5))
             {
                 noSplittingIsNeeded = true;
 
                 // If between C-3 and B-5 (Deflemask tracker note format)
-                modSampleInfo.splitPoint = { (int)DMFNotePitch::C, 2 };
+                modSampleInfo.splitPoint = DMFNote(DMFNotePitch::C, 3);
                 modSampleInfo.lowLength = 32; // Use sample length: 32 (regular wavetable length)
             }
-            else if (lowestNote >= DMFMakeNote(DMFNotePitch::C, 3) && highestNote <= DMFMakeNote(DMFNotePitch::B, 6))
+            else if (lowestNote >= DMFNote(DMFNotePitch::C, 4) && highestNote <= DMFNote(DMFNotePitch::B, 6))
             {
                 // If between C-4 and B-6 (Deflemask tracker note format) and none of the above options work
                 if (sampleId >= 4 && !m_Options->GetDownsample()) // If on a wavetable instrument and can't downsample it
@@ -446,10 +504,10 @@ void MOD::DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMF
 
                 noSplittingIsNeeded = true;
 
-                modSampleInfo.splitPoint = { (int)DMFNotePitch::C, 3 };
+                modSampleInfo.splitPoint = DMFNote(DMFNotePitch::C, 4);
                 modSampleInfo.lowLength = 16; // Use sample length: 16 (half length - downsampling needed)
             }
-            else if (lowestNote >= DMFMakeNote(DMFNotePitch::C, 4) && highestNote <= DMFMakeNote(DMFNotePitch::B, 7))
+            else if (lowestNote >= DMFNote(DMFNotePitch::C, 5) && highestNote <= DMFNote(DMFNotePitch::B, 7))
             {
                 // If between C-5 and B-7 (Deflemask tracker note format)
                 if (sampleId >= 4 && !m_Options->GetDownsample()) // If on a wavetable instrument and can't downsample it
@@ -459,10 +517,10 @@ void MOD::DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMF
                 
                 noSplittingIsNeeded = true;
 
-                modSampleInfo.splitPoint = { (int)DMFNotePitch::C, 4 };
+                modSampleInfo.splitPoint = DMFNote(DMFNotePitch::C, 5);
                 modSampleInfo.lowLength = 8; // Use sample length: 8 (1/4 length - downsampling needed)
             }
-            else if (highestNote == DMFMakeNote(DMFNotePitch::C, 7))
+            else if (highestNote == DMFNote(DMFNotePitch::C, 8))
             {
                 // If between C#5 and C-8 (highest note) (Deflemask tracker note format):
                 if (sampleId >= 4 && !m_Options->GetDownsample()) // If on a wavetable instrument and can't downsample it
@@ -471,11 +529,12 @@ void MOD::DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMF
                 }
                 
                 // TODO: This note is currently unsupported. Should fail here.
+                assert(false && "C-8 note");
 
                 noSplittingIsNeeded = true;
                 //finetune = 0; // One semitone up from B = C- ??? was 7
 
-                modSampleInfo.splitPoint = { (int)DMFNotePitch::C, 4 };
+                modSampleInfo.splitPoint = DMFNote(DMFNotePitch::C, 5);
                 modSampleInfo.lowLength = 8; // Use sample length: 8 (1/4 length - downsampling needed)
             }
 
@@ -488,7 +547,7 @@ void MOD::DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMF
                     // match the octave for wavetable instruments in Deflemask
                     
                     // TODO: Is this correct?
-                    modSampleInfo.lowLength *= 2;
+                    //modSampleInfo.lowLength *= 2;
                 }
 
                 modSampleInfo.lowId = currentMODSampleId; // Assign MOD sample number to this square wave / WAVE sample
@@ -516,9 +575,9 @@ void MOD::DMFSampleSplittingAndAssignment(std::map<dmf_sample_id_t, MODMappedDMF
                 }
             }
 
-            modSampleInfo.splitPoint = {(int)DMFNotePitch::C, 4};
+            modSampleInfo.splitPoint = DMFNote(DMFNotePitch::C, 5);
 
-            if (highestNote == DMFMakeNote(DMFNotePitch::C, 7))
+            if (highestNote == DMFNote(DMFNotePitch::C, 8))
             {
                 m_Status.AddWarning(GetWarningMessage(MOD::ConvertWarning::PitchHigh));
             }
@@ -727,8 +786,6 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
     unsigned initialTempo, initialSpeed; // Together these will set the initial BPM
     DMFConvertInitialBPM(dmf, initialTempo, initialSpeed);
 
-    const uint8_t dmfTotalWavetables = dmf.GetTotalWavetables();
-
     if (m_UsingSetupPattern)
     {
         m_Patterns[0].assign(64 * m_NumberOfChannels, {0, 0, 0, 0});
@@ -762,30 +819,14 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
 
     // The current square wave duty cycle, note volume, and other information that the 
     //      tracker stores for each channel while playing a tracker file.
-    MODChannelState state[m_NumberOfChannels], stateJumpCopy[m_NumberOfChannels];
-    for (unsigned i = 0; i < m_NumberOfChannels; i++)
-    {
-        state[i].channel = DMFGameBoyChannel(i);   // Set channel types: SQ1, SQ2, WAVE, NOISE.
-        state[i].dutyCycle = 0; // Default is 0 or a 12.5% duty cycle square wave.
-        state[i].wavetable = 0; // Default is wavetable #0.
-        state[i].sampleChanged = true; // Whether dutyCycle or wavetable recently changed
-        state[i].volume = DMFVolumeMax; // The max volume for a channel (in DMF units)
-        state[i].notePlaying = false; // Whether a note is currently playing on a channel
-        state[i].onHighNoteRange = false; // Whether a note is using the PT sample for the high note range.
-        state[i].needToSetVolume = false; // Whether the volume needs to be set (can happen after sample changes).
 
-        stateJumpCopy[i] = state[i]; // Shallow copy, but it's ok since there are no pointers to anything.
-    }
-    
-    DMFChannelRow chanRow;
-    int16_t effectCode, effectValue;
+    MODState state;
+    state.Init();
 
     // The main MODChannelState structs should NOT update during patterns or parts of 
     //   patterns that the Position Jump (Bxx) effect skips over. (Ignore loops)
     //   Keep a copy of the main state for each channel, and once it reaches the 
     //   jump destination, overwrite the current state with the copied state.
-    bool stateSuspended = false; // true == currently in part that a Position Jump skips over
-    int8_t jumpDestination = -1; // Pattern matrix row where you are jumping to. Not a loop.
 
     const int dmfTotalRowsInPatternMatrix = dmf.GetModuleInfo().totalRowsInPatternMatrix;
     const unsigned dmfTotalRowsPerPattern = dmf.GetModuleInfo().totalRowsPerPattern;
@@ -793,78 +834,65 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
     // Loop through ProTracker pattern matrix rows (corresponds to DMF pattern numbers):
     for (int patMatRow = 0; patMatRow < dmfTotalRowsInPatternMatrix; patMatRow++)
     {
+        state.global.order = patMatRow;
+
         // patMatRow is in DMF pattern matrix rows, not MOD
         m_Patterns[patMatRow + (int)m_UsingSetupPattern].assign(64 * m_NumberOfChannels, {});
 
         // Loop through rows in a pattern:
         for (unsigned patRow = 0; patRow < dmfTotalRowsPerPattern; patRow++)
         {
-            MODEffect noiseChannelEffect {MODEffectCode::NoEffectCode, MODEffectCode::NoEffectVal};
+            state.global.patternRow = patRow;
+            state.global.channelIndependentEffect = {MODEffectCode::NoEffectCode, MODEffectCode::NoEffectVal};
 
             // Use Pattern Break effect to allow for patterns that are less than 64 rows
             if (dmfTotalRowsPerPattern < 64 && patRow + 1 == dmfTotalRowsPerPattern /*&& !stateSuspended*/)
-                noiseChannelEffect = {MODEffectCode::PatBreak, 0};
+                state.global.channelIndependentEffect = {MODEffectCode::PatBreak, 0};
+
+            //MODChannelRow tempChannelRows[4];
 
             // Loop through channels:
             for (unsigned chan = 0; chan < m_NumberOfChannels; chan++)
             {
-                chanRow = dmf.GetChannelRow(chan, patMatRow, patRow);
-                effectCode = chanRow.effect[0].code;
-                effectValue = chanRow.effect[0].value;
+                state.global.channel = chan;
+
+                DMFChannelRow chanRow = dmf.GetChannelRow(chan, patMatRow, patRow);
 
                 // If just arrived at jump destination:
-                if (patMatRow == jumpDestination && patRow == 0 && stateSuspended)
+                if (patMatRow == state.global.jumpDestination && patRow == 0 && state.global.suspended)
                 {
                     // Restore state copies
-                    for (unsigned v = 0; v < m_NumberOfChannels; v++)
-                    {
-                        state[v] = stateJumpCopy[v];
-                    }
-                    stateSuspended = false;
-                    jumpDestination = -1;
+                    state.Restore();
                 }
 
-                #pragma region UPDATE_STATE
-                // If a Position Jump / Pattern Break command was found and it's not in a section skipped by another Position Jump / Pattern Break:
-                if ((effectCode == DMFEffectCode::PosJump || (effectCode == DMFEffectCode::PatBreak && effectValue == 0)) && !stateSuspended)
-                {
-                    const int dest = effectCode == DMFEffectCode::PosJump ? effectValue : patMatRow + 1;
-                    if (dest < 0 || dest >= dmfTotalRowsInPatternMatrix)
-                        throw std::invalid_argument("Invalid Position Jump or Pattern Break effect");
+                PriorityEffectsMap modEffects;
+                mod_sample_id_t modSampleId = 0;
+                uint16_t period = 0;
 
-                    if (dest >= patMatRow) // If not a loop
-                    {
-                        // Save copies of states
-                        for (unsigned v = 0; v < m_NumberOfChannels; v++)
-                        {
-                            stateJumpCopy[v] = state[v];
-                        }
-                        stateSuspended = true;
-                        jumpDestination = dest;
-                    }
-                }
-                else if (effectCode == DMFGameBoyEffectCode::SetDutyCycle && state[chan].dutyCycle != effectValue && chan <= static_cast<int>(DMFGameBoyChannel::SQW2)) // If sqw channel duty cycle needs to change 
+                if (chan == DMFGameBoyChannel::NOISE)
                 {
-                    if (effectValue >= 0 && effectValue <= 3)
-                    {
-                        state[chan].dutyCycle = effectValue;
-                        state[chan].sampleChanged = true;
-                    }
+                    modEffects = DMFConvertEffects_NoiseChannel(chanRow);
+                    UpdateStatePre(dmf, state, modEffects);
                 }
-                else if (effectCode == DMFGameBoyEffectCode::SetWave && state[chan].wavetable != effectValue && chan == static_cast<int>(DMFGameBoyChannel::WAVE)) // If wave channel wavetable needs to change 
+                else
                 {
-                    if (effectValue >= 0 && effectValue < dmfTotalWavetables)
+                    modEffects = DMFConvertEffects(chanRow);
+                    UpdateStatePre(dmf, state, modEffects);
+                    auto extraModEffects = DMFGetAdditionalEffects(state, chanRow);
+                    for (const auto& effectsPair : extraModEffects)
                     {
-                        state[chan].wavetable = effectValue;
-                        state[chan].sampleChanged = true;
+                        modEffects.insert(effectsPair);
                     }
-                }
-                #pragma endregion
 
-                MODChannelRow tempChannelRow;
-                DMFConvertChannelRow(dmf, sampleMap, chanRow, state[chan], tempChannelRow, noiseChannelEffect);
+                    DMFConvertNote(state, chanRow, sampleMap, modEffects, modSampleId, period);
+                }
+                
+                MODChannelRow tempChannelRow = ApplyNoteAndEffect(state, modEffects, modSampleId, period);
                 SetChannelRow(patMatRow + (int)m_UsingSetupPattern, patRow, chan, tempChannelRow);
             }
+
+            // TODO: Better channel independent effects implementation
+
         }
 
         // If the DMF has less than 64 rows per pattern, there will be extra MOD rows which will need to be blank
@@ -880,108 +908,87 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, MOD
     }
 }
 
-void MOD::DMFConvertChannelRow(const DMF& dmf, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, const DMFChannelRow& pat, MODChannelState& state, MODChannelRow& modChannelRow, MODEffect& noiseChannelEffect)
+// Updates Structure and Sample Change state info.
+void MOD::UpdateStatePre(const DMF& dmf, MODState& state, const MOD::PriorityEffectsMap& modEffects)
 {
-    auto modEffects = DMFConvertEffects(state, pat);
+    MODChannelState& chanState = state.channel[state.global.channel];
 
-    mod_sample_id_t modSampleId;
-    uint16_t period;
-    bool volumeChangeNeeded;
-
-    DMFConvertNote(state, pat, sampleMap, modEffects, modSampleId, period, volumeChangeNeeded);
+    // Update structure-related state info
     
-    modChannelRow.SampleNumber = modSampleId;
-    modChannelRow.SamplePeriod = period;
-    modChannelRow.EffectCode = 0; // Will be set below
-    modChannelRow.EffectValue = 0; // Will be set below
-
-    // If no effects are being used here and a pat break or jump effect needs to be used, it can be done here
-    if (modEffects.size() == 0)
+    auto structureEffects = modEffects.equal_range(MODEffectPriority::EffectPriorityStructureRelated);
+    if (structureEffects.first != structureEffects.second && !state.global.suspended) // If structure effects exist and state isn't suspended
     {
-        if (noiseChannelEffect.effect != MODEffectCode::NoEffectCode)
+        for (auto& iter = structureEffects.first; iter != structureEffects.second; ++iter)
         {
-            // It's free real estate
-            modChannelRow.EffectCode = noiseChannelEffect.effect;
-            modChannelRow.EffectValue = noiseChannelEffect.value;
+            auto effectCode = iter->second.effect;
+            auto effectValue = iter->second.value;
 
-            noiseChannelEffect.effect = MODEffectCode::NoEffectCode;
-            noiseChannelEffect.value = 0;
+            // If a PosJump / PatBreak command was found and it's not in a section skipped by another PosJump / PatBreak:
+            if (effectCode == DMFEffectCode::PosJump || (effectCode == DMFEffectCode::PatBreak && effectValue == 0))
+            {
+                const int dest = effectCode == DMFEffectCode::PosJump ? effectValue : state.global.order + 1;
+
+                if (dest < 0 || dest >= dmf.GetModuleInfo().totalRowsInPatternMatrix)
+                    throw std::invalid_argument("Invalid Position Jump or Pattern Break effect");
+                
+                if (dest >= (int)state.global.order) // If not a loop
+                {
+                    state.Save();
+                    state.global.jumpDestination = dest;
+                }
+            }
         }
     }
-    else // There are effect(s) which need to be applied
+
+    // Update duty cycle / wavetable state
+
+    auto sampleChangeEffects = modEffects.equal_range(MODEffectPriority::EffectPrioritySampleChange);
+    if (sampleChangeEffects.first != sampleChangeEffects.second)
     {
-        bool effectUsed = false; // Whether an effect has been chosen to be used for this channel's effect slot
-    
-        // If a pat break or jump is used
-        if (modEffects.find(EffectPriorityStructureRelated) != modEffects.end())
+        for (auto& iter = sampleChangeEffects.first; iter != sampleChangeEffects.second; ++iter)
         {
-            // Get iterator to effect(s) after the pat break or jump effects
-            auto iter = modEffects.upper_bound(EffectPriorityStructureRelated);
+            auto effectCode = iter->second.effect;
+            auto effectValue = iter->second.value;
 
-            // If there are effects besides pat break or jump, and the noise channel effect slot is free
-            if (iter != modEffects.end() && noiseChannelEffect.effect == MODEffectCode::NoEffectCode)
+            if (effectCode == MODEffectCode::DutyCycleChange)
             {
-                --iter; // To last pat break or jump effect
-
-                assert(iter->first == EffectPriorityStructureRelated && "Must be pat break or jump effect");
-
-                // Use the pat break / jump effect later
-                noiseChannelEffect.effect = iter->second.effect;
-                noiseChannelEffect.value = iter->second.value;
+                // Set Duty Cycle effect. Must be in square wave channel:
+                if (state.global.channel == DMFGameBoyChannel::SQW1 || state.global.channel == DMFGameBoyChannel::SQW2)
+                {
+                    if (effectValue >= 0 && effectValue < 4)
+                    {
+                        // Update state
+                        chanState.dutyCycle = effectValue;
+                        chanState.sampleChanged = true;
+                    }
+                }
             }
-            else // Use the pat break or jump effect now
+            else if (effectCode == MODEffectCode::WavetableChange)
             {
-                --iter; // To last pat break or jump effect
-
-                assert(iter->first == EffectPriorityStructureRelated && "Must be pat break or jump effect");
-
-                modChannelRow.EffectCode = iter->second.effect;
-                modChannelRow.EffectValue = iter->second.value;
-                effectUsed = true;
-            }
-            ++iter; // Back to effect(s) after the pat break or jump effects
-        }
-
-        // Skip to effect(s) after sample change, since sample changes do not need MOD effect
-        auto iter = modEffects.upper_bound(EffectPrioritySampleChange);
-
-        // If there are more effects that need to be used
-        if (iter != modEffects.end())
-        {
-            if (!effectUsed)
-            {
-                // MOD effect slot is available, so we'll use it
-                modChannelRow.EffectCode = iter->second.effect;
-                modChannelRow.EffectValue = iter->second.value;
-                effectUsed = true;
-                ++iter;
-            }
-            else
-            {
-                // No more room for effects even though one is needed
-                // ERROR: If max effects were desired, it cannot be done. At least one effect cannot be used.
-            }
-        }
-        else
-        {
-            // No more effects
-            if (!effectUsed && noiseChannelEffect.effect != MODEffectCode::NoEffectCode)
-            {
-                assert(false && "This code should never be reached now that DMFConvertNote() erases sample change effects.");
-
-                // The only MOD effect was a sample change, which isn't implemented as an effect, so...
-                // It's free real estate
-                modChannelRow.EffectCode = noiseChannelEffect.effect;
-                modChannelRow.EffectValue = noiseChannelEffect.value;
-
-                noiseChannelEffect.effect = MODEffectCode::NoEffectCode;
-                noiseChannelEffect.value = 0;
+                // Set Wave effect. Must be in wave channel:
+                if (state.global.channel == DMFGameBoyChannel::WAVE)
+                {
+                    if (effectValue >= 0 && effectValue < dmf.GetTotalWavetables())
+                    {
+                        // Update state
+                        chanState.wavetable = effectValue;
+                        chanState.sampleChanged = true;
+                    }
+                }
             }
         }
     }
 }
 
-std::multimap<MODEffectPriority, MODEffect> MOD::DMFConvertEffects(MODChannelState& state, const DMFChannelRow& pat)
+/* 
+void MOD::UpdateStatePost(const DMF& dmf, MODState& state, const std::multimap<MODEffectPriority, MODEffect>& modEffects)
+{
+    MODChannelState& chanState = state.channel[state.global.channel];
+
+}
+*/
+
+MOD::PriorityEffectsMap MOD::DMFConvertEffects(const DMFChannelRow& pat)
 {
     /*
      * Higher in list = higher priority effect:
@@ -996,50 +1003,16 @@ std::multimap<MODEffectPriority, MODEffect> MOD::DMFConvertEffects(MODChannelSta
     using EffectPair = std::pair<MODEffectPriority, MODEffect>;
     std::multimap<MODEffectPriority, MODEffect> modEffects;
 
-    // The noise channel is currently unsupported.
-    // Only Pattern Break and Jump effects on the noise channel are converted.
-    if (state.channel == DMFGameBoyChannel::NOISE)
-    {
-        for (auto& dmfEffect : pat.effect)
-        {
-            if (dmfEffect.code == (int)DMFEffectCode::PatBreak)
-            {
-                // Only D00 is supported at the moment
-                modEffects.insert({EffectPriorityStructureRelated, {MODEffectCode::PatBreak, 0}});
-                break;
-            }
-            else if (dmfEffect.code == (int)DMFEffectCode::PosJump)
-            {
-                uint16_t dest = dmfEffect.value + (int)m_UsingSetupPattern;
-                modEffects.insert({EffectPriorityStructureRelated, {MODEffectCode::PosJump, dest}});
-                break;
-            }
-        }
-        return modEffects;
-    }
-    
-    // Add volume change effect if needed. TODO: Use volume optimization later
-    if (state.sampleChanged || (pat.volume != state.volume && pat.volume != DMFNoVolume)) // If volume changed
-    {
-        if (DMFNoteHasPitch(pat.note) || state.notePlaying) // If a note is playing
-        {
-            uint8_t newVolume = std::round(pat.volume / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
-
-            modEffects.insert({EffectPriorityVolumeChange, {MODEffectCode::SetVolume, newVolume}});
-
-            state.volume = pat.volume; // Update the state
-        }
-    }
-
-    // Add other effects
+    // Convert DMF effects to MOD effects
     for (const auto& dmfEffect : pat.effect)
     {
         EffectPair effectPair {EffectPriorityUnsupportedEffect, {MODEffectCode::NoEffectCode, MODEffectCode::NoEffectVal}};
 
+        if (dmfEffect.code == DMFEffectCode::NoEffect)
+            continue;
+
         switch (DMFEffectCode(dmfEffect.code))
         {
-        case DMFEffectCode::NoEffect:
-            continue;
         case DMFEffectCode::NoteCut:
             if (dmfEffect.value == 0)
             {
@@ -1069,28 +1042,12 @@ std::multimap<MODEffectPriority, MODEffect> MOD::DMFConvertEffects(MODChannelSta
         switch (DMFGameBoyEffectCode(dmfEffect.code))
         {
         case DMFGameBoyEffectCode::SetDutyCycle:
-            if (state.channel != DMFGameBoyChannel::SQW1 && state.channel != DMFGameBoyChannel::SQW2)
-                break; // Must be a square wave channel
-
-            if (dmfEffect.value != state.dutyCycle && (0 <= dmfEffect.value && dmfEffect.value <= 3))
-            {
-                // Update state
-                state.dutyCycle = dmfEffect.value;
-
-                continue; // No MOD effect exists for this
-            }
+            effectPair.first = EffectPrioritySampleChange;
+            effectPair.second = {MODEffectCode::DutyCycleChange, (uint16_t)dmfEffect.value};
             break;
         case DMFGameBoyEffectCode::SetWave:
-            if (state.channel != DMFGameBoyChannel::WAVE)
-                break; // Must be the wave channel
-
-            if (dmfEffect.value != state.wavetable)
-            {
-                // Update state
-                state.wavetable = dmfEffect.value;
-
-                continue; // No MOD effect exists for this
-            }
+            effectPair.first = EffectPrioritySampleChange;
+            effectPair.second = {MODEffectCode::WavetableChange, (uint16_t)(dmfEffect.value)};
             break;
         default:
             break; // Unsupported. priority remains UnsupportedEffect
@@ -1102,35 +1059,86 @@ std::multimap<MODEffectPriority, MODEffect> MOD::DMFConvertEffects(MODChannelSta
     return modEffects;
 }
 
-MODNote MOD::DMFConvertNote(MODChannelState& state, const DMFChannelRow& pat, const std::map<dmf_sample_id_t, MODMappedDMFSample>& sampleMap, std::multimap<MODEffectPriority, MODEffect>& modEffects, mod_sample_id_t& sampleId, uint16_t& period, bool& volumeChangeNeeded)
+MOD::PriorityEffectsMap MOD::DMFConvertEffects_NoiseChannel(const DMFChannelRow& pat)
+{
+    // Temporary method until the Noise channel is supported.
+    // Only Pattern Break and Jump effects on the noise channel are converted for now.
+
+    PriorityEffectsMap modEffects;
+
+    for (auto& dmfEffect : pat.effect)
+    {
+        if (dmfEffect.code == (int)DMFEffectCode::PatBreak && dmfEffect.value == 0)
+        {
+            // Only D00 is supported at the moment
+            modEffects.insert({EffectPriorityStructureRelated, {MODEffectCode::PatBreak, 0}});
+            break;
+        }
+        else if (dmfEffect.code == (int)DMFEffectCode::PosJump)
+        {
+            uint16_t dest = dmfEffect.value + (int)m_UsingSetupPattern;
+            modEffects.insert({EffectPriorityStructureRelated, {MODEffectCode::PosJump, dest}});
+            break;
+        }
+    }
+    return modEffects;
+}
+
+MOD::PriorityEffectsMap MOD::DMFGetAdditionalEffects(MODState& state, const DMFChannelRow& pat)
+{
+    PriorityEffectsMap modEffects;
+
+    MODChannelState& chanState = state.channel[state.global.channel];
+    
+    // Add volume change effect if needed. TODO: Use volume optimization later
+    if (chanState.sampleChanged || (pat.volume != chanState.volume && pat.volume != DMFNoVolume)) // If volume changed
+    {
+        if (pat.note.HasPitch() || chanState.notePlaying) // If a note is playing
+        {
+            uint8_t newVolume = std::round(pat.volume / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
+
+            modEffects.insert({EffectPriorityVolumeChange, {MODEffectCode::SetVolume, newVolume}});
+
+            chanState.volume = pat.volume; // Update the state
+        }
+    }
+
+    return modEffects;
+}
+
+MODNote MOD::DMFConvertNote(MODState& state, const DMFChannelRow& pat, const MOD::SampleMap& sampleMap, MOD::PriorityEffectsMap& modEffects, mod_sample_id_t& sampleId, uint16_t& period)
 {
     MODNote modNote {0, 0};
 
     sampleId = 0;
     period = 0;
-    volumeChangeNeeded = false;
 
     // Noise channel is unsupported and should contain no notes
-    if (state.channel == DMFGameBoyChannel::NOISE)
+    if (state.global.channel == DMFGameBoyChannel::NOISE)
         return modNote;
 
-    // Convert note - Note cut effect
-    auto sampleChangeEffect = modEffects.find(EffectPrioritySampleChange);
-    if (sampleChangeEffect != modEffects.end()) // If sample change occurred (duty cycle, wave, or note cut effect)
+    MODChannelState& chanState = state.channel[state.global.channel];
+
+    // Convert note - Note cut effect // TODO: Move this to UpdateStatePre()?
+    auto sampleChangeEffects = modEffects.equal_range(EffectPrioritySampleChange);
+    if (sampleChangeEffects.first != sampleChangeEffects.second) // If sample change occurred (duty cycle, wave, or note cut effect)
     {
-        MODEffect modEffect = sampleChangeEffect->second;
-        if (modEffect.effect == MODEffectCode::CutSample) // Note cut
+        for (auto& iter = sampleChangeEffects.first; iter != sampleChangeEffects.second; ++iter)
         {
-            sampleId = sampleMap.at(-1).lowId; // Use silent sample
-            period = 0; // Don't need a note for the silent sample to work
-            state.notePlaying = false;
-            modEffects.erase(sampleChangeEffect); // Consume the effect
-            return modNote;
+            MODEffect& modEffect = iter->second;
+            if (modEffect.effect == MODEffectCode::CutSample) // Note cut
+            {
+                sampleId = sampleMap.at(-1).lowId; // Use silent sample
+                period = 0; // Don't need a note for the silent sample to work
+                chanState.notePlaying = false;
+                modEffects.erase(iter); // Consume the effect
+                return modNote;
+            }
         }
     }
 
     // Convert note - No note playing
-    if (pat.note.pitch == DMFNotePitch::Empty) // No note is playing. Only handle effects.
+    if (pat.note.IsEmpty()) // No note is playing. Only handle effects.
     {
         sampleId = 0; // Keeps previous sample id
         period = 0;
@@ -1138,65 +1146,68 @@ MODNote MOD::DMFConvertNote(MODChannelState& state, const DMFChannelRow& pat, co
     }
     
     // Convert note - Note OFF
-    if (pat.note.pitch == DMFNotePitch::Off) // Note OFF. Use silent sample and handle effects.
+    if (pat.note.IsOff()) // Note OFF. Use silent sample and handle effects.
     {
         sampleId = sampleMap.at(-1).lowId; // Use silent sample
         period = 0; // Don't need a note for the silent sample to work
-        state.notePlaying = false;
+        chanState.notePlaying = false;
         return modNote;
     }
 
     // Note is playing
 
     // The indices for this SQW / WAVE sample's low note range and high note range:
-    dmf_sample_id_t dmfSampleId = state.channel == DMFGameBoyChannel::WAVE ? state.wavetable + 4 : state.dutyCycle;
+    dmf_sample_id_t dmfSampleId = state.global.channel == DMFGameBoyChannel::WAVE ? chanState.wavetable + 4 : chanState.dutyCycle;
     
     // If we are on the NOISE channel, dmfSampleId will go unused
 
     uint16_t modOctave = 0; // The note's octave to export to the MOD file.
 
-    if (DMFNoteHasPitch(pat.note)) // A note
+    if (pat.note.HasPitch()) // A note
     {
-        if (state.channel != DMFGameBoyChannel::NOISE)
+        MODNote modNote(pat.note);
+        if (state.global.channel != DMFGameBoyChannel::NOISE)
         {
             if (sampleMap.count(dmfSampleId) > 0)
             {
                 const MODMappedDMFSample& modSampleInfo = sampleMap.at(dmfSampleId);
-                DMFNote dmfSplitPoint;
-                dmfSplitPoint.octave = modSampleInfo.splitPoint.octave;
-                dmfSplitPoint.pitch = modSampleInfo.splitPoint.pitch;
+                
+                if (state.global.channel == DMFGameBoyChannel::WAVE && modSampleInfo.splitPoint.octave != 5)
+                    std::cout << "modNote.octave=" << modNote.octave << "; modSampleInfo.splitPoint.octave=" << modSampleInfo.splitPoint.octave << "\n";
 
                 // If using high note range:
                 if (modSampleInfo.highId != -1)
                 {
                     // If the current note is in the high note range
-                    if (pat.note >= dmfSplitPoint)
+                    if (modNote >= modSampleInfo.splitPoint)
                     {
                         // Find the note's octave in MOD format:
-                        modOctave = pat.note.octave - dmfSplitPoint.octave;
-                        if (!state.onHighNoteRange)
+                        modOctave = pat.note.octave - modSampleInfo.splitPoint.octave + 1;
+                        //std::cout << "   hi: pat.note.octave=" << pat.note.octave << " - modSampleInfo.splitPoint.octave=" << modSampleInfo.splitPoint.octave << "...modOctave=" << modOctave << "\n";
+                        if (!chanState.onHighNoteRange)
                         {
                             // Switching to a different note range requires the use of a different MOD sample.
-                            state.sampleChanged = true;
+                            chanState.sampleChanged = true;
                         }
-                        state.onHighNoteRange = true;
+                        chanState.onHighNoteRange = true;
                     }
                     else // If current note is in the low note range
                     {
                         // Find the note's octave in MOD format:
-                        modOctave = pat.note.octave - dmfSplitPoint.octave + 3;
-                        if (state.onHighNoteRange)
+                        modOctave = pat.note.octave - modSampleInfo.splitPoint.octave + 4;
+                        //std::cout << "   lo: pat.note.octave=" << pat.note.octave << " - modSampleInfo.splitPoint.octave=" << modSampleInfo.splitPoint.octave << " + 3...modOctave=" << modOctave << "\n";
+                        if (chanState.onHighNoteRange)
                         {
                             // Switching to a different note range requires the use of a different MOD sample.
-                            state.sampleChanged = true;
+                            chanState.sampleChanged = true;
                         }
-                        state.onHighNoteRange = false;
+                        chanState.onHighNoteRange = false;
                     }
                 }
                 else // Only one MOD note range for this DMF sample
                 {
                     // Find the note's octave in MOD format:
-                    modOctave = pat.note.octave - dmfSplitPoint.octave;
+                    modOctave = pat.note.octave - modSampleInfo.splitPoint.octave;
                 }
             }
             else
@@ -1208,40 +1219,146 @@ MODNote MOD::DMFConvertNote(MODChannelState& state, const DMFChannelRow& pat, co
 
     // C# is the start of next octave in .dmf, not C- like in PT / .mod / Deflemask GUI, 
     //      so the note C- needs adjusted for exporting to mod:
-    if (pat.note.pitch == DMFNotePitch::C)
+    if (pat.note.pitch == DMFNotePitch::C_Alt)
     {
+        assert(false && "DMF note pitch is 12 (C)");
         modOctave++;
     }
 
     modNote.octave = modOctave;
-    modNote.pitch = pat.note.pitch;
+    modNote.pitch = pat.note.pitch % 12;
 
-    period = proTrackerPeriodTable[modOctave][pat.note.pitch % 12];
+    period = proTrackerPeriodTable[modNote.octave][modNote.pitch];
 
-    if (state.sampleChanged || !state.notePlaying)
+    if (chanState.sampleChanged || !chanState.notePlaying)
     {
         const MODMappedDMFSample& modSampleInfo = sampleMap.at(dmfSampleId);
-        sampleId = state.onHighNoteRange ? modSampleInfo.highId : modSampleInfo.lowId;
+        sampleId = chanState.onHighNoteRange ? modSampleInfo.highId : modSampleInfo.lowId;
 
-        state.sampleChanged = false; // Just changed the sample, so resetting this for next time.
+        chanState.sampleChanged = false; // Just changed the sample, so resetting this for next time.
         
         // When you change PT samples, the channel volume resets, so 
         //  if there are still no effects being used on this pattern row, 
         //  use a volume change effect to set the volume to where it needs to be.
-        uint8_t newVolume = std::round(state.volume / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
 
-        modEffects.insert({EffectPriorityVolumeChange, {MODEffectCode::SetVolume, newVolume}});
-        
-        // TODO: If the default volume of the sample is selected in a smart way, we could potentially skip having to use a volume effect sometimes
+        if (chanState.volume != DMFVolumeMax) // Currently, the default volume for all sample is the maximum. TODO: Can optimize
+        {
+            uint8_t newVolume = std::round(chanState.volume / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
+
+            modEffects.insert({EffectPriorityVolumeChange, {MODEffectCode::SetVolume, newVolume}});
+
+            // TODO: If the default volume of the sample is selected in a smart way, we could potentially skip having to use a volume effect sometimes
+        }
     }
     else
     {
         sampleId = 0; // Keeps the previous sample number and prevents channel volume from being reset.
     }
 
-    state.notePlaying = true;
+    chanState.notePlaying = true;
     return modNote;
 }
+
+MODChannelRow MOD::ApplyNoteAndEffect(MODState& state, const MOD::PriorityEffectsMap& modEffects, mod_sample_id_t modSampleId, uint16_t period)
+{
+    MODChannelRow modChannelRow;
+
+    modChannelRow.SampleNumber = modSampleId;
+    modChannelRow.SamplePeriod = period;
+    modChannelRow.EffectCode = 0; // Will be set below
+    modChannelRow.EffectValue = 0; // Will be set below
+
+    MODEffect& channelIndependentEffect = state.global.channelIndependentEffect;
+
+    // If no effects are being used here and a pat break or jump effect needs to be used, it can be done here
+    if (modEffects.size() == 0)
+    {
+        if (channelIndependentEffect.effect != MODEffectCode::NoEffectCode)
+        {
+            // It's free real estate
+            modChannelRow.EffectCode = channelIndependentEffect.effect;
+            modChannelRow.EffectValue = channelIndependentEffect.value;
+
+            channelIndependentEffect.effect = MODEffectCode::NoEffectCode;
+            channelIndependentEffect.value = 0;
+        }
+    }
+    else // There are effect(s) which need to be applied
+    {
+        bool effectUsed = false; // Whether an effect has been chosen to be used for this channel's effect slot
+    
+        // If a pat break or jump is used
+        if (modEffects.find(EffectPriorityStructureRelated) != modEffects.end())
+        {
+            // Get iterator to effect(s) after the pat break or jump effects
+            auto iter = modEffects.upper_bound(EffectPriorityStructureRelated);
+
+            // If there are effects besides pat break or jump, and the noise channel effect slot is free
+            if (iter != modEffects.end() && channelIndependentEffect.effect == MODEffectCode::NoEffectCode)
+            {
+                --iter; // To last pat break or jump effect
+
+                assert(iter->first == EffectPriorityStructureRelated && "Must be pat break or jump effect");
+
+                // Use the pat break / jump effect later
+                channelIndependentEffect.effect = iter->second.effect;
+                channelIndependentEffect.value = iter->second.value;
+            }
+            else // Use the pat break or jump effect now
+            {
+                --iter; // To last pat break or jump effect
+
+                assert(iter->first == EffectPriorityStructureRelated && "Must be pat break or jump effect");
+
+                modChannelRow.EffectCode = iter->second.effect;
+                modChannelRow.EffectValue = iter->second.value;
+                effectUsed = true;
+            }
+            ++iter; // Back to effect(s) after the pat break or jump effects
+        }
+
+        // Skip to effect(s) after sample change, since sample changes do not need MOD effect
+        auto iter = modEffects.upper_bound(EffectPrioritySampleChange);
+        const auto unsupportedEffects = modEffects.lower_bound(EffectPriorityUnsupportedEffect); 
+
+        // If there are more effects that need to be used
+        if (iter != modEffects.end() && iter != unsupportedEffects)
+        {
+            if (!effectUsed)
+            {
+                // MOD effect slot is available, so we'll use it
+                modChannelRow.EffectCode = iter->second.effect;
+                modChannelRow.EffectValue = iter->second.value;
+                effectUsed = true;
+                ++iter;
+            }
+            else
+            {
+                // No more room for effects even though one is needed
+                // ERROR: If max effects were desired, it cannot be done. At least one effect cannot be used.
+            }
+        }
+        else
+        {
+            // No more effects
+            if (!effectUsed && channelIndependentEffect.effect != MODEffectCode::NoEffectCode)
+            {
+                //assert(false && "This code should never be reached now that DMFConvertNote() erases sample change effects.");
+
+                // The only MOD effect was a sample change, which isn't implemented as an effect, so...
+                // It's free real estate
+                modChannelRow.EffectCode = channelIndependentEffect.effect;
+                modChannelRow.EffectValue = channelIndependentEffect.value;
+
+                channelIndependentEffect.effect = MODEffectCode::NoEffectCode;
+                channelIndependentEffect.value = 0;
+            }
+        }
+    }
+
+    return modChannelRow;
+}
+
 
 void MOD::DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed)
 {
@@ -1632,11 +1749,6 @@ std::string MODException::CreateErrorMessage(Category category, int errorCode, c
     return "";
 }
 
-MODNote::operator DMFNote() const
-{
-    return (DMFNote){ .pitch = pitch, .octave = octave };
-}
-
 uint8_t MOD::GetMODTempo(double bpm)
 {
     // Get ProTracker tempo from Deflemask bpm.
@@ -1694,4 +1806,25 @@ unsigned GCD(unsigned u, unsigned v)
     if (v == 0)
         return u;
     return GCD(v, u % v);
+}
+
+MODNote::MODNote(const DMFNote& dmfNote)
+{
+    this->pitch = dmfNote.pitch % 12;
+    this->octave = dmfNote.octave;
+}
+
+MODNote& MODNote::operator=(const DMFNote& dmfNote)
+{
+    this->pitch = dmfNote.pitch % 12;
+    this->octave = dmfNote.octave;
+    return *this;
+}
+
+MODNote::operator DMFNote() const
+{
+    DMFNote n;
+    n.pitch = pitch;
+    n.octave = octave;
+    return n;
 }

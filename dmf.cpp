@@ -813,22 +813,20 @@ bool operator!=(const DMFNote& lhs, const DMFNote& rhs)
 
 bool operator>(const DMFNote& lhs, const DMFNote& rhs)
 {
-    return lhs.octave + static_cast<int>(lhs.pitch) / 13.f > rhs.octave + static_cast<int>(rhs.pitch) / 13.f;
+    return (lhs.octave << 4) + lhs.pitch > (rhs.octave << 4) + rhs.pitch;
 }
 
 bool operator<(const DMFNote& lhs, const DMFNote& rhs)
 {
-    return lhs.octave + static_cast<int>(lhs.pitch) / 13.f < rhs.octave + static_cast<int>(rhs.pitch) / 13.f;
+    return (lhs.octave << 4) + lhs.pitch < (rhs.octave << 4) + rhs.pitch;
 }
 
 bool operator>=(const DMFNote& lhs, const DMFNote& rhs)
 {
-    return lhs.octave + static_cast<int>(lhs.pitch) / 13.f >= rhs.octave + static_cast<int>(rhs.pitch) / 13.f;
+    return (lhs.octave << 4) + lhs.pitch >= (rhs.octave << 4) + rhs.pitch;
 }
 
 bool operator<=(const DMFNote& lhs, const DMFNote& rhs)
 {
-    return lhs.octave + static_cast<int>(lhs.pitch) / 13.f <= rhs.octave + static_cast<int>(rhs.pitch) / 13.f;
+    return (lhs.octave << 4) + lhs.pitch <= (rhs.octave << 4) + rhs.pitch;
 }
-
-

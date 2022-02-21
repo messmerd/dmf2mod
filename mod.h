@@ -25,6 +25,7 @@ REGISTER_MODULE_HEADER(MOD, MODConversionOptions)
 // Forward defines
 struct DMFNote;
 struct DMFChannelRow;
+enum class DMFNotePitch;
 struct MODChannelState;
 struct MODState;
 
@@ -76,39 +77,40 @@ struct MODNote
         : pitch(p), octave(o)
     {}
 
-    bool operator>(const MODNote& rhs)
+    bool operator>(const MODNote& rhs) const
     {
         return (this->octave << 4) + this->pitch > (rhs.octave << 4) + rhs.pitch;
     }
 
-    bool operator>=(const MODNote& rhs)
+    bool operator>=(const MODNote& rhs) const
     {
         return (this->octave << 4) + this->pitch >= (rhs.octave << 4) + rhs.pitch;
     }
 
-    bool operator<(const MODNote& rhs)
+    bool operator<(const MODNote& rhs) const
     {
         return (this->octave << 4) + this->pitch < (rhs.octave << 4) + rhs.pitch;
     }
 
-    bool operator<=(const MODNote& rhs)
+    bool operator<=(const MODNote& rhs) const
     {
         return (this->octave << 4) + this->pitch <= (rhs.octave << 4) + rhs.pitch;
     }
 
-    bool operator==(const MODNote& rhs)
+    bool operator==(const MODNote& rhs) const
     {
         return this->octave == rhs.octave && this->pitch == rhs.pitch;
     }
 
-    bool operator!=(const MODNote& rhs)
+    bool operator!=(const MODNote& rhs) const
     {
         return !(*this == rhs);
     }
 
     MODNote(const DMFNote& dmfNote);
+    MODNote(DMFNotePitch p, uint16_t o);
     MODNote& operator=(const DMFNote& dmfNote);
-    operator DMFNote() const;    
+    DMFNote ToDMFNote() const;
 };
 
 
@@ -131,23 +133,50 @@ typedef int mod_sample_id_t;
  * samples - low and high - in order to allow it to be played in the severely 
  * limited MOD format.
  */
-struct MODMappedDMFSample
+class SampleMapper
 {
-    mod_sample_id_t lowId;
+public:
+    enum class SampleType
+    {
+        Silence, Square, Wave
+    };
 
-    // -1 in the case that the upper range is not needed
-    mod_sample_id_t highId;
+    enum class NoteRange
+    {
+        First=0, Second=1, Third=2
+    };
 
-    // Sample lengths:
-    unsigned lowLength;
-    unsigned highLength;
+    enum class NoteRangeName
+    {
+        None=-1, Low=0, Middle=1, High=2
+    };
 
-    /*
-        Specifies the first note of high note range for a given SQW / WAVE sample, or
-        the first note of the range if it does not have both a high and low note range.
-        A note range always contains 36 notes. I.e. C-2 thru B-4 (Deflemask tracker note format).
-    */
-    MODNote splitPoint;
+    SampleMapper() = default;
+
+    mod_sample_id_t Init(dmf_sample_id_t dmfSampleId, mod_sample_id_t startingId, const std::pair<DMFNote, DMFNote>& dmfNoteRange);
+    mod_sample_id_t InitSilence();
+
+    MODNote GetMODNote(const DMFNote& dmfNote, NoteRange& modNoteRange) const;
+    NoteRange GetMODNoteRange(DMFNote dmfNote) const;
+    mod_sample_id_t GetMODSampleId(DMFNote dmfNote) const;
+    mod_sample_id_t GetMODSampleId(NoteRange modNoteRange) const;
+    unsigned GetMODSampleLength(NoteRange modNoteRange) const;
+    NoteRange GetMODNoteRange(mod_sample_id_t modSampleId) const;
+    NoteRangeName GetMODNoteRangeName(NoteRange modNoteRange) const;
+
+    int GetNumMODSamples() const { return m_NumMODSamples; }
+    SampleType GetSampleType() const { return m_SampleType; }
+    mod_sample_id_t GetFirstMODSampleId() const { return m_ModIds[0]; }
+    bool IsDownsamplingNeeded() const { return m_DownsamplingNeeded; }
+
+private:
+    dmf_sample_id_t m_DmfId;
+    mod_sample_id_t m_ModIds[3]; // Up to 3
+    unsigned m_ModSampleLengths[3];
+    std::vector<DMFNote> m_RangeStart;
+    int m_NumMODSamples;
+    SampleType m_SampleType;
+    bool m_DownsamplingNeeded;
 };
 
 // Stores a MOD sample
@@ -257,17 +286,17 @@ public:
     
 
 private:
-    using SampleMap = std::map<dmf_sample_id_t, MODMappedDMFSample>;
+    using SampleMap = std::map<dmf_sample_id_t, SampleMapper>;
     using PriorityEffectsMap = std::multimap<MODEffectPriority, MODEffect>;
-    
+    using DMFSampleNoteRangeMap = std::map<dmf_sample_id_t, std::pair<DMFNote, DMFNote>>;
 
     void ConvertFrom(const Module* input, const ConversionOptionsPtr& options) override;
 
     // Conversion from DMF:
     void ConvertFromDMF(const DMF& dmf, const ConversionOptionsPtr& options);
     void DMFConvertSamples(const DMF& dmf, SampleMap& sampleMap);
-    void DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap);
-    void DMFSampleSplittingAndAssignment(SampleMap& sampleMap, const std::map<dmf_sample_id_t, std::pair<MODNote, MODNote>>& sampleIdLowestHighestNotesMap);
+    void DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSampleNoteRangeMap& sampleIdLowestHighestNotesMap);
+    void DMFSampleSplittingAndAssignment(SampleMap& sampleMap, const DMFSampleNoteRangeMap& sampleIdLowestHighestNotesMap);
     void DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap);
     
     void DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap);

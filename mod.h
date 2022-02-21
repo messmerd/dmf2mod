@@ -4,11 +4,6 @@
 
     Declares the ModuleInterface-derived class for ProTracker's 
     MOD files.
-
-    Several limitations apply in order to export. For example, 
-    for DMF --> MOD, the DMF file must use the Game Boy system, 
-    patterns must have 64 rows, only one effect column is allowed 
-    per channel, etc.
 */
 
 #pragma once
@@ -113,8 +108,6 @@ struct MODNote
     DMFNote ToDMFNote() const;
 };
 
-
-
 struct MODChannelRow
 {
     uint8_t SampleNumber;
@@ -127,13 +120,13 @@ typedef int dmf_sample_id_t;
 typedef int mod_sample_id_t;
 
 /*
- * Used during conversion from DMF to MOD. For mapping DMF square waves and 
- * wavetables ("DMF samples") with corresponding MOD samples. For DMF samples 
- * that span a wide note range, the corresponding MOD sample is split into two 
- * samples - low and high - in order to allow it to be played in the severely 
- * limited MOD format.
+ * MOD has only a 3 octave range while Deflemask has 8.
+ * For this reason, a DMF square wave or wavetable may
+ * need to be broken up into 1 to 3 different MOD samples
+ * of varying sample lengths to emulate the full range of 
+ * Deflemask. DMFSampleMapper handles the details of this.
  */
-class SampleMapper
+class DMFSampleMapper
 {
 public:
     enum class SampleType
@@ -151,7 +144,7 @@ public:
         None=-1, Low=0, Middle=1, High=2
     };
 
-    SampleMapper() = default;
+    DMFSampleMapper();
 
     mod_sample_id_t Init(dmf_sample_id_t dmfSampleId, mod_sample_id_t startingId, const std::pair<DMFNote, DMFNote>& dmfNoteRange);
     mod_sample_id_t InitSilence();
@@ -171,12 +164,13 @@ public:
 
 private:
     dmf_sample_id_t m_DmfId;
-    mod_sample_id_t m_ModIds[3]; // Up to 3
+    mod_sample_id_t m_ModIds[3]; // Up to 3 MOD samples from one DMF sample
     unsigned m_ModSampleLengths[3];
     std::vector<DMFNote> m_RangeStart;
     int m_NumMODSamples;
     SampleType m_SampleType;
     bool m_DownsamplingNeeded;
+    int m_ModOctaveShift;
 };
 
 // Stores a MOD sample
@@ -279,14 +273,11 @@ public:
         TempoPrecision,
         EffectIgnored
     };
-
     
     static constexpr unsigned VolumeMax = 64u; // Yes, there are 65 different values for the volume
 
-    
-
 private:
-    using SampleMap = std::map<dmf_sample_id_t, SampleMapper>;
+    using SampleMap = std::map<dmf_sample_id_t, DMFSampleMapper>;
     using PriorityEffectsMap = std::multimap<MODEffectPriority, MODEffect>;
     using DMFSampleNoteRangeMap = std::map<dmf_sample_id_t, std::pair<DMFNote, DMFNote>>;
 
@@ -302,11 +293,11 @@ private:
     void DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap);
     PriorityEffectsMap DMFConvertEffects(const DMFChannelRow& pat);
     PriorityEffectsMap DMFConvertEffects_NoiseChannel(const DMFChannelRow& pat);
-    void UpdateStatePre(const DMF& dmf, MODState& state, const PriorityEffectsMap& modEffects);
+    void DMFUpdateStatePre(const DMF& dmf, MODState& state, const PriorityEffectsMap& modEffects);
     PriorityEffectsMap DMFGetAdditionalEffects(MODState& state, const DMFChannelRow& pat);
     //void UpdateStatePost(const DMF& dmf, MODState& state, const PriorityEffectsMap& modEffects);
     MODNote DMFConvertNote(MODState& state, const DMFChannelRow& pat, const SampleMap& sampleMap, PriorityEffectsMap& modEffects, mod_sample_id_t& sampleId, uint16_t& period);
-    MODChannelRow ApplyNoteAndEffect(MODState& state, const PriorityEffectsMap& modEffects, mod_sample_id_t modSampleId, uint16_t period);
+    MODChannelRow DMFApplyNoteAndEffect(MODState& state, const PriorityEffectsMap& modEffects, mod_sample_id_t modSampleId, uint16_t period);
     
     void DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed);
     

@@ -11,9 +11,6 @@
     allowed per channel, etc.
 */
 
-// TODO: Right now, only effect column 0 is used. But two dmf effects 
-//      could potentially be used if one of them is 10xx or 12xx. Need to allow for that. 
-
 // TODO: Add '--effects=none' option, which does not use any ProTracker effects. 
 
 // TODO: Delete output file if an error occurred while creating it?
@@ -34,8 +31,6 @@
 const std::vector<std::string> MODOptions = {"--downsample", "--effects=[min,max]"};
 REGISTER_MODULE_CPP(MOD, MODConversionOptions, ModuleType::MOD, "mod", MODOptions)
 
-//static const DMFNote MOD_LOWEST_POSSIBLE_NOTE(DMFNotePitch::C, 2);
-//static const unsigned int MOD_NOTE_VOLUMEMAX = 64u; // Yes, there are 65 different values for the volume
 #define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 
 static std::vector<int8_t> GenerateSquareWaveSample(unsigned dutyCycle, unsigned length);
@@ -55,7 +50,7 @@ struct MODChannelState
     bool sampleChanged; // MOD sample
     int16_t volume;
     bool notePlaying;
-    SampleMapper::NoteRange noteRange;
+    DMFSampleMapper::NoteRange noteRange;
 };
 
 struct MODState
@@ -95,7 +90,7 @@ struct MODState
             channel[i].sampleChanged = true; // Whether dutyCycle or wavetable recently changed
             channel[i].volume = DMFVolumeMax; // The max volume for a channel (in DMF units)
             channel[i].notePlaying = false; // Whether a note is currently playing on a channel
-            channel[i].noteRange = SampleMapper::NoteRange::First; // Which MOD sample note range is currently being used
+            channel[i].noteRange = DMFSampleMapper::NoteRange::First; // Which MOD sample note range is currently being used
 
             channelCopy[i] = channel[i];
         }
@@ -125,14 +120,9 @@ struct MODState
 };
 
 /*
-    Game Boy's range is:  C-1 -> C-8 (though in testing this, the range seems to be C-2 -> C-8 in Deflemask GUI)
+    Game Boy's range is:  C-0 -> C-8 (though notes lower than C-2 just play as C-2)
     ProTracker's range is:  C-1 -> B-3  (plus octaves 0 and 4 which are non-standard) 
-
-    If I upsample current 32-length PT square wave samples to double length (64), then C-1 -> B-3 in PT will be C-2 -> B-4 in Deflemask GUI. ("low note range")
-    If I downsample current 32-length PT square wave samples to quarter length (8), then C-1 -> B-3 in PT will be C-5 -> B-7 in Deflemask GUI. ("high note range")
-            If finetune == 0, then it would cover Deflemask's lowest note for the GB (C-2), but not the highest (C-10). 
-    I would have to downsample wavetables in order to achieve notes of C-6 or higher. 
-      And in order to reach Deflemask's 2nd highest GB note (B-7), I would need to downsample the wavetables to 1/4 of the values it normally has.  
+    See DMFSampleMapper for how this issue is resolved.
 */
 
 static uint16_t proTrackerPeriodTable[5][12] = {
@@ -267,7 +257,7 @@ void MOD::ConvertFromDMF(const DMF& dmf, const ConversionOptionsPtr& options)
     if (!silent)
         std::cout << "Converting samples...\n";
 
-    std::map<dmf_sample_id_t, SampleMapper> sampleMap;
+    SampleMap sampleMap;
     DMFConvertSamples(dmf, sampleMap);
 
     ///////////////// CONVERT PATTERN DATA
@@ -293,12 +283,14 @@ void MOD::DMFConvertSamples(const DMF& dmf, SampleMap& sampleMap)
 
 void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSampleNoteRangeMap& sampleIdLowestHighestNotesMap)
 {
-    // This function loops through all DMF pattern contents to find the highest and lowest notes 
-    //  for each square wave duty cycle and each wavetable. It also finds which SQW duty cycles are 
-    //  used and which wavetables are used and stores this info in sampleMap.
-    //  This extra processing is needed because Deflemask has roughly twice the pitch range that MOD has, so
-    //  a pair of samples may be needed for MOD to achieve the same pitch range. These extra samples are only
-    //  used when needed.
+    /*
+     * This function loops through all DMF pattern contents to find the highest and lowest notes 
+     *  for each square wave duty cycle and each wavetable. It also finds which SQW duty cycles are 
+     *  used and which wavetables are used and stores this info in sampleMap.
+     *  This extra processing is needed because Deflemask has over twice the note range that MOD has, so
+     *  up to 3 MOD samples may be needed for MOD to achieve the same pitch range. These extra samples are 
+     *  only used when needed.
+     */
 
     sampleMap.clear();
 
@@ -317,7 +309,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
 
     const DMFModuleInfo& moduleInfo = dmf.GetModuleInfo();
     
-    // Most of the following nested for loop is copied from the export pattern data loop in ConvertPatterns.
+    // Most of the following nested for loop is copied from the export pattern data loop in DMFConvertPatterns.
     // I didn't want to do this, but I think having two of the same loop is the only simple way.
     // Loop through SQ1, SQ2, and WAVE channels:
     for (int chan = static_cast<int>(DMFGameBoyChannel::SQW1); chan <= static_cast<int>(DMFGameBoyChannel::WAVE); chan++)
@@ -352,12 +344,12 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
                 if (chan == DMFGameBoyChannel::NOISE)
                 {
                     modEffects = DMFConvertEffects_NoiseChannel(chanRow);
-                    UpdateStatePre(dmf, state, modEffects);
+                    DMFUpdateStatePre(dmf, state, modEffects);
                     continue;
                 }
 
                 modEffects = DMFConvertEffects(chanRow);
-                UpdateStatePre(dmf, state, modEffects);
+                DMFUpdateStatePre(dmf, state, modEffects);
                 auto extraModEffects = DMFGetAdditionalEffects(state, chanRow);
                 for (const auto& effectsPair : extraModEffects)
                 {
@@ -433,18 +425,6 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
             }
         }
     }
-
-    /*
-    // Deflemask allows GB notes lower than C-2, but they are all played as C-2, so I'm treating them as C-2
-    for (auto& mapPair : sampleIdLowestHighestNotesMap)
-    {
-        auto& lowestNote = mapPair.second.first;
-        if (lowestNote < MOD_LOWEST_POSSIBLE_NOTE)
-        {
-            lowestNote = MOD_LOWEST_POSSIBLE_NOTE;
-        }
-    }
-    */
 }
 
 void MOD::DMFSampleSplittingAndAssignment(SampleMap& sampleMap, const DMFSampleNoteRangeMap& sampleIdLowestHighestNotesMap)
@@ -458,7 +438,7 @@ void MOD::DMFSampleSplittingAndAssignment(SampleMap& sampleMap, const DMFSampleN
     for (auto& mapPair : sampleMap)
     {
         dmf_sample_id_t sampleId = mapPair.first;
-        SampleMapper& sampleMapper = mapPair.second;
+        DMFSampleMapper& sampleMapper = mapPair.second;
 
         // Special handling of silent sample
         if (sampleId == -1)
@@ -489,14 +469,14 @@ void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap)
     
     for (const auto& mapPair : sampleMap)
     {
-        dmf_sample_id_t modSampleId = mapPair.first;
-        const SampleMapper& sampleMapper = mapPair.second;
+        dmf_sample_id_t dmfSampleId = mapPair.first;
+        const DMFSampleMapper& sampleMapper = mapPair.second;
 
         const int totalNoteRanges = sampleMapper.GetNumMODSamples();        
 
         for (int noteRangeInt = 0; noteRangeInt < totalNoteRanges; noteRangeInt++)
         {
-            auto noteRange = static_cast<SampleMapper::NoteRange>(noteRangeInt);
+            auto noteRange = static_cast<DMFSampleMapper::NoteRange>(noteRangeInt);
 
             MODSample si;
 
@@ -509,7 +489,7 @@ void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap)
             si.name = "";
 
             // Set sample data specific to the sample type:
-            using SampleType = SampleMapper::SampleType;
+            using SampleType = DMFSampleMapper::SampleType;
             switch (sampleMapper.GetSampleType())
             {
                 case SampleType::Silence:
@@ -520,7 +500,7 @@ void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap)
 
                 case SampleType::Square:
                     si.name = "SQW, Duty ";
-                    switch (modSampleId)
+                    switch (dmfSampleId)
                     {
                         case 0: si.name += "12.5%"; break;
                         case 1: si.name += "25%"; break;
@@ -528,11 +508,11 @@ void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap)
                         case 3: si.name += "75%"; break;
                     }
                     si.volume = VolumeMax; // TODO: Optimize this?
-                    si.data = GenerateSquareWaveSample(modSampleId, si.length);
+                    si.data = GenerateSquareWaveSample(dmfSampleId, si.length);
                     break;
 
                 case SampleType::Wave:
-                    const int wavetableIndex = modSampleId - 4;
+                    const int wavetableIndex = dmfSampleId - 4;
 
                     si.name = "Wavetable #";
                     si.name += std::to_string(wavetableIndex);
@@ -545,7 +525,7 @@ void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap)
             }
 
             // Append note range text to the sample name:
-            using NoteRangeName = SampleMapper::NoteRangeName;
+            using NoteRangeName = DMFSampleMapper::NoteRangeName;
             switch (sampleMapper.GetMODNoteRangeName(noteRange))
             {
                 case NoteRangeName::None:
@@ -601,55 +581,48 @@ std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned le
     for (unsigned i = 0; i < length; i++)
     {
         // Note: For the Deflemask Game Boy system, all wavetable lengths are 32.
-        if (length == 256) // x8 length
+        // Converting from DMF sample values (0 to 15) to PT sample values (-128 to 127).
+        switch (length)
         {
-            // Convert from DMF sample values (0 to 15) to PT sample values (-128 to 127).
-            sample[i] = (int8_t)((wavetableData[i / 8] / 15.f * 255.f) - 128.f);
-        }
-        else if (length == 128) // Quadruple length
-        {
-            // Convert from DMF sample values (0 to 15) to PT sample values (-128 to 127).
-            sample[i] = (int8_t)((wavetableData[i / 4] / 15.f * 255.f) - 128.f);
-        }
-        else if (length == 64) // Double length
-        {
-            // Convert from DMF sample values (0 to 15) to PT sample values (-128 to 127).
-            sample[i] = (int8_t)((wavetableData[i / 2] / 15.f * 255.f) - 128.f);
-        }
-        else if (length == 32) // Normal length 
-        {
-            // Convert from DMF sample values (0 to 15) to PT sample values (-128 to 127).
-            sample[i] = (int8_t)((wavetableData[i] / 15.f * 255.f) - 128.f);
-        }
-        else if (length == 16) // Half length (loss of information)
-        {
-            // Take average of every two sample values to make new sample value
-            int avg = (int8_t)((wavetableData[i * 2] / 15.f * 255.f) - 128.f);
-            avg += (int8_t)((wavetableData[(i * 2) + 1] / 15.f * 255.f) - 128.f);
-            avg /= 2;
-            sample[i] = (int8_t)avg;
-        }
-        else if (length == 8) // Quarter length (loss of information)
-        {
-            // Take average of every four sample values to make new sample value
-            int avg = (int8_t)((wavetableData[i * 4] / 15.f * 255.f) - 128.f);
-            avg += (int8_t)((wavetableData[(i * 4) + 1] / 15.f * 255.f) - 128.f);
-            avg += (int8_t)((wavetableData[(i * 4) + 2] / 15.f * 255.f) - 128.f);
-            avg += (int8_t)((wavetableData[(i * 4) + 3] / 15.f * 255.f) - 128.f);
-            avg /= 4;
-            sample[i] = (int8_t)avg;
-        }
-        else
-        {
-            // ERROR: Invalid length
-            throw std::invalid_argument("Invalid value for length in GenerateWavetableSample(): " + std::to_string(length));
+            case 512: // x16
+                sample[i] = (int8_t)((wavetableData[i / 16] / 15.f * 255.f) - 128.f); break;
+            case 256: // x8
+                sample[i] = (int8_t)((wavetableData[i / 8] / 15.f * 255.f) - 128.f); break;
+            case 128: // x4
+                sample[i] = (int8_t)((wavetableData[i / 4] / 15.f * 255.f) - 128.f); break;
+            case 64:  // x2
+                sample[i] = (int8_t)((wavetableData[i / 2] / 15.f * 255.f) - 128.f); break;
+            case 32:  // Original length
+                sample[i] = (int8_t)((wavetableData[i] / 15.f * 255.f) - 128.f); break;
+            case 16:  // Half length (loss of information from downsampling)
+            {
+                // Take average of every two sample values to make new sample value
+                int avg = (int8_t)((wavetableData[i * 2] / 15.f * 255.f) - 128.f);
+                avg += (int8_t)((wavetableData[(i * 2) + 1] / 15.f * 255.f) - 128.f);
+                avg /= 2;
+                sample[i] = (int8_t)avg;
+                break;
+            }
+            case 8:   // Quarter length (loss of information from downsampling)
+            {
+                // Take average of every four sample values to make new sample value
+                int avg = (int8_t)((wavetableData[i * 4] / 15.f * 255.f) - 128.f);
+                avg += (int8_t)((wavetableData[(i * 4) + 1] / 15.f * 255.f) - 128.f);
+                avg += (int8_t)((wavetableData[(i * 4) + 2] / 15.f * 255.f) - 128.f);
+                avg += (int8_t)((wavetableData[(i * 4) + 3] / 15.f * 255.f) - 128.f);
+                avg /= 4;
+                sample[i] = (int8_t)avg;
+            }
+            default:
+                // ERROR: Invalid length
+                throw std::invalid_argument("Invalid value for length in GenerateWavetableSample(): " + std::to_string(length));
         }
     }
 
     return sample;
 }
 
-void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, SampleMapper>& sampleMap)
+void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
 {
     m_Patterns.assign(m_NumberOfRowsInPatternMatrix, {});
 
@@ -742,12 +715,12 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, Sam
                 if (chan == DMFGameBoyChannel::NOISE)
                 {
                     modEffects = DMFConvertEffects_NoiseChannel(chanRow);
-                    UpdateStatePre(dmf, state, modEffects);
+                    DMFUpdateStatePre(dmf, state, modEffects);
                 }
                 else
                 {
                     modEffects = DMFConvertEffects(chanRow);
-                    UpdateStatePre(dmf, state, modEffects);
+                    DMFUpdateStatePre(dmf, state, modEffects);
                     auto extraModEffects = DMFGetAdditionalEffects(state, chanRow);
                     for (const auto& effectsPair : extraModEffects)
                     {
@@ -757,7 +730,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, Sam
                     DMFConvertNote(state, chanRow, sampleMap, modEffects, modSampleId, period);
                 }
                 
-                MODChannelRow tempChannelRow = ApplyNoteAndEffect(state, modEffects, modSampleId, period);
+                MODChannelRow tempChannelRow = DMFApplyNoteAndEffect(state, modEffects, modSampleId, period);
                 SetChannelRow(patMatRow + (int)m_UsingSetupPattern, patRow, chan, tempChannelRow);
             }
 
@@ -777,87 +750,6 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const std::map<dmf_sample_id_t, Sam
         }
     }
 }
-
-// Updates Structure and Sample Change state info.
-void MOD::UpdateStatePre(const DMF& dmf, MODState& state, const MOD::PriorityEffectsMap& modEffects)
-{
-    MODChannelState& chanState = state.channel[state.global.channel];
-
-    // Update structure-related state info
-    
-    auto structureEffects = modEffects.equal_range(MODEffectPriority::EffectPriorityStructureRelated);
-    if (structureEffects.first != structureEffects.second && !state.global.suspended) // If structure effects exist and state isn't suspended
-    {
-        for (auto& iter = structureEffects.first; iter != structureEffects.second; ++iter)
-        {
-            auto effectCode = iter->second.effect;
-            auto effectValue = iter->second.value;
-
-            // If a PosJump / PatBreak command was found and it's not in a section skipped by another PosJump / PatBreak:
-            if (effectCode == DMFEffectCode::PosJump || (effectCode == DMFEffectCode::PatBreak && effectValue == 0))
-            {
-                // Convert MOD destination value to DMF destination value:
-                const int dest = effectCode == DMFEffectCode::PosJump ? effectValue - (int)m_UsingSetupPattern : state.global.order + 1;
-
-                if (dest < 0 || dest >= dmf.GetModuleInfo().totalRowsInPatternMatrix)
-                    throw std::invalid_argument("Invalid Position Jump or Pattern Break effect");
-                
-                if (dest >= (int)state.global.order) // If not a loop
-                {
-                    state.Save();
-                    state.global.jumpDestination = dest;
-                }
-            }
-        }
-    }
-
-    // Update duty cycle / wavetable state
-
-    auto sampleChangeEffects = modEffects.equal_range(MODEffectPriority::EffectPrioritySampleChange);
-    if (sampleChangeEffects.first != sampleChangeEffects.second)
-    {
-        for (auto& iter = sampleChangeEffects.first; iter != sampleChangeEffects.second; ++iter)
-        {
-            auto effectCode = iter->second.effect;
-            auto effectValue = iter->second.value;
-
-            if (effectCode == MODEffectCode::DutyCycleChange)
-            {
-                // Set Duty Cycle effect. Must be in square wave channel:
-                if (state.global.channel == DMFGameBoyChannel::SQW1 || state.global.channel == DMFGameBoyChannel::SQW2)
-                {
-                    if (effectValue >= 0 && effectValue < 4)
-                    {
-                        // Update state
-                        chanState.dutyCycle = effectValue;
-                        chanState.sampleChanged = true;
-                    }
-                }
-            }
-            else if (effectCode == MODEffectCode::WavetableChange)
-            {
-                // Set Wave effect. Must be in wave channel:
-                if (state.global.channel == DMFGameBoyChannel::WAVE)
-                {
-                    if (effectValue >= 0 && effectValue < dmf.GetTotalWavetables())
-                    {
-                        // Update state
-                        chanState.wavetable = effectValue;
-                        chanState.sampleChanged = true;
-                    }
-                }
-            }
-        }
-    }
-}
-
-/* 
-void MOD::UpdateStatePost(const DMF& dmf, MODState& state, const MOD::PriorityEffectsMap& modEffects)
-{
-    MODChannelState& chanState = state.channel[state.global.channel];
-
-}
-*/
 
 MOD::PriorityEffectsMap MOD::DMFConvertEffects(const DMFChannelRow& pat)
 {
@@ -955,6 +847,80 @@ MOD::PriorityEffectsMap MOD::DMFConvertEffects_NoiseChannel(const DMFChannelRow&
     return modEffects;
 }
 
+void MOD::DMFUpdateStatePre(const DMF& dmf, MODState& state, const MOD::PriorityEffectsMap& modEffects)
+{
+    // This method updates Structure and Sample Change state info.
+
+    MODChannelState& chanState = state.channel[state.global.channel];
+
+    // Update structure-related state info
+    
+    auto structureEffects = modEffects.equal_range(MODEffectPriority::EffectPriorityStructureRelated);
+    if (structureEffects.first != structureEffects.second && !state.global.suspended) // If structure effects exist and state isn't suspended
+    {
+        for (auto& iter = structureEffects.first; iter != structureEffects.second; ++iter)
+        {
+            auto effectCode = iter->second.effect;
+            auto effectValue = iter->second.value;
+
+            // If a PosJump / PatBreak command was found and it's not in a section skipped by another PosJump / PatBreak:
+            if (effectCode == DMFEffectCode::PosJump || (effectCode == DMFEffectCode::PatBreak && effectValue == 0))
+            {
+                // Convert MOD destination value to DMF destination value:
+                const int dest = effectCode == DMFEffectCode::PosJump ? effectValue - (int)m_UsingSetupPattern : state.global.order + 1;
+
+                if (dest < 0 || dest >= dmf.GetModuleInfo().totalRowsInPatternMatrix)
+                    throw std::invalid_argument("Invalid Position Jump or Pattern Break effect");
+                
+                if (dest >= (int)state.global.order) // If not a loop
+                {
+                    state.Save();
+                    state.global.jumpDestination = dest;
+                }
+            }
+        }
+    }
+
+    // Update duty cycle / wavetable state
+
+    auto sampleChangeEffects = modEffects.equal_range(MODEffectPriority::EffectPrioritySampleChange);
+    if (sampleChangeEffects.first != sampleChangeEffects.second)
+    {
+        for (auto& iter = sampleChangeEffects.first; iter != sampleChangeEffects.second; ++iter)
+        {
+            auto effectCode = iter->second.effect;
+            auto effectValue = iter->second.value;
+
+            if (effectCode == MODEffectCode::DutyCycleChange)
+            {
+                // Set Duty Cycle effect. Must be in square wave channel:
+                if (state.global.channel == DMFGameBoyChannel::SQW1 || state.global.channel == DMFGameBoyChannel::SQW2)
+                {
+                    if (effectValue >= 0 && effectValue < 4)
+                    {
+                        // Update state
+                        chanState.dutyCycle = effectValue;
+                        chanState.sampleChanged = true;
+                    }
+                }
+            }
+            else if (effectCode == MODEffectCode::WavetableChange)
+            {
+                // Set Wave effect. Must be in wave channel:
+                if (state.global.channel == DMFGameBoyChannel::WAVE)
+                {
+                    if (effectValue >= 0 && effectValue < dmf.GetTotalWavetables())
+                    {
+                        // Update state
+                        chanState.wavetable = effectValue;
+                        chanState.sampleChanged = true;
+                    }
+                }
+            }
+        }
+    }
+}
+
 MOD::PriorityEffectsMap MOD::DMFGetAdditionalEffects(MODState& state, const DMFChannelRow& pat)
 {
     PriorityEffectsMap modEffects;
@@ -976,6 +942,15 @@ MOD::PriorityEffectsMap MOD::DMFGetAdditionalEffects(MODState& state, const DMFC
 
     return modEffects;
 }
+
+/* 
+void MOD::UpdateStatePost(const DMF& dmf, MODState& state, const MOD::PriorityEffectsMap& modEffects)
+{
+    // Update volume-related state info?
+    MODChannelState& chanState = state.channel[state.global.channel];
+
+}
+*/
 
 MODNote MOD::DMFConvertNote(MODState& state, const DMFChannelRow& pat, const MOD::SampleMap& sampleMap, MOD::PriorityEffectsMap& modEffects, mod_sample_id_t& sampleId, uint16_t& period)
 {
@@ -1036,9 +1011,9 @@ MODNote MOD::DMFConvertNote(MODState& state, const DMFChannelRow& pat, const MOD
     {
         if (sampleMap.count(dmfSampleId) > 0)
         {
-            const SampleMapper& sampleMapper = sampleMap.at(dmfSampleId);
+            const DMFSampleMapper& sampleMapper = sampleMap.at(dmfSampleId);
             
-            SampleMapper::NoteRange noteRange;
+            DMFSampleMapper::NoteRange noteRange;
             modNote = sampleMapper.GetMODNote(dmfNote, noteRange);
 
             if (chanState.noteRange != noteRange)
@@ -1064,7 +1039,7 @@ MODNote MOD::DMFConvertNote(MODState& state, const DMFChannelRow& pat, const MOD
 
     if (chanState.sampleChanged || !chanState.notePlaying)
     {
-        const SampleMapper& samplerMapper = sampleMap.at(dmfSampleId);
+        const DMFSampleMapper& samplerMapper = sampleMap.at(dmfSampleId);
         sampleId = samplerMapper.GetMODSampleId(chanState.noteRange);
 
         chanState.sampleChanged = false; // Just changed the sample, so resetting this for next time.
@@ -1091,7 +1066,7 @@ MODNote MOD::DMFConvertNote(MODState& state, const DMFChannelRow& pat, const MOD
     return modNote;
 }
 
-MODChannelRow MOD::ApplyNoteAndEffect(MODState& state, const MOD::PriorityEffectsMap& modEffects, mod_sample_id_t modSampleId, uint16_t period)
+MODChannelRow MOD::DMFApplyNoteAndEffect(MODState& state, const MOD::PriorityEffectsMap& modEffects, mod_sample_id_t modSampleId, uint16_t period)
 {
     MODChannelRow modChannelRow;
 
@@ -1190,7 +1165,6 @@ MODChannelRow MOD::ApplyNoteAndEffect(MODState& state, const MOD::PriorityEffect
 
     return modChannelRow;
 }
-
 
 void MOD::DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed)
 {
@@ -1390,6 +1364,298 @@ void MOD::DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed)
     if (speed == 0)
         speed = 1; // Speed 0 and 1 are identical in ProTracker, but I prefer using 1.
 }
+
+///// DMF --> MOD Sample Mapper
+
+DMFSampleMapper::DMFSampleMapper()
+{
+    m_DmfId = -1;
+    m_ModIds[0] = 0;
+    m_ModIds[1] = 0;
+    m_ModIds[2] = 0;
+    m_ModSampleLengths[0] = 0;
+    m_ModSampleLengths[1] = 0;
+    m_ModSampleLengths[2] = 0;
+    m_RangeStart.clear();
+    m_NumMODSamples = 0;
+    m_SampleType = SampleType::Silence;
+    m_DownsamplingNeeded = false;
+    m_ModOctaveShift = 0;
+}
+
+mod_sample_id_t DMFSampleMapper::Init(dmf_sample_id_t dmfSampleId, mod_sample_id_t startingId, const std::pair<DMFNote, DMFNote>& dmfNoteRange)
+{
+    // Determines how to split up a DMF sample into MOD sample(s). Returns the next free MOD sample id.
+
+    // If it's a silent sample, use the special Init method for that:
+    if (dmfSampleId == -1)
+        return InitSilence();
+
+    // Else, it's a Square or WAVE sample
+    m_SampleType = dmfSampleId < 4 ? SampleType::Square : SampleType::Wave;
+    m_DmfId = dmfSampleId;
+
+    const DMFNote& lowestNote = dmfNoteRange.first;
+    const DMFNote& highestNote = dmfNoteRange.second;
+
+    // Note ranges always start on a C, so get nearest C note (in downwards direction):
+    const DMFNote lowestNoteNearestC = DMFNote(DMFNotePitch::C, lowestNote.octave);
+
+    // Get the number of MOD samples needed
+    const int range = DMFGetNoteRange(lowestNoteNearestC, highestNote);
+    if (range <= 36) // Only one MOD note range needed
+        m_NumMODSamples = 1;
+    else if (range <= 72)
+        m_NumMODSamples = 2;
+    else
+        m_NumMODSamples = 3;
+
+    m_RangeStart.clear();
+
+    // Initializing for 3 MOD samples is always the same:
+    if (m_NumMODSamples == 3)
+    {
+        m_RangeStart.emplace_back(DMFNotePitch::C, 0);
+        m_RangeStart.emplace_back(DMFNotePitch::C, 2);
+        m_RangeStart.emplace_back(DMFNotePitch::C, 5);
+        m_ModSampleLengths[0] = 256;
+        m_ModSampleLengths[1] = 64;
+        m_ModSampleLengths[2] = 8;
+
+        // For whatever reason, wave samples need to be transposed down one octave to match their sound in Deflemask
+        if (m_SampleType == SampleType::Wave)
+        {
+            m_ModSampleLengths[0] *= 2;
+            m_ModSampleLengths[1] *= 2;
+            m_ModSampleLengths[2] *= 2;
+        }
+
+        m_DownsamplingNeeded = m_SampleType == SampleType::Wave; // Only wavetables are downsampled
+        m_ModOctaveShift = 0;
+        m_ModIds[0] = startingId;
+        m_ModIds[1] = startingId + 1;
+        m_ModIds[2] = startingId + 2;
+        return startingId + 3;
+    }
+
+    // From here on, 1 or 2 MOD samples are needed
+
+    // If we can, shift RangeStart lower to possibly prevent the need for downsampling:
+    DMFNote lowestPossibleRangeStart = lowestNoteNearestC;
+    int possibleShiftAmount = 0;
+
+    DMFNote currentHighEnd = lowestNoteNearestC;
+    currentHighEnd.octave += 3;
+    if (m_NumMODSamples == 2)
+        currentHighEnd.octave += 3;
+
+    assert(currentHighEnd > highestNote);
+
+    const int highEndSlack = DMFGetNoteRange(highestNote, currentHighEnd);
+    if (highEndSlack > 12 && lowestNoteNearestC.octave >= 1) // 1 octave or more of slack at upper end, plus room to shift at bottom
+        possibleShiftAmount = 1; // Can shift MOD notes down 1 octave
+    if (highEndSlack > 24 && lowestNoteNearestC.octave >= 1) // 2 octaves of slack at upper end, plus room to shift at bottom
+        possibleShiftAmount = 2; // Can shift MOD notes down 2 octaves
+
+    // Apply octave shift
+    lowestPossibleRangeStart.octave -= possibleShiftAmount;
+    m_ModOctaveShift = possibleShiftAmount;
+
+    /*
+    TODO: Whenever shifting is possible and m_NumMODSamples > 1, overlapping
+        note ranges are possible. This hasn't been implemented, but within the
+        intersection of two note ranges, 2 different MOD samples would be valid.
+        If they were chosen intelligently, the number of sample changes (and
+        consequently channel volume resets) could be reduced, which could lead
+        to fewer necessary volume effects.
+    */
+
+    // Map of range start to required sample length:
+    // C-0 --> 256
+    // C-1 --> 128
+    // C-2 --> 64
+    // C-3 --> 32
+    // C-4 --> 16
+    // C-5 --> 8
+    // DMF wavetables are 32 samples long, so downsampling is needed for MOD sample lengths of 16 or 8.
+
+    unsigned rangeStartOctaveToSampleLengthMap[6] = 
+    {
+        256,
+        128,
+        64,
+        32,
+        16,
+        8
+    };
+
+    // Set Range Start and Sample Length for 1st MOD sample:
+    m_RangeStart.push_back(lowestPossibleRangeStart);
+    m_ModSampleLengths[0] = rangeStartOctaveToSampleLengthMap[m_RangeStart[0].octave];
+
+    // For whatever reason, wave samples need to be transposed down one octave to match their sound in Deflemask
+    if (m_SampleType == SampleType::Wave)
+        m_ModSampleLengths[0] *= 2;
+
+    m_DownsamplingNeeded = m_ModSampleLengths[0] < 32 && m_SampleType == SampleType::Wave;
+    m_ModIds[0] = startingId;
+
+    // Set Range Start and Sample Length for 2nd MOD sample (if it exists):
+    if (m_NumMODSamples == 2)
+    {
+        m_RangeStart.emplace_back(DMFNotePitch::C, lowestPossibleRangeStart.octave + 3);
+        m_ModSampleLengths[1] = rangeStartOctaveToSampleLengthMap[m_RangeStart[1].octave];
+
+        // For whatever reason, wave samples need to be transposed down one octave to match their sound in Deflemask
+        if (m_SampleType == SampleType::Wave)
+            m_ModSampleLengths[1] *= 2;
+
+        if (m_ModSampleLengths[1] < 32 && m_SampleType == SampleType::Wave)
+            m_DownsamplingNeeded = true;
+        
+        m_ModIds[1] = startingId + 1;
+        return startingId + 2; // Two MOD samples were needed
+    }
+    
+    return startingId + 1; // Only 1 MOD sample was needed
+}
+
+mod_sample_id_t DMFSampleMapper::InitSilence()
+{
+    // Set up for a silent sample
+    m_SampleType = SampleType::Silence;
+    m_RangeStart.clear();
+    m_NumMODSamples = 1;
+    m_ModSampleLengths[0] = 8;
+    m_DownsamplingNeeded = false;
+    m_ModOctaveShift = 0;
+    m_DmfId = -1;
+    m_ModIds[0] = 1; // Silent sample is always MOD sample #1
+    return 2; // The next available MOD sample id
+}
+
+MODNote DMFSampleMapper::GetMODNote(const DMFNote& dmfNote, NoteRange& modNoteRange) const
+{
+    // Returns the MOD note to use given a DMF note. Also returns which
+    //      MOD sample the MOD note needs to use. The MOD note's octave
+    //      and pitch should always be exactly what gets displayed in ProTracker.
+
+    MODNote modNote(DMFNotePitch::C, 0);
+    modNoteRange = NoteRange::First;
+
+    if (m_SampleType == SampleType::Silence)
+        return modNote;
+
+    modNoteRange = GetMODNoteRange(dmfNote);
+    const DMFNote& rangeStart = m_RangeStart[static_cast<int>(modNoteRange)];
+
+    modNote.pitch = dmfNote.pitch;
+    modNote.octave = dmfNote.octave - rangeStart.octave + 1;
+    // NOTE: The octave shift is already factored into rangeStart.
+    //          The "+ 1" is because MOD's range starts at C-1 not C-0.
+
+    assert(modNote.octave >= 1 && "MODNote octave is too low.");
+    assert(modNote.octave <= 3 && "MODNote octave is too high.");
+
+    return modNote;
+}
+
+DMFSampleMapper::NoteRange DMFSampleMapper::GetMODNoteRange(DMFNote dmfNote) const
+{
+    // Returns which MOD sample in the collection (1st, 2nd, or 3rd) should be used for the given DMF note
+    // Assumes dmfNote is a valid note for this MOD sample collection
+
+    if (m_NumMODSamples == 1)
+        return NoteRange::First; // The only option
+
+    const uint16_t& octaveOfNearestC = dmfNote.octave;
+
+    if (octaveOfNearestC < m_RangeStart[1].octave)
+    {
+        // It is the lowest MOD sample
+        return NoteRange::First;
+    }
+    else if (m_NumMODSamples == 2)
+    {
+        // The only other option when there are just two choices is the 2nd one
+        return NoteRange::Second;
+    }
+    else if (octaveOfNearestC < m_RangeStart[2].octave)
+    {
+        // Must be the middle of the 3 MOD samples
+        return NoteRange::Second;
+    }
+    else
+    {
+        // Last option
+        return NoteRange::Third;
+    }
+}
+
+mod_sample_id_t DMFSampleMapper::GetMODSampleId(DMFNote dmfNote) const
+{
+    // Returns the MOD sample id that would be used for the given DMF note
+    // Assumes dmfNote is a valid note for this MOD sample collection
+    const NoteRange noteRange = GetMODNoteRange(dmfNote);
+    return GetMODSampleId(noteRange);
+}
+
+mod_sample_id_t DMFSampleMapper::GetMODSampleId(NoteRange modNoteRange) const
+{
+    // Returns the MOD sample id of the given MOD sample in the collection (1st, 2nd, or 3rd)
+    const int modNoteRangeInt = static_cast<int>(modNoteRange);
+    if (modNoteRangeInt + 1 > m_NumMODSamples)
+        throw std::invalid_argument("In SampleMapper::GetMODSampleId: The provided MOD note range is invalid for this SampleMapper object.");
+
+    return m_ModIds[modNoteRangeInt];
+}
+
+unsigned DMFSampleMapper::GetMODSampleLength(NoteRange modNoteRange) const
+{
+    // Returns the sample length of the given MOD sample in the collection (1st, 2nd, or 3rd)
+    const int modNoteRangeInt = static_cast<int>(modNoteRange);
+    if (modNoteRangeInt + 1 > m_NumMODSamples)
+        throw std::invalid_argument("In SampleMapper::GetMODSampleLength: The provided MOD note range is invalid for this SampleMapper object.");
+
+    return m_ModSampleLengths[modNoteRangeInt];
+}
+
+DMFSampleMapper::NoteRange DMFSampleMapper::GetMODNoteRange(mod_sample_id_t modSampleId) const
+{
+    // Returns note range (1st, 2nd, or 3rd MOD sample in the collection) given the MOD sample id
+    switch (modSampleId - m_ModIds[0])
+    {
+        case 0:
+            return NoteRange::First;
+        case 1:
+            return NoteRange::Second;
+        case 2:
+            return NoteRange::Third;
+        default:
+            throw std::invalid_argument("In SampleMapper::GetMODNoteRange: The provided MOD sample id was invalid for this SampleMapper object.");
+    }
+}
+
+DMFSampleMapper::NoteRangeName DMFSampleMapper::GetMODNoteRangeName(NoteRange modNoteRange) const
+{
+    // Gets NoteRange which can be used for printing purposes
+    switch (modNoteRange)
+    {
+        case NoteRange::First:
+            if (m_NumMODSamples == 1)
+                return NoteRangeName::None;
+            return NoteRangeName::Low;
+        case NoteRange::Second:
+            if (m_NumMODSamples == 2)
+                return NoteRangeName::High;
+            return NoteRangeName::Middle;
+        case NoteRange::Third:
+            return NoteRangeName::High;
+        default:
+            throw std::invalid_argument("In SampleMapper::GetMODNoteRangeName: The provided MOD note range is invalid for this SampleMapper object.");
+    }
+}
+
 
 ///////// EXPORT /////////
 
@@ -1667,220 +1933,3 @@ DMFNote MODNote::ToDMFNote() const
     return n;
 }
 
-mod_sample_id_t SampleMapper::Init(dmf_sample_id_t dmfSampleId, mod_sample_id_t startingId, const std::pair<DMFNote, DMFNote>& dmfNoteRange)
-{
-    // Returns the next free MOD sample id.
-
-    // If it's a silent sample, use the special Init method for that:
-    if (dmfSampleId == -1)
-        return InitSilence();
-
-    // Else, it's a Square or WAVE sample
-    m_SampleType = dmfSampleId < 4 ? SampleType::Square : SampleType::Wave;
-    m_DmfId = dmfSampleId;
-
-    const DMFNote& lowestNote = dmfNoteRange.first;
-    const DMFNote& highestNote = dmfNoteRange.second;
-
-    // Note ranges always start on a C, so get nearest C note:
-    const DMFNote lowestNoteNearestC = DMFNote(DMFNotePitch::C, lowestNote.octave);
-
-    // Get the number of MOD samples needed
-    const int range = DMFGetNoteRange(lowestNoteNearestC, highestNote);
-    if (range < 36) // Only one MOD note range needed
-        m_NumMODSamples = 1;
-    else if (range < 72)
-        m_NumMODSamples = 2;
-    else
-        m_NumMODSamples = 3;
-
-    m_RangeStart.clear();
-
-    // Initializing for 3 MOD samples is always the same:
-    if (m_NumMODSamples == 3)
-    {
-        m_RangeStart.emplace_back(DMFNotePitch::C, 0);
-        m_RangeStart.emplace_back(DMFNotePitch::C, 2);
-        m_RangeStart.emplace_back(DMFNotePitch::C, 5);
-        m_ModSampleLengths[0] = 256;
-        m_ModSampleLengths[1] = 64;
-        m_ModSampleLengths[2] = 8;
-        m_DownsamplingNeeded = m_SampleType == SampleType::Wave; // Only wavetables are downsampled
-        m_ModIds[0] = startingId;
-        m_ModIds[1] = startingId + 1;
-        m_ModIds[2] = startingId + 2;
-        return startingId + 3;
-    }
-
-    // From here on, 1 or 2 MOD samples are needed
-
-    // If we can, shift RangeStart lower to possibly prevent the need for downsampling:
-    DMFNote lowestPossibleRangeStart = lowestNoteNearestC;
-    int possibleShiftAmount = 0;
-    if (range < 24 && lowestNoteNearestC.octave >= 1) // 2 octave range
-        possibleShiftAmount -= 1; // Can shift MOD notes down 1 octave
-    if (range < 12 && lowestNoteNearestC.octave >= 2) // 1 octave range
-        possibleShiftAmount -= 2; // Can shift MOD notes down 2 octaves
-    
-    // Apply octave shift
-    lowestPossibleRangeStart.octave += possibleShiftAmount;
-
-    // Map of range start to required sample length:
-    // C-0 --> 256
-    // C-1 --> 128
-    // C-2 --> 64
-    // C-3 --> 32
-    // C-4 --> 16
-    // C-5 --> 8
-    // DMF wavetables are 32 samples long, so downsampling is needed for MOD sample lengths of 16 or 8.
-
-    unsigned rangeStartOctaveToSampleLengthMap[6] = 
-    {
-        256,
-        128,
-        64,
-        32,
-        16,
-        8
-    };
-
-    // Set Range Start and Sample Length for 1st MOD sample:
-    m_RangeStart.push_back(lowestPossibleRangeStart);
-    m_ModSampleLengths[0] = rangeStartOctaveToSampleLengthMap[m_RangeStart[0].octave];
-    m_DownsamplingNeeded = m_ModSampleLengths[0] < 32 && m_SampleType == SampleType::Wave;
-    m_ModIds[0] = startingId;
-
-    // Set Range Start and Sample Length for 2nd MOD sample (if it exists):
-    if (m_NumMODSamples == 2)
-    {
-        m_RangeStart.emplace_back(DMFNotePitch::C, lowestPossibleRangeStart.octave + 3);
-        m_ModSampleLengths[1] = rangeStartOctaveToSampleLengthMap[m_RangeStart[1].octave];
-        if (m_ModSampleLengths[1] < 32 && m_SampleType == SampleType::Wave)
-            m_DownsamplingNeeded = true;
-        
-        m_ModIds[1] = startingId + 1;
-        return startingId + 2; // Two MOD samples were needed
-    }
-    
-    return startingId + 1; // Only 1 MOD sample was needed
-}
-
-mod_sample_id_t SampleMapper::InitSilence()
-{
-    m_SampleType = SampleType::Silence;
-    m_RangeStart.clear();
-    m_NumMODSamples = 1;
-    m_ModSampleLengths[0] = 8;
-    m_DownsamplingNeeded = false;
-    m_DmfId = -1;
-    m_ModIds[0] = 1; // Silent sample is always MOD sample #1
-    return 2; // The next available MOD sample id
-}
-
-MODNote SampleMapper::GetMODNote(const DMFNote& dmfNote, NoteRange& modNoteRange) const
-{
-    MODNote modNote(DMFNotePitch::C, 0);
-    modNoteRange = NoteRange::First;
-
-    if (m_SampleType == SampleType::Silence)
-        return modNote;
-
-    modNoteRange = GetMODNoteRange(dmfNote);
-    const DMFNote& rangeStart = m_RangeStart[static_cast<int>(modNoteRange)];
-
-    modNote.pitch = dmfNote.pitch;
-    modNote.octave = dmfNote.octave - rangeStart.octave;
-
-    return modNote;
-}
-
-SampleMapper::NoteRange SampleMapper::GetMODNoteRange(DMFNote dmfNote) const
-{
-    // Assumes dmfNote is a valid note for this MOD sample collection
-
-    if (m_NumMODSamples == 1)
-        return NoteRange::First; // The only option
-
-    const uint16_t& octaveOfNearestC = dmfNote.octave;
-
-    if (octaveOfNearestC < m_RangeStart[1].octave)
-    {
-        // It is the lowest MOD sample
-        return NoteRange::First;
-    }
-    else if (m_NumMODSamples == 2)
-    {
-        // The only other option when there are just two choices is the 2nd one
-        return NoteRange::Second;
-    }
-    else if (octaveOfNearestC < m_RangeStart[2].octave)
-    {
-        // Must be the middle of the 3 MOD samples
-        return NoteRange::Second;
-    }
-    else
-    {
-        // Last option
-        return NoteRange::Third;
-    }
-}
-
-mod_sample_id_t SampleMapper::GetMODSampleId(DMFNote dmfNote) const
-{
-    // Assumes dmfNote is a valid note for this MOD sample collection
-    const NoteRange noteRange = GetMODNoteRange(dmfNote);
-    return GetMODSampleId(noteRange);
-}
-
-mod_sample_id_t SampleMapper::GetMODSampleId(NoteRange modNoteRange) const
-{
-    const int modNoteRangeInt = static_cast<int>(modNoteRange);
-    if (modNoteRangeInt + 1 > m_NumMODSamples)
-        throw std::invalid_argument("In SampleMapper::GetMODSampleId: The provided MOD note range is invalid for this SampleMapper object.");
-
-    return m_ModIds[modNoteRangeInt];
-}
-
-unsigned SampleMapper::GetMODSampleLength(NoteRange modNoteRange) const
-{
-    const int modNoteRangeInt = static_cast<int>(modNoteRange);
-    if (modNoteRangeInt + 1 > m_NumMODSamples)
-        throw std::invalid_argument("In SampleMapper::GetMODSampleLength: The provided MOD note range is invalid for this SampleMapper object.");
-
-    return m_ModSampleLengths[modNoteRangeInt];
-}
-
-SampleMapper::NoteRange SampleMapper::GetMODNoteRange(mod_sample_id_t modSampleId) const
-{
-    switch (modSampleId - m_ModIds[0])
-    {
-        case 0:
-            return NoteRange::First;
-        case 1:
-            return NoteRange::Second;
-        case 2:
-            return NoteRange::Third;
-        default:
-            throw std::invalid_argument("In SampleMapper::GetMODNoteRange: The provided MOD sample id was invalid for this SampleMapper object.");
-    }
-}
-
-SampleMapper::NoteRangeName SampleMapper::GetMODNoteRangeName(NoteRange modNoteRange) const
-{
-    // Gets NoteRange which can be used for printing purposes
-    switch (modNoteRange)
-    {
-        case NoteRange::First:
-            if (m_NumMODSamples == 1)
-                return NoteRangeName::None;
-            return NoteRangeName::Low;
-        case NoteRange::Second:
-            if (m_NumMODSamples == 2)
-                return NoteRangeName::High;
-            return NoteRangeName::Middle;
-        case NoteRange::Third:
-            return NoteRangeName::High;
-        default:
-            throw std::invalid_argument("In SampleMapper::GetMODNoteRangeName: The provided MOD note range is invalid for this SampleMapper object.");
-    }
-}

@@ -35,6 +35,7 @@ REGISTER_MODULE_CPP(MOD, MODConversionOptions, ModuleType::MOD, "mod", MODOption
 
 static std::vector<int8_t> GenerateSquareWaveSample(unsigned dutyCycle, unsigned length);
 static std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned length);
+static int16_t GetNewDMFVolume(int16_t dmfRowVol, const MODChannelState& state);
 
 static std::string GetWarningMessage(MOD::ConvertWarning warning);
 
@@ -45,6 +46,7 @@ static unsigned GCD(unsigned u, unsigned v);
 //      tracker stores for each channel while playing a tracker file.
 struct MODChannelState
 {
+    int channel;
     uint8_t dutyCycle;
     uint8_t wavetable;
     bool sampleChanged; // MOD sample
@@ -85,6 +87,7 @@ struct MODState
 
         for (int i = 0; i < 4; i++)
         {
+            channel[i].channel = i;
             channel[i].dutyCycle = 0; // Default is 0 or a 12.5% duty cycle square wave.
             channel[i].wavetable = 0; // Default is wavetable #0.
             channel[i].sampleChanged = true; // Whether dutyCycle or wavetable recently changed
@@ -96,7 +99,7 @@ struct MODState
         }
     }
 
-    void Save()
+    void Save(unsigned jumpDestination)
     {
         // Save copy of channel states
         for (int i = 0; i < 4; i++)
@@ -104,6 +107,7 @@ struct MODState
             channelCopy[i] = channel[i];
         }
         global.suspended = true;
+        global.jumpDestination = (int)jumpDestination;
     }
 
     void Restore()
@@ -350,11 +354,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
 
                 modEffects = DMFConvertEffects(chanRow);
                 DMFUpdateStatePre(dmf, state, modEffects);
-                auto extraModEffects = DMFGetAdditionalEffects(state, chanRow);
-                for (const auto& effectsPair : extraModEffects)
-                {
-                    modEffects.insert(effectsPair);
-                }
+                DMFGetAdditionalEffects(state, chanRow, modEffects);
 
                 //DMFConvertNote(state, chanRow, sampleMap, modEffects, modSampleId, period);
 
@@ -517,7 +517,8 @@ void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap)
                     si.name = "Wavetable #";
                     si.name += std::to_string(wavetableIndex);
                 
-                    si.volume = VolumeMax; // TODO: Optimize this?
+                    const int modWaveVolumeMax = std::round(12 / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
+                    si.volume = modWaveVolumeMax; // WAVE max volume is slightly lower. TODO: Optimize this?
 
                     uint32_t* wavetableData = dmf.GetWavetableValues()[wavetableIndex];
                     si.data = GenerateWavetableSample(wavetableData, si.length);
@@ -721,12 +722,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
                 {
                     modEffects = DMFConvertEffects(chanRow);
                     DMFUpdateStatePre(dmf, state, modEffects);
-                    auto extraModEffects = DMFGetAdditionalEffects(state, chanRow);
-                    for (const auto& effectsPair : extraModEffects)
-                    {
-                        modEffects.insert(effectsPair);
-                    }
-
+                    DMFGetAdditionalEffects(state, chanRow, modEffects);
                     DMFConvertNote(state, chanRow, sampleMap, modEffects, modSampleId, period);
                 }
                 
@@ -874,8 +870,7 @@ void MOD::DMFUpdateStatePre(const DMF& dmf, MODState& state, const MOD::Priority
                 
                 if (dest >= (int)state.global.order) // If not a loop
                 {
-                    state.Save();
-                    state.global.jumpDestination = dest;
+                    state.Save(dest);
                 }
             }
         }
@@ -896,7 +891,7 @@ void MOD::DMFUpdateStatePre(const DMF& dmf, MODState& state, const MOD::Priority
                 // Set Duty Cycle effect. Must be in square wave channel:
                 if (state.global.channel == DMFGameBoyChannel::SQW1 || state.global.channel == DMFGameBoyChannel::SQW2)
                 {
-                    if (effectValue >= 0 && effectValue < 4)
+                    if (effectValue >= 0 && effectValue < 4 && chanState.dutyCycle != effectValue)
                     {
                         // Update state
                         chanState.dutyCycle = effectValue;
@@ -909,7 +904,7 @@ void MOD::DMFUpdateStatePre(const DMF& dmf, MODState& state, const MOD::Priority
                 // Set Wave effect. Must be in wave channel:
                 if (state.global.channel == DMFGameBoyChannel::WAVE)
                 {
-                    if (effectValue >= 0 && effectValue < dmf.GetTotalWavetables())
+                    if (effectValue >= 0 && effectValue < dmf.GetTotalWavetables() && chanState.wavetable != effectValue)
                     {
                         // Update state
                         chanState.wavetable = effectValue;
@@ -921,26 +916,52 @@ void MOD::DMFUpdateStatePre(const DMF& dmf, MODState& state, const MOD::Priority
     }
 }
 
-MOD::PriorityEffectsMap MOD::DMFGetAdditionalEffects(MODState& state, const DMFChannelRow& pat)
+static inline int16_t GetNewDMFVolume(int16_t dmfRowVol, const MODChannelState& state)
 {
-    PriorityEffectsMap modEffects;
+    if (state.channel != DMFGameBoyChannel::WAVE)
+        return dmfRowVol == DMFNoVolume ? state.volume : dmfRowVol;
 
+    switch (dmfRowVol)
+    {
+        case DMFNoVolume: // Volume isn't set for this channel row
+            return state.volume; // channel's volume
+        case 0: case 1: case 2: case 3:
+            return 0;
+        case 4: case 5: case 6: case 7:
+            return 4;
+        case 8: case 9: case 10: case 11:
+            return 8;
+        case 12: case 13: case 14: case 15:
+            return 12;
+        default:
+            assert(false && "Invalid DMF volume");
+            return -1;
+    }
+}
+
+void MOD::DMFGetAdditionalEffects(MODState& state, const DMFChannelRow& pat, PriorityEffectsMap& modEffects)
+{
     MODChannelState& chanState = state.channel[state.global.channel];
     
-    // Add volume change effect if needed. TODO: Use volume optimization later
-    if (chanState.sampleChanged || (pat.volume != chanState.volume && pat.volume != DMFNoVolume)) // If volume changed
+    // Determine what the volume should be for this channel
+    const int16_t newChanVol = GetNewDMFVolume(pat.volume, chanState);
+
+    // If the volume or sample changed. If the sample changed, the MOD volume resets, so volume needs to be set again. TODO: Can optimize later.
+    if (newChanVol != chanState.volume)
     {
-        if (pat.note.HasPitch() || chanState.notePlaying) // If a note is playing
+        // The WAVE channel volume changes whether a note is attached or not, but SQ1/SQ2 need a note
+        if (chanState.channel == DMFGameBoyChannel::WAVE || pat.note.HasPitch())
         {
-            uint8_t newVolume = std::round(pat.volume / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
+            uint8_t newVolume = std::round(newChanVol / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
 
             modEffects.insert({EffectPriorityVolumeChange, {MODEffectCode::SetVolume, newVolume}});
 
-            chanState.volume = pat.volume; // Update the state
+            chanState.volume = newChanVol; // Update the state
         }
     }
+    
+    // The sample change case is handled in DMFConvertNote.
 
-    return modEffects;
 }
 
 /* 
@@ -1044,17 +1065,21 @@ MODNote MOD::DMFConvertNote(MODState& state, const DMFChannelRow& pat, const MOD
 
         chanState.sampleChanged = false; // Just changed the sample, so resetting this for next time.
         
-        // When you change ProTracker samples, the channel volume resets, so 
-        //  if there are still no effects being used on this pattern row, 
-        //  use a volume change effect to set the volume to where it needs to be.
-
-        if (chanState.volume != DMFVolumeMax) // Currently, the default volume for all sample is the maximum. TODO: Can optimize
+        // If a volume change effect isn't already present
+        if (modEffects.find(MODEffectPriority::EffectPriorityVolumeChange) == modEffects.end())
         {
-            uint8_t newVolume = std::round(chanState.volume / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
+            // When you change ProTracker samples, the channel volume resets, so
+            //  we need to check if a volume change effect is needed to get the volume back to where it was.
 
-            modEffects.insert({EffectPriorityVolumeChange, {MODEffectCode::SetVolume, newVolume}});
+            const int16_t channelMaxVolume = chanState.channel == DMFGameBoyChannel::WAVE ? 12 : DMFVolumeMax;
+            if (chanState.volume != channelMaxVolume) // Currently, the default volume for all samples is the channel maximum. TODO: Can optimize
+            {
+                uint8_t newVolume = std::round(chanState.volume / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
 
-            // TODO: If the default volume of the sample is selected in a smart way, we could potentially skip having to use a volume effect sometimes
+                modEffects.insert({EffectPriorityVolumeChange, {MODEffectCode::SetVolume, newVolume}});
+
+                // TODO: If the default volume of the sample is selected in a smart way, we could potentially skip having to use a volume effect sometimes
+            }
         }
     }
     else

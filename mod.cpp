@@ -70,6 +70,8 @@ struct MODState
     MODChannelState channel[4];
     MODChannelState channelCopy[4];
 
+    MODChannelRow channelRows[4];
+
     MODState()
     {
         Init();
@@ -96,6 +98,7 @@ struct MODState
             channel[i].noteRange = DMFSampleMapper::NoteRange::First; // Which MOD sample note range is currently being used
 
             channelCopy[i] = channel[i];
+            channelRows[i] = {};
         }
     }
 
@@ -354,7 +357,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
 
                 modEffects = DMFConvertEffects(chanRow);
                 DMFUpdateStatePre(dmf, state, modEffects);
-                DMFGetAdditionalEffects(state, chanRow, modEffects);
+                DMFGetAdditionalEffects(dmf, state, chanRow, modEffects);
 
                 //DMFConvertNote(state, chanRow, sampleMap, modEffects, modSampleId, period);
 
@@ -517,8 +520,7 @@ void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap)
                     si.name = "Wavetable #";
                     si.name += std::to_string(wavetableIndex);
                 
-                    const int modWaveVolumeMax = std::round(12 / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
-                    si.volume = modWaveVolumeMax; // WAVE max volume is slightly lower. TODO: Optimize this?
+                    si.volume = VolumeMax; // TODO: Optimize this?
 
                     uint32_t* wavetableData = dmf.GetWavetableValues()[wavetableIndex];
                     si.data = GenerateWavetableSample(wavetableData, si.length);
@@ -579,6 +581,8 @@ std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned le
     std::vector<int8_t> sample;
     sample.assign(length, 0);
 
+    const float maxVolCap = 12.f / 15.f; // Set WAVE max volume to 12/15 of potential max volume to emulate DMF wave channel
+
     for (unsigned i = 0; i < length; i++)
     {
         // Note: For the Deflemask Game Boy system, all wavetable lengths are 32.
@@ -586,33 +590,27 @@ std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned le
         switch (length)
         {
             case 512: // x16
-                sample[i] = (int8_t)((wavetableData[i / 16] / 15.f * 255.f) - 128.f); break;
+                sample[i] = (int8_t)(((wavetableData[i / 16] / 15.f * 255.f) - 128.f) * maxVolCap); break;
             case 256: // x8
-                sample[i] = (int8_t)((wavetableData[i / 8] / 15.f * 255.f) - 128.f); break;
+                sample[i] = (int8_t)(((wavetableData[i / 8] / 15.f * 255.f) - 128.f) * maxVolCap); break;
             case 128: // x4
-                sample[i] = (int8_t)((wavetableData[i / 4] / 15.f * 255.f) - 128.f); break;
+                sample[i] = (int8_t)(((wavetableData[i / 4] / 15.f * 255.f) - 128.f) * maxVolCap); break;
             case 64:  // x2
-                sample[i] = (int8_t)((wavetableData[i / 2] / 15.f * 255.f) - 128.f); break;
+                sample[i] = (int8_t)(((wavetableData[i / 2] / 15.f * 255.f) - 128.f) * maxVolCap); break;
             case 32:  // Original length
-                sample[i] = (int8_t)((wavetableData[i] / 15.f * 255.f) - 128.f); break;
+                sample[i] = (int8_t)(((wavetableData[i] / 15.f * 255.f) - 128.f) * maxVolCap); break;
             case 16:  // Half length (loss of information from downsampling)
             {
                 // Take average of every two sample values to make new sample value
-                int avg = (int8_t)((wavetableData[i * 2] / 15.f * 255.f) - 128.f);
-                avg += (int8_t)((wavetableData[(i * 2) + 1] / 15.f * 255.f) - 128.f);
-                avg /= 2;
-                sample[i] = (int8_t)avg;
+                const unsigned sum = wavetableData[i * 2] + wavetableData[(i * 2) + 1];
+                sample[i] = (int8_t)(((sum / (15.f * 2) * 255.f) - 128.f) * maxVolCap);
                 break;
             }
             case 8:   // Quarter length (loss of information from downsampling)
             {
                 // Take average of every four sample values to make new sample value
-                int avg = (int8_t)((wavetableData[i * 4] / 15.f * 255.f) - 128.f);
-                avg += (int8_t)((wavetableData[(i * 4) + 1] / 15.f * 255.f) - 128.f);
-                avg += (int8_t)((wavetableData[(i * 4) + 2] / 15.f * 255.f) - 128.f);
-                avg += (int8_t)((wavetableData[(i * 4) + 3] / 15.f * 255.f) - 128.f);
-                avg /= 4;
-                sample[i] = (int8_t)avg;
+                const unsigned sum = wavetableData[i * 4] + wavetableData[(i * 4) + 1] + wavetableData[(i * 4) + 2] + wavetableData[(i * 4) + 3];
+                sample[i] = (int8_t)(((sum / (15.f * 4) * 255.f) - 128.f) * maxVolCap);
             }
             default:
                 // ERROR: Invalid length
@@ -657,7 +655,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
         posJumpRow.EffectCode = MODEffectCode::PatBreak;
         posJumpRow.EffectValue = 0;
         SetChannelRow(0, 0, 2, posJumpRow);
-
+        
         // All other channel rows in the pattern are already zeroed out so nothing needs to be done for them
     }
 
@@ -693,7 +691,11 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
             if (dmfTotalRowsPerPattern < 64 && patRow + 1 == dmfTotalRowsPerPattern /*&& !stateSuspended*/)
                 state.global.channelIndependentEffect = {MODEffectCode::PatBreak, 0};
 
-            //MODChannelRow tempChannelRows[4];
+            // Clear channel rows
+            for (unsigned chan = 0; chan < m_NumberOfChannels; chan++)
+            {
+                state.channelRows[chan] = {};
+            }
 
             // Loop through channels:
             for (unsigned chan = 0; chan < m_NumberOfChannels; chan++)
@@ -701,7 +703,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
                 state.global.channel = chan;
 
                 DMFChannelRow chanRow = dmf.GetChannelRow(chan, patMatRow, patRow);
-
+                
                 // If just arrived at jump destination:
                 if (patMatRow == state.global.jumpDestination && patRow == 0 && state.global.suspended)
                 {
@@ -722,12 +724,17 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
                 {
                     modEffects = DMFConvertEffects(chanRow);
                     DMFUpdateStatePre(dmf, state, modEffects);
-                    DMFGetAdditionalEffects(state, chanRow, modEffects);
+                    DMFGetAdditionalEffects(dmf, state, chanRow, modEffects);
                     DMFConvertNote(state, chanRow, sampleMap, modEffects, modSampleId, period);
                 }
                 
-                MODChannelRow tempChannelRow = DMFApplyNoteAndEffect(state, modEffects, modSampleId, period);
-                SetChannelRow(patMatRow + (int)m_UsingSetupPattern, patRow, chan, tempChannelRow);
+                state.channelRows[chan] = DMFApplyNoteAndEffect(state, modEffects, modSampleId, period);
+            }
+
+            // Set the channel rows for the current pattern row all at once
+            for (unsigned chan = 0; chan < m_NumberOfChannels; chan++)
+            {
+                SetChannelRow(patMatRow + (int)m_UsingSetupPattern, patRow, chan, state.channelRows[chan]);
             }
 
             // TODO: Better channel independent effects implementation
@@ -850,7 +857,7 @@ void MOD::DMFUpdateStatePre(const DMF& dmf, MODState& state, const MOD::Priority
     MODChannelState& chanState = state.channel[state.global.channel];
 
     // Update structure-related state info
-    
+
     auto structureEffects = modEffects.equal_range(MODEffectPriority::EffectPriorityStructureRelated);
     if (structureEffects.first != structureEffects.second && !state.global.suspended) // If structure effects exist and state isn't suspended
     {
@@ -928,18 +935,18 @@ static inline int16_t GetNewDMFVolume(int16_t dmfRowVol, const MODChannelState& 
         case 0: case 1: case 2: case 3:
             return 0;
         case 4: case 5: case 6: case 7:
-            return 4;
+            return 5;
         case 8: case 9: case 10: case 11:
-            return 8;
+            return 10;
         case 12: case 13: case 14: case 15:
-            return 12;
+            return 15;
         default:
             assert(false && "Invalid DMF volume");
             return -1;
     }
 }
 
-void MOD::DMFGetAdditionalEffects(MODState& state, const DMFChannelRow& pat, PriorityEffectsMap& modEffects)
+void MOD::DMFGetAdditionalEffects(const DMF& dmf, MODState& state, const DMFChannelRow& pat, PriorityEffectsMap& modEffects)
 {
     MODChannelState& chanState = state.channel[state.global.channel];
     
@@ -962,6 +969,35 @@ void MOD::DMFGetAdditionalEffects(MODState& state, const DMFChannelRow& pat, Pri
     
     // The sample change case is handled in DMFConvertNote.
 
+    // If we're at the very end of the song, in the 1st channel, and using the setup pattern
+    if (state.global.patternRow + 1 == dmf.GetModuleInfo().totalRowsPerPattern
+        && state.global.order + 1 == dmf.GetModuleInfo().totalRowsInPatternMatrix
+        && state.global.channel == DMFGameBoyChannel::SQW1
+        && m_UsingSetupPattern)
+    {
+        // Check whether DMF pattern row has any Pos Jump effects that loop back to earlier in the song
+        bool hasLoopback = false;
+        for (int chan = 0; chan < (int)DMFGameBoyChannel::WAVE; chan++)
+        {
+            DMFChannelRow tempChanRow = dmf.GetChannelRow(chan, state.global.order, state.global.patternRow);
+            for (const auto& effect : tempChanRow.effect)
+            {
+                if (effect.code == DMFEffectCode::PosJump && effect.value < (int)state.global.patternRow)
+                {
+                    hasLoopback = true;
+                    break;
+                }
+            }
+            if (hasLoopback)
+                break;
+        }
+
+        if (!hasLoopback)
+        {
+            // Add loopback so that song doesn't restart on the setup pattern
+            modEffects.insert({EffectPriorityStructureRelated, {MODEffectCode::PosJump, (uint16_t)1}});
+        }
+    }
 }
 
 /* 
@@ -1071,8 +1107,7 @@ MODNote MOD::DMFConvertNote(MODState& state, const DMFChannelRow& pat, const MOD
             // When you change ProTracker samples, the channel volume resets, so
             //  we need to check if a volume change effect is needed to get the volume back to where it was.
 
-            const int16_t channelMaxVolume = chanState.channel == DMFGameBoyChannel::WAVE ? 12 : DMFVolumeMax;
-            if (chanState.volume != channelMaxVolume) // Currently, the default volume for all samples is the channel maximum. TODO: Can optimize
+            if (chanState.volume != DMFVolumeMax) // Currently, the default volume for all samples is the maximum. TODO: Can optimize
             {
                 uint8_t newVolume = std::round(chanState.volume / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
 

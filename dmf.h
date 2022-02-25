@@ -22,7 +22,7 @@
 REGISTER_MODULE_HEADER(DMF, DMFConversionOptions)
 
 // Deflemask allows four effects columns per channel regardless of the system 
-#define MAX_EFFECTS_COLUMN_COUNT 4
+#define DMF_MAX_EFFECTS_COLUMN_COUNT 4
 
 enum class DMFNotePitch
 {
@@ -199,7 +199,7 @@ struct DMFChannelRow
 {
     DMFNote note;
     int16_t volume;
-    DMFEffect effect[MAX_EFFECTS_COLUMN_COUNT];
+    DMFEffect effect[DMF_MAX_EFFECTS_COLUMN_COUNT];
     int16_t instrument;
 };
 

@@ -294,7 +294,7 @@ private:
     PriorityEffectsMap DMFConvertEffects(const DMFChannelRow& pat);
     PriorityEffectsMap DMFConvertEffects_NoiseChannel(const DMFChannelRow& pat);
     void DMFUpdateStatePre(const DMF& dmf, MODState& state, const PriorityEffectsMap& modEffects);
-    void DMFGetAdditionalEffects(MODState& state, const DMFChannelRow& pat, PriorityEffectsMap& modEffects);
+    void DMFGetAdditionalEffects(const DMF& dmf, MODState& state, const DMFChannelRow& pat, PriorityEffectsMap& modEffects);
     //void UpdateStatePost(const DMF& dmf, MODState& state, const PriorityEffectsMap& modEffects);
     MODNote DMFConvertNote(MODState& state, const DMFChannelRow& pat, const SampleMap& sampleMap, PriorityEffectsMap& modEffects, mod_sample_id_t& sampleId, uint16_t& period);
     MODChannelRow DMFApplyNoteAndEffect(MODState& state, const PriorityEffectsMap& modEffects, mod_sample_id_t modSampleId, uint16_t period);

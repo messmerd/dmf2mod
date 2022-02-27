@@ -8,14 +8,17 @@ on:
 
 jobs:
   deploy:
-    runs-on: macos-latest
+    runs-on: ubuntu-20.04
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
     steps:
       - uses: actions/checkout@v2
       
       - name: Setup Emscripten
-        uses: mymindstorm/setup-emsdk@v9
+        uses: mymindstorm/setup-emsdk@v11
+        with:
+          version: 'latest'
+          actions-cache-folder: 'emsdk-cache'
 
       - name: Verify Emscripten
         run: emcc -v

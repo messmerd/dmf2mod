@@ -119,7 +119,7 @@ template <typename T,
     std::is_same<std::underlying_type_t<T>, int>{}>>
 bool operator==(int lhs, const T& rhs)
 {
-    return lhs == static_cast<uint16_t>(rhs);
+    return lhs == static_cast<int>(rhs);
 }
 
 template <typename T,
@@ -127,7 +127,23 @@ template <typename T,
     std::is_same<std::underlying_type_t<T>, int>{}>>
 bool operator!=(int lhs, const T& rhs)
 {
-    return lhs != static_cast<uint16_t>(rhs);
+    return lhs != static_cast<int>(rhs);
+}
+
+template <typename T,
+    class = typename std::enable_if<std::is_enum<T>{} &&
+    std::is_same<std::underlying_type_t<T>, int>{}>>
+bool operator==(uint16_t lhs, const T& rhs)
+{
+    return lhs == static_cast<int>(rhs);
+}
+
+template <typename T,
+    class = typename std::enable_if<std::is_enum<T>{} &&
+    std::is_same<std::underlying_type_t<T>, int>{}>>
+bool operator!=(uint16_t lhs, const T& rhs)
+{
+    return lhs != static_cast<int>(rhs);
 }
 
 struct DMFSystem

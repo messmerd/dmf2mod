@@ -16,11 +16,8 @@ Conversion to XM and other module formats may be added in the future.
 ```
 cmake -S . -B ./bin/Release
 cd ./bin/Release
-make
+cmake --build .
 ```
-
-Requires GCC (MinGW on Windows) and make. Works on Windows, Linux, and MacOS.
-Other compilers besides GCC would probably work, though this hasn't been tested.
 
 #### Web application:
 
@@ -30,7 +27,7 @@ cd ./bin/webapp
 emmake make
 ```
 
-Requires the Emscripten SDK and make.
+Requires the Emscripten SDK.
 
 ## Usage
 ```

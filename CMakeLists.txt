@@ -41,7 +41,10 @@ endif()
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 
-set(WARNING_FLAGS "-Wall -Wno-unknown-pragmas")
+set(WARNING_FLAGS "-Wall")
+if(NOT MSVC)
+    set(WARNING_FLAGS "${WARNING_FLAGS} -Wno-unknown-pragmas")
+endif()
 
 # WASM flags
 set(WASM_LDFLAGS "")

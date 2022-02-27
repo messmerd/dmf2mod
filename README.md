@@ -14,6 +14,8 @@ Conversion to XM and other module formats may be added in the future.
 #### Command-line application:
 
 ```
+cmake -S . -B ./bin/Release
+cd ./bin/Release
 make
 ```
 
@@ -23,7 +25,9 @@ Other compilers besides GCC would probably work, though this hasn't been tested.
 #### Web application:
 
 ```
-make webapp
+emcmake cmake -S . -B ./bin/webapp
+cd ./bin/webapp
+emmake make
 ```
 
 Requires the Emscripten SDK and make.

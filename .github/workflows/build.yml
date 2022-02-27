@@ -16,7 +16,8 @@ jobs:
     - name: build
       run: |
         cmake -S . -B .\bin\Release
-        cmake --build .\bin\Release --config Release
+        cd .\bin\Release
+        make
     - name: run
       run: .\dmf2mod.exe
   
@@ -28,8 +29,9 @@ jobs:
     - uses: actions/checkout@v2
     - name: build
       run: |
-        cmake -DCMAKE_BUILD_TYPE=Release -S . -B ./bin/Release
-        cmake --build ./bin/Release
+        cmake -S . -B ./bin/Release
+        cd ./bin/Release
+        make
     - name: run
       run: ./dmf2mod
       
@@ -41,7 +43,8 @@ jobs:
     - uses: actions/checkout@v2
     - name: build
       run: |
-        cmake -DCMAKE_BUILD_TYPE=Release -S . -B ./bin/Release
-        cmake --build ./bin/Release
+        cmake -S . -B ./bin/Release
+        cd ./bin/Release
+        make
     - name: run
       run: ./dmf2mod

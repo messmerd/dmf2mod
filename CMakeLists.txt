@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.11)
 
 project(dmf2mod VERSION "0.1")
 
@@ -28,26 +28,63 @@ set(MODULE_SOURCES
     ${SRC}/modules/mod.cpp
 )
 
-# Set a default build type if none was specified
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
+# Set default build type if none was specified
+set(DEFAULT_BUILD_TYPE "Release")
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  message(STATUS "Setting build type to '${DEFAULT_BUILD_TYPE}' as none was specified.")
+  set(CMAKE_BUILD_TYPE "${DEFAULT_BUILD_TYPE}" CACHE STRING "Choose the type of build." FORCE)
+  # Set the possible values of build type for cmake-gui
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
-message("CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 
-set(WARNING_FLAGS -Wall -Wno-unknown-pragmas)
+# Default debug and optimize flags
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 
+set(WARNING_FLAGS "-Wall -Wno-unknown-pragmas")
+
+# WASM flags
+set(WASM_LDFLAGS "")
 set(WASM_DEFINES "-s USE_ZLIB=1 -s INLINING_LIMIT=1")
-set(WASM_LDEFINES "$(WASM_DEFINES) -s ASSERTIONS=1 -s MODULARIZE=0 -s AGGRESSIVE_VARIABLE_ELIMINATION=1 -s NO_EXIT_RUNTIME=1 -s FORCE_FILESYSTEM=1")
-set(WASM_LDEFINES "$(WASM_LDEFINES) -s EXPORTED_FUNCTIONS=\"['_main']\" -s EXPORTED_RUNTIME_METHODS='[\"FS\"]' -s NO_DISABLE_EXCEPTION_CATCHING)")
+set(WASM_LDEFINES "${WASM_DEFINES} -s ASSERTIONS=1 -s MODULARIZE=0 -s AGGRESSIVE_VARIABLE_ELIMINATION=1 -s NO_EXIT_RUNTIME=1 -s FORCE_FILESYSTEM=1")
+set(WASM_LDEFINES "${WASM_LDEFINES} -s EXPORTED_FUNCTIONS=\"['_main']\" -s EXPORTED_RUNTIME_METHODS='[\"FS\"]' -s NO_DISABLE_EXCEPTION_CATCHING")
 
-set(WASM_FLAGS "$(WASM_LDFLAGS) $(WASM_DEFINES)")
-set(WASM_LFLAGS "--bind -lidbfs.js $(WASM_LDFLAGS) $(WASM_LDEFINES)")
+set(WASM_FLAGS "${WASM_LDFLAGS} ${WASM_DEFINES}")
+set(WASM_LFLAGS "--bind -lidbfs.js ${WASM_LDFLAGS} ${WASM_LDEFINES}")
 
-add_compile_options(${WARNING_FLAGS})
+# EMSCRIPTEN is defined when using emcmake
+if(EMSCRIPTEN)
+    # Web app
+    message(STATUS "Setting up for web app")
+    
+    # Determine whether to build WASM or asm.js version
+    option(USE_WASM "Use WASM (asm.js is used otherwise)" ON)
+    if (USE_WASM)
+        message(STATUS "Using WebAssembly")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s WASM=1")
+    else()
+        message(STATUS "Using asm.js")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s WASM=0")
+    endif()
+    
+    # Add both compiler and linker flags to CMAKE_CXX_FLAGS, since it's the only way I was able to get it to work
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${WASM_FLAGS} ${WASM_LFLAGS} ${WARNING_FLAGS} --pre-js ${SRC}/webapp/pre.js")
+    
+    add_executable(dmf2mod ${WEB_APP_SOURCES} ${CORE_SOURCES} ${MODULE_SOURCES})
 
-# add the executable
-if(NOT EMSCRIPTEN)
-    # console application
+    add_custom_command(
+    TARGET dmf2mod 
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${SRC}/webapp/ui"
+        "${CMAKE_BINARY_DIR}"
+    )
+else()
+    # Console application
+    message(STATUS "Setting up for console application")
+
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${WARNING_FLAGS}")
+
     add_executable(dmf2mod ${CONSOLE_SOURCES} ${CORE_SOURCES} ${MODULE_SOURCES})
 
     # zlib
@@ -55,29 +92,6 @@ if(NOT EMSCRIPTEN)
     add_subdirectory(${ZLIB_ROOT} EXCLUDE_FROM_ALL)
     include_directories(${ZLIB_DEPS})
     target_link_libraries(${PROJECT_NAME} zlibstatic)
-else()
-    # web app
-    option(USE_WASM "Use WASM (asm.js is used otherwise)" ON)
-    if (USE_WASM)
-        message("Using WebAssembly")
-        add_compile_options(-s WASM=1)
-    else()
-        message("Using asm.js")
-        add_compile_options(-s WASM=0)
-    endif()
-    add_compile_options(${WASM_FLAGS})
-    add_compile_options(--pre-js ${SRC}/webapp/pre.js)
-    add_link_options(${WASM_LFLAGS})
-    
-    add_executable(webapp ${WEB_APP_SOURCES} ${CORE_SOURCES} ${MODULE_SOURCES})
-
-    add_custom_command(
-    TARGET webapp 
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${SRC}/webapp/ui"
-        $<TARGET_FILE_DIR:webapp>
-    )
 endif()
 
 # includes

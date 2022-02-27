@@ -1,4 +1,4 @@
-// the configured options and settings for dmf2mod
+// The configured options and settings for dmf2mod
 #define DMF2MOD_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
 #define DMF2MOD_VERSION_MINOR @PROJECT_VERSION_MINOR@
 #define DMF2MOD_VERSION_PATCH @PROJECT_VERSION_PATCH@

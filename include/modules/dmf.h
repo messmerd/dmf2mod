@@ -114,24 +114,23 @@ bool operator>=(const DMFNote& lhs, const DMFNote& rhs);
 bool operator<=(const DMFNote& lhs, const DMFNote& rhs);
 
 // Comparison operators for enums
-// MSVC has something similar which is built-in, so skip if using MSVC
-#if !_MSC_VER || __INTEL_COMPILER
-template <typename T,
-    class = typename std::enable_if<std::is_enum<T>{} &&
-    std::is_same<std::underlying_type_t<T>, int>{}>>
-bool operator==(int lhs, const T& rhs)
+template <typename T, typename U,
+    class = typename std::enable_if<std::is_enum<U>{} &&
+    std::is_same<std::underlying_type_t<U>, int>{} &&
+    std::is_integral<T>{}>>
+bool operator==(T lhs, const U& rhs)
 {
-    return lhs == static_cast<int>(rhs);
+    return lhs == static_cast<T>(rhs);
 }
 
-template <typename T,
-    class = typename std::enable_if<std::is_enum<T>{} &&
-    std::is_same<std::underlying_type_t<T>, int>{}>>
-bool operator!=(int lhs, const T& rhs)
+template <typename T, typename U,
+    class = typename std::enable_if<std::is_enum<U>{} &&
+    std::is_same<std::underlying_type_t<U>, int>{} &&
+    std::is_integral<T>{}>>
+bool operator!=(T lhs, const U& rhs)
 {
-    return lhs != static_cast<int>(rhs);
+    return lhs != static_cast<T>(rhs);
 }
-#endif
 
 struct DMFSystem
 {

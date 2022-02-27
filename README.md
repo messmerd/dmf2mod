@@ -15,16 +15,20 @@ Conversion to XM and other module formats may be added in the future.
 
 ```
 cmake -S . -B ./bin/Release
-cd ./bin/Release
-cmake --build .
+cmake --build ./bin/Release
+```
+
+On Windows:
+```
+cmake -S . -B .\bin
+cmake --build .\bin --config Release
 ```
 
 #### Web application:
 
 ```
 emcmake cmake -S . -B ./bin/webapp
-cd ./bin/webapp
-emmake make
+emmake make --dir=./bin/webapp
 ```
 
 Requires the Emscripten SDK.

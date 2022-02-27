@@ -23,8 +23,7 @@ jobs:
       - name: Build web app
         run: |
           emcmake cmake -S . -B ./bin/webapp
-          cd ./bin/webapp
-          emmake make
+          emmake make --dir=./bin/webapp
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3

@@ -65,16 +65,19 @@ if(EMSCRIPTEN)
     option(USE_WASM "Use WASM (asm.js is used otherwise)" ON)
     if (USE_WASM)
         message(STATUS "Using WebAssembly")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s WASM=1")
+        set(USE_WASM_FLAG "-s WASM=1")
     else()
         message(STATUS "Using asm.js")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s WASM=0")
+        set(USE_WASM_FLAG "-s WASM=0")
     endif()
     
-    # Add both compiler and linker flags to CMAKE_CXX_FLAGS, since it's the only way I was able to get it to work
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${WASM_FLAGS} ${WASM_LFLAGS} ${WARNING_FLAGS} --pre-js ${SRC}/webapp/pre.js")
-    
+    # Set compiler and linker flags
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${WASM_FLAGS} ${WARNING_FLAGS} --pre-js ${SRC}/webapp/pre.js" CACHE STRING "")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${USE_WASM_FLAG} ${WASM_LFLAGS}" CACHE STRING "")
+
     add_executable(dmf2mod ${WEB_APP_SOURCES} ${CORE_SOURCES} ${MODULE_SOURCES})
+
+    include_directories(${ZLIB_INCLUDE_DIRS})
 
     add_custom_command(
     TARGET dmf2mod 
@@ -103,6 +106,7 @@ include_directories(PRIVATE
         ${PROJECT_SOURCE_DIR}/extern
         ${PROJECT_SOURCE_DIR}/extern/zstr
         ${PROJECT_SOURCE_DIR}/extern/zlib
+        ${PROJECT_BINARY_DIR}
         ${PROJECT_BINARY_DIR}/extern/zlib
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/include/modules

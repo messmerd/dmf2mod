@@ -28,8 +28,7 @@ cmake --build .\bin --config Release
 
 ```
 emcmake cmake -S . -B ./bin/webapp
-cd ./bin/webapp
-emmake make
+emmake make --dir=./bin/webapp
 ```
 
 Requires the Emscripten SDK.

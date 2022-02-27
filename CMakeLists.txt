@@ -6,6 +6,11 @@ enable_language(CXX)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+if(EMSCRIPTEN)
+    # https://stackoverflow.com/questions/52434030/how-to-resolve-freetype-header-files-when-using-emscripten
+    add_compile_options("-s" "USE_ZLIB=1")
+endif()
+
 set(SRC ${PROJECT_SOURCE_DIR}/src)
 configure_file(${PROJECT_SOURCE_DIR}/dmf2mod_config.h.in ${PROJECT_SOURCE_DIR}/include/dmf2mod_config.h)
 
@@ -48,13 +53,13 @@ else()
 endif()
 
 # WASM flags
-set(WASM_LDFLAGS "")
-set(WASM_DEFINES "-s USE_ZLIB=1 -s INLINING_LIMIT=1")
-set(WASM_LDEFINES "${WASM_DEFINES} -s ASSERTIONS=1 -s MODULARIZE=0 -s AGGRESSIVE_VARIABLE_ELIMINATION=1 -s NO_EXIT_RUNTIME=1 -s FORCE_FILESYSTEM=1")
-set(WASM_LDEFINES "${WASM_LDEFINES} -s EXPORTED_FUNCTIONS=\"['_main']\" -s EXPORTED_RUNTIME_METHODS='[\"FS\"]' -s NO_DISABLE_EXCEPTION_CATCHING")
+set(WASM_COMMON_FLAGS "-s DISABLE_EXCEPTION_CATCHING=0")
+set(WASM_COMPILE_FLAGS "-s INLINING_LIMIT=1")
+set(WASM_LINKER_FLAGS "-s USE_ZLIB=1 -s ASSERTIONS=1 -s MODULARIZE=0 -s AGGRESSIVE_VARIABLE_ELIMINATION=1 -s NO_EXIT_RUNTIME=1")
+set(WASM_LINKER_FLAGS "${WASM_LINKER_FLAGS} -s FORCE_FILESYSTEM=1 -s EXPORTED_RUNTIME_METHODS='[\"FS\"]'")
 
-set(WASM_FLAGS "${WASM_LDFLAGS} ${WASM_DEFINES}")
-set(WASM_LFLAGS "--bind -lidbfs.js ${WASM_LDFLAGS} ${WASM_LDEFINES}")
+set(WASM_FLAGS "${WASM_COMMON_FLAGS} ${WASM_COMPILE_FLAGS}")
+set(WASM_LFLAGS "--bind -lidbfs.js ${WASM_COMMON_FLAGS} ${WASM_LINKER_FLAGS}")
 
 # EMSCRIPTEN is defined when using emcmake
 if(EMSCRIPTEN)
@@ -72,12 +77,11 @@ if(EMSCRIPTEN)
     endif()
     
     # Set compiler and linker flags
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${WASM_FLAGS} ${WARNING_FLAGS} --pre-js ${SRC}/webapp/pre.js" CACHE STRING "")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${USE_WASM_FLAG} ${WASM_LFLAGS}" CACHE STRING "")
+    set(CMAKE_CXX_FLAGS "${EMCC_CFLAGS} ${CMAKE_CXX_FLAGS} ${WASM_FLAGS} ${WARNING_FLAGS} ${USE_WASM_FLAG} ${WASM_LFLAGS} --pre-js ${SRC}/webapp/pre.js")
+    message(STATUS "em++ compile/link flags: ${CMAKE_CXX_FLAGS}")
+    # Only CMAKE_CXX_FLAGS has been working for me. Don't bother with EMCC_CFLAGS or CMAKE_EXE_LINKER_FLAGS
 
     add_executable(dmf2mod ${WEB_APP_SOURCES} ${CORE_SOURCES} ${MODULE_SOURCES})
-
-    include_directories(${ZLIB_INCLUDE_DIRS})
 
     add_custom_command(
     TARGET dmf2mod 
@@ -97,21 +101,20 @@ else()
     # zlib
     set(ZLIB_ROOT ${PROJECT_SOURCE_DIR}/extern/zlib)
     add_subdirectory(${ZLIB_ROOT} EXCLUDE_FROM_ALL)
-    include_directories(${ZLIB_DEPS})
+    target_include_directories(dmf2mod PRIVATE ${ZLIB_DEPS} ${PROJECT_BINARY_DIR}/extern/zlib)
     target_link_libraries(${PROJECT_NAME} zlibstatic)
 endif()
 
 # includes
-include_directories(PRIVATE
+target_include_directories(dmf2mod PRIVATE
         ${PROJECT_SOURCE_DIR}/extern
         ${PROJECT_SOURCE_DIR}/extern/zstr
         ${PROJECT_SOURCE_DIR}/extern/zlib
-        ${PROJECT_BINARY_DIR}
-        ${PROJECT_BINARY_DIR}/extern/zlib
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/include/modules
+        ${PROJECT_BINARY_DIR}
 )
 
-include_directories(PUBLIC
+target_include_directories(dmf2mod PUBLIC
     ${PROJECT_BINARY_DIR}
 )

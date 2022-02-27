@@ -26,5 +26,5 @@ class DMFConversionOptions;
 class MODConversionOptions;
 
 // Include all supported modules here
-#include "dmf.h"
-#include "mod.h"
+#include "modules/dmf.h"
+#include "modules/mod.h"

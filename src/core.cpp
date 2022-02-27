@@ -10,6 +10,7 @@
 
 #include "core.h"
 #include "modules.h"
+#include "dmf2mod_config.h"
 
 #include <string>
 #include <iostream>

@@ -32,19 +32,19 @@ REGISTER_MODULE_CPP(DMF, DMFConversionOptions, ModuleType::DMF, "dmf", DMFOption
 // Information about all the systems Deflemask supports
 static const std::map<DMF::SystemType, DMFSystem> DMFSystems =
 {
-    {DMF::SystemType::Error, {.id = 0x00, .name = "ERROR", .channels = 0}},
-    {DMF::SystemType::YMU759, {.id = 0x01, .name = "YMU759", .channels = 17}}, // Removed since DMF version 19 (0x13)
-    {DMF::SystemType::Genesis, {.id = 0x02, .name = "GENESIS", .channels = 10}},
-    {DMF::SystemType::Genesis_CH3, {.id = 0x42, .name = "GENESIS_CH3", .channels = 13}},
-    {DMF::SystemType::SMS, {.id = 0x03, .name = "SMS", .channels = 4}},
-    {DMF::SystemType::GameBoy, {.id = 0x04, .name = "GAMEBOY", .channels = 4}},
-    {DMF::SystemType::PCEngine, {.id = 0x05, .name = "PCENGINE", .channels = 6}},
-    {DMF::SystemType::NES, {.id = 0x06, .name = "NES", .channels = 5}},
-    {DMF::SystemType::C64_SID_8580, {.id = 0x07, .name = "C64_SID_8580", .channels = 3}},
-    {DMF::SystemType::C64_SID_6581, {.id = 0x47, .name = "C64_SID_6581", .channels = 3}},
-    {DMF::SystemType::Arcade, {.id = 0x08, .name = "ARCADE", .channels = 13}},
-    {DMF::SystemType::NeoGeo, {.id = 0x09, .name = "NEOGEO", .channels = 13}},
-    {DMF::SystemType::NeoGeo_CH2, {.id = 0x49, .name = "NEOGEO_CH2", .channels = 16}}
+    {DMF::SystemType::Error, DMFSystem(0x00, "ERROR", 0)},
+    {DMF::SystemType::YMU759, DMFSystem(0x01, "YMU759", 17)}, // Removed since DMF version 19 (0x13)
+    {DMF::SystemType::Genesis, DMFSystem(0x02, "GENESIS", 10)},
+    {DMF::SystemType::Genesis_CH3, DMFSystem(0x42, "GENESIS_CH3", 13)},
+    {DMF::SystemType::SMS, DMFSystem(0x03, "SMS", 4)},
+    {DMF::SystemType::GameBoy, DMFSystem(0x04, "GAMEBOY", 4)},
+    {DMF::SystemType::PCEngine, DMFSystem(0x05, "PCENGINE", 6)},
+    {DMF::SystemType::NES, DMFSystem(0x06, "NES", 5)},
+    {DMF::SystemType::C64_SID_8580, DMFSystem(0x07, "C64_SID_8580", 3)},
+    {DMF::SystemType::C64_SID_6581, DMFSystem(0x47, "C64_SID_6581", 3)},
+    {DMF::SystemType::Arcade, DMFSystem(0x08, "ARCADE", 13)},
+    {DMF::SystemType::NeoGeo, DMFSystem(0x09, "NEOGEO", 13)},
+    {DMF::SystemType::NeoGeo_CH2, DMFSystem(0x49, "NEOGEO_CH2", 16)}
 };
 
 const DMFSystem DMF::Systems(DMF::SystemType systemType) { return DMFSystems.at(systemType); }

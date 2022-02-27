@@ -114,6 +114,8 @@ bool operator>=(const DMFNote& lhs, const DMFNote& rhs);
 bool operator<=(const DMFNote& lhs, const DMFNote& rhs);
 
 // Comparison operators for enums
+// MSVC has something similar which is built-in, so skip if using MSVC
+#if !_MSC_VER || __INTEL_COMPILER
 template <typename T,
     class = typename std::enable_if<std::is_enum<T>{} &&
     std::is_same<std::underlying_type_t<T>, int>{}>>
@@ -129,28 +131,18 @@ bool operator!=(int lhs, const T& rhs)
 {
     return lhs != static_cast<int>(rhs);
 }
-
-template <typename T,
-    class = typename std::enable_if<std::is_enum<T>{} &&
-    std::is_same<std::underlying_type_t<T>, int>{}>>
-bool operator==(uint16_t lhs, const T& rhs)
-{
-    return lhs == static_cast<int>(rhs);
-}
-
-template <typename T,
-    class = typename std::enable_if<std::is_enum<T>{} &&
-    std::is_same<std::underlying_type_t<T>, int>{}>>
-bool operator!=(uint16_t lhs, const T& rhs)
-{
-    return lhs != static_cast<int>(rhs);
-}
+#endif
 
 struct DMFSystem
 {
     uint8_t id;
     std::string name;
     uint8_t channels;
+
+    DMFSystem() = default;
+    DMFSystem(uint8_t id, std::string name, uint8_t channels)
+        : id(id), name(name), channels(channels)
+    {}
 };
 
 struct DMFVisualInfo

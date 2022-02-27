@@ -834,13 +834,13 @@ MOD::PriorityEffectsMap MOD::DMFConvertEffects_NoiseChannel(const DMFChannelRow&
 
     for (auto& dmfEffect : pat.effect)
     {
-        if (dmfEffect.code == (int)DMFEffectCode::PatBreak && dmfEffect.value == 0)
+        if (dmfEffect.code == DMFEffectCode::PatBreak && dmfEffect.value == 0)
         {
             // Only D00 is supported at the moment
             modEffects.insert({EffectPriorityStructureRelated, {MODEffectCode::PatBreak, 0}});
             break;
         }
-        else if (dmfEffect.code == (int)DMFEffectCode::PosJump)
+        else if (dmfEffect.code == DMFEffectCode::PosJump)
         {
             const int dest = dmfEffect.value + (int)m_UsingSetupPattern; // Into MOD order value, not DMF
             modEffects.insert({EffectPriorityStructureRelated, {MODEffectCode::PosJump, (uint16_t)dest}});

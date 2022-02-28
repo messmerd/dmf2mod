@@ -17,6 +17,8 @@
 #include <functional>
 #include <vector>
 #include <memory>
+#include <exception>
+#include <stdexcept>
 
 // Forward declarations
 enum class ModuleType;
@@ -83,7 +85,6 @@ struct CommonFlags
     bool silent = false;
     // More to be added later
 };
-
 
 
 // Used whenever an error occurs during import/converting/exporting. Can derive from this class.

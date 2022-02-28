@@ -20,6 +20,8 @@
 
 // Forward declarations
 enum class ModuleType;
+class ModuleException;
+class Status;
 class ModuleUtils;
 class ModuleBase;
 class ConversionOptionsBase;
@@ -82,32 +84,7 @@ struct CommonFlags
     // More to be added later
 };
 
-// Provides warning information after module importing/converting/exporting
-class Status
-{
-public:
-    Status()
-    {
-        Clear();
-    }
 
-    void AddWarning(const std::string& warningMessage)
-    {
-        m_WarningMessages.push_back("WARNING: " + warningMessage);
-    }
-
-    bool WarningsIssued() const { return !m_WarningMessages.empty(); }
-    
-    void PrintWarnings(bool useStdErr = false);
-
-    void Clear()
-    {
-        m_WarningMessages.clear();
-    }
-
-private:
-    std::vector<std::string> m_WarningMessages;
-};
 
 // Used whenever an error occurs during import/converting/exporting. Can derive from this class.
 class ModuleException : public std::exception
@@ -137,12 +114,32 @@ public:
     // The type of error
     enum class Category
     {
+        None,
         Import,
         Export,
         Convert
     };
 
-public:
+    const char* what() const throw() override
+    {
+        return m_ErrorMessage.c_str();
+    }
+
+    std::string str() const
+    {
+        return m_ErrorMessage;
+    }
+
+    ~ModuleException() = default;
+    ModuleException(ModuleException&& other) noexcept = default;
+    ModuleException& operator=(ModuleException&& other) = default;
+
+public: // Should this be private once DMF gets its own DMFException class?
+
+    ModuleException() = default;
+    ModuleException(const ModuleException& other) = default;
+    ModuleException& operator=(ModuleException& other) = default;
+
     template <class T, 
         class = typename std::enable_if<
         (std::is_enum<T>{} || std::is_integral<T>{}) &&
@@ -155,6 +152,8 @@ public:
         std::string categoryString;
         switch (category)
         {
+            case Category::None:
+                categoryString = "Init: "; break;
             case Category::Import:
                 categoryString = "Import: "; break;
             case Category::Export:
@@ -173,22 +172,76 @@ public:
         }
     }
 
-    ModuleException() = delete;
-    ~ModuleException() = default;
-
-    void Print() const;
-
-    const char* what() const throw() override
-    {
-        return "Module exception";
-    }
-
 protected:
     int m_ErrorCode;
     std::string m_ErrorMessage;
 
 private:
     std::string CommonErrorMessageCreator(Category category, int errorCode, const std::string& arg);
+};
+
+
+// Provides warning information after module importing/converting/exporting
+class Status
+{
+public:
+    // The source of the error/warning
+    using Category = ModuleException::Category;
+
+    Status()
+    {
+        Clear();
+        m_Category = Category::None;
+    }
+
+    bool ErrorOccurred() const { return m_Error.first; }
+    bool WarningsIssued() const { return !m_WarningMessages.empty(); }
+    
+    void PrintError(bool useStdErr = true) const;
+    void PrintWarnings(bool useStdErr = false) const;
+
+    // Prints error and warnings that occurred during the last action. Returns true if an error occurred.
+    bool HandleResults() const;
+
+    void Clear()
+    {
+        m_WarningMessages.clear();
+        m_Error.first = false;
+    }
+
+    void AddError(ModuleException&& error)
+    {
+        m_Error.second = std::move(error);
+        m_Error.first = true;
+    }
+
+    void AddWarning(const std::string& warningMessage)
+    {
+        m_WarningMessages.push_back("WARNING: " + warningMessage);
+    }
+
+    void Reset(Category actionType)
+    {
+        Clear();
+        m_Category = actionType;
+    }
+
+private:
+
+    template <typename T>
+    using poor_mans_optional = std::pair<bool, T>;
+
+    poor_mans_optional<ModuleException> m_Error;
+    std::vector<std::string> m_WarningMessages;
+    Category m_Category;
+};
+
+
+// NotImplementedException because I took exception to the standard library not implementing it
+class NotImplementedException : public std::logic_error
+{
+public:
+    NotImplementedException() : std::logic_error("Function not yet implemented.") {}
 };
 
 
@@ -339,7 +392,7 @@ public:
 
     /*
      * Create and import a new module given a filename. Module type is inferred from the file extension.
-     * Returns pointer to the module
+     * Returns pointer to the module or nullptr if a module registration error occurred.
      */
     static ModulePtr CreateAndImport(const std::string& filename)
     {
@@ -347,7 +400,18 @@ public:
         ModulePtr m = Module::Create(type);
         if (!m)
             return nullptr;
-        m->Import(filename);
+        
+        m->m_Status.Reset(Status::Category::Import);
+
+        try
+        {
+            m->Import(filename);
+        }
+        catch (ModuleException& e)
+        {
+            m->m_Status.AddError(std::move(e));
+        }
+        
         return m;
     }
 
@@ -355,13 +419,41 @@ public:
      * Import the specified module file
      * Returns true upon failure
      */
-    virtual void Import(const std::string& filename) = 0;
+    bool Import(const std::string& filename)
+    {
+        m_Status.Reset(Status::Category::Import);
+        try
+        {
+            ImportRaw(filename);
+            return false;
+        }
+        catch (ModuleException& e)
+        {
+            m_Status.AddError(std::move(e));
+        }
+        
+        return true;
+    }
 
     /*
      * Export module to the specified file
      * Returns true upon failure
      */
-    virtual void Export(const std::string& filename) = 0;
+    bool Export(const std::string& filename)
+    {
+        m_Status.Reset(Status::Category::Export);
+        try
+        {
+            ExportRaw(filename);
+            return false;
+        }
+        catch (ModuleException& e)
+        {
+            m_Status.AddError(std::move(e));
+        }
+
+        return true;
+    }
 
     /*
      * Converts the module to the specified type using the provided conversion options
@@ -377,12 +469,30 @@ public:
         if (!output)
             return nullptr;
 
-        // Perform the conversion
-        output->ConvertFrom(this, options);
+        output->m_Status.Reset(Status::Category::Convert);
+
+        try
+        {
+            // Perform the conversion
+            output->ConvertRaw(this, options);
+        }
+        catch (ModuleException& e)
+        {
+            m_Status.AddError(std::move(e));
+        }
+        
         return output;
     }
 
-    Status GetStatus() const { return m_Status; }
+    /*
+     * Gets the Status object for the last import/export/convert
+     */
+    const Status& GetStatus() const { return m_Status; }
+
+    /*
+     * Convenience wrapper for GetStatus().HandleResults()
+     */
+    bool HandleResults() const { return m_Status.HandleResults(); }
 
     /*
      * Cast a Module pointer to a pointer of a derived type
@@ -431,7 +541,11 @@ public:
     virtual std::string GetName() const = 0;
 
 protected:
-    virtual void ConvertFrom(const Module* input, const ConversionOptionsPtr& options) = 0;
+    // Import() and Export() and Convert() are wrappers for these methods:
+
+    virtual void ImportRaw(const std::string& filename) = 0;
+    virtual void ExportRaw(const std::string& filename) = 0;
+    virtual void ConvertRaw(const Module* input, const ConversionOptionsPtr& options) = 0;
 
     Status m_Status;
 };

@@ -6,11 +6,6 @@ enable_language(CXX)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-if(EMSCRIPTEN)
-    # https://stackoverflow.com/questions/52434030/how-to-resolve-freetype-header-files-when-using-emscripten
-    add_compile_options("-s" "USE_ZLIB=1")
-endif()
-
 set(SRC ${PROJECT_SOURCE_DIR}/src)
 configure_file(${PROJECT_SOURCE_DIR}/dmf2mod_config.h.in ${PROJECT_SOURCE_DIR}/include/dmf2mod_config.h)
 
@@ -59,7 +54,7 @@ set(WASM_LINKER_FLAGS "-s USE_ZLIB=1 -s ASSERTIONS=1 -s MODULARIZE=0 -s AGGRESSI
 set(WASM_LINKER_FLAGS "${WASM_LINKER_FLAGS} -s FORCE_FILESYSTEM=1 -s EXPORTED_RUNTIME_METHODS='[\"FS\"]'")
 
 set(WASM_FLAGS "${WASM_COMMON_FLAGS} ${WASM_COMPILE_FLAGS}")
-set(WASM_LFLAGS "--bind -lidbfs.js ${WASM_COMMON_FLAGS} ${WASM_LINKER_FLAGS}")
+set(WASM_LFLAGS "--bind -lidbfs.js ${WASM_LINKER_FLAGS} ${WASM_COMMON_FLAGS}")
 
 # EMSCRIPTEN is defined when using emcmake
 if(EMSCRIPTEN)
@@ -77,7 +72,7 @@ if(EMSCRIPTEN)
     endif()
     
     # Set compiler and linker flags
-    set(CMAKE_CXX_FLAGS "${EMCC_CFLAGS} ${CMAKE_CXX_FLAGS} ${WASM_FLAGS} ${WARNING_FLAGS} ${USE_WASM_FLAG} ${WASM_LFLAGS} --pre-js ${SRC}/webapp/pre.js")
+    set(CMAKE_CXX_FLAGS "${WASM_LFLAGS} ${USE_WASM_FLAG} ${EMCC_CFLAGS} ${CMAKE_CXX_FLAGS} ${WASM_FLAGS} ${WARNING_FLAGS} --pre-js ${SRC}/webapp/pre.js")
     message(STATUS "em++ compile/link flags: ${CMAKE_CXX_FLAGS}")
     # Only CMAKE_CXX_FLAGS has been working for me. Don't bother with EMCC_CFLAGS or CMAKE_EXE_LINKER_FLAGS
 

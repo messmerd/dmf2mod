@@ -238,13 +238,6 @@ public:
     ~MOD() {};
     void CleanUp() {};
 
-    void Import(const std::string& filename) override
-    {
-        m_Status.Clear();
-    }
-
-    void Export(const std::string& filename) override;
-
     std::string GetName() const override { return m_ModuleName; }
 
     enum class ImportError {Success=0};
@@ -281,7 +274,9 @@ private:
     using PriorityEffectsMap = std::multimap<MODEffectPriority, MODEffect>;
     using DMFSampleNoteRangeMap = std::map<dmf_sample_id_t, std::pair<DMFNote, DMFNote>>;
 
-    void ConvertFrom(const Module* input, const ConversionOptionsPtr& options) override;
+    void ImportRaw(const std::string& filename) override;
+    void ExportRaw(const std::string& filename) override;
+    void ConvertRaw(const Module* input, const ConversionOptionsPtr& options) override;
 
     // Conversion from DMF:
     void ConvertFromDMF(const DMF& dmf, const ConversionOptionsPtr& options);

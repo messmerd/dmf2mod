@@ -380,7 +380,18 @@ bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType
 
 // Status class
 
-void Status::PrintWarnings(bool useStdErr)
+void Status::PrintError(bool useStdErr) const
+{
+    if (!ErrorOccurred())
+        return;
+
+    if (useStdErr)
+        std::cerr << m_Error.second.what() << "\n\n";
+    else
+        std::cout << m_Error.second.what() << "\n\n";
+}
+
+void Status::PrintWarnings(bool useStdErr) const
 {
     if (!m_WarningMessages.empty())
     {
@@ -398,10 +409,38 @@ void Status::PrintWarnings(bool useStdErr)
     }
 }
 
+bool Status::HandleResults() const
+{
+    PrintError();
+
+    std::string actionStr;
+    switch (m_Category)
+    {
+        case Category::None:
+            actionStr = "init"; break;
+        case Category::Import:
+            actionStr = "import"; break;
+        case Category::Export:
+            actionStr = "export"; break;
+        case Category::Convert:
+            actionStr = "conversion"; break;
+    }
+
+    if (WarningsIssued())
+    {
+        const std::string plural = m_WarningMessages.size() > 1 ? "s" : "";
+        std::cout << "Warning" << plural << " issued during " << actionStr << ":\n";
+        PrintWarnings();
+    }
+    return ErrorOccurred();
+}
+
 std::string ModuleException::CommonErrorMessageCreator(Category category, int errorCode, const std::string& arg)
 {
     switch (category)
     {
+        case Category::None:
+            return "";
         case Category::Import:
             switch (errorCode)
             {
@@ -437,11 +476,6 @@ std::string ModuleException::CommonErrorMessageCreator(Category category, int er
             break;
     }
     return "";
-}
-
-void ModuleException::Print() const
-{
-    std::cerr << m_ErrorMessage << "\n\n";
 }
 
 // ModuleStatic class

@@ -27,67 +27,37 @@ int main(int argc, char *argv[])
         return 0;
 
     ////////// IMPORT //////////
-    ModulePtr input;
-    try
+
+    // Import the input file by inferring module type:
+    ModulePtr input = Module::CreateAndImport(io.InputFile);
+    if (!input)
     {
-        // Import the input file by inferring module type:
-        input = Module::CreateAndImport(io.InputFile);
-        if (!input)
-        {
-            std::cerr << "ERROR: The input module type is not registered.\n";
-            return 1;
-        }
-    }
-    catch (const ModuleException& e)
-    {
-        // Error occurred during import
-        e.Print();
+        std::cerr << "ERROR: The input module type is not registered.\n";
         return 1;
     }
-    
-    if (input->GetStatus().WarningsIssued())
-    {
-        std::cout << "Warning(s) issued during load:\n";
-        input->GetStatus().PrintWarnings();
-    }
+
+    if (input->HandleResults())
+        return 1;
 
     ////////// CONVERT //////////
-    ModulePtr output;
-    try
+
+    // Convert the input module to the output module type:
+    ModulePtr output = input->Convert(io.OutputType, options);
+    if (!output)
     {
-        // Convert the input module to the output module type:
-        output = input->Convert(io.OutputType, options);
-        if (!output)
-        {
-            std::cerr << "ERROR: The output module type is not registered.\n";
-            return 1;
-        }
-    }
-    catch (const ModuleException& e)
-    {
-        // Error occurred during conversion
-        e.Print();
+        std::cerr << "ERROR: The output module type is not registered.\n";
         return 1;
-    }
-    
-    if (output->GetStatus().WarningsIssued())
-    {
-        std::cout << "Warning(s) issued during conversion:\n";
-        output->GetStatus().PrintWarnings();
     }
 
-    ////////// EXPORT //////////
-    try
-    {
-        // Export the converted module to disk:
-        output->Export(io.OutputFile);
-    }
-    catch (const ModuleException& e)
-    {
-        // Error occurred while exporting
-        e.Print();
+    if (input->HandleResults())
         return 1;
-    }
+
+    ////////// EXPORT //////////
+
+    // Export the converted module to disk:
+    output->Export(io.OutputFile);
+    if (output->HandleResults())
+        return 1;
     
     return 0;
 }

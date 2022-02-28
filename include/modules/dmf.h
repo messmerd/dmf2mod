@@ -255,9 +255,6 @@ public:
     ~DMF();
     void CleanUp();
 
-    void Import(const std::string& filename) override;
-    void Export(const std::string& filename) override;
-
     std::string GetName() const override { return m_VisualInfo.songName; }
 
     ////////////
@@ -284,10 +281,9 @@ public:
     }
 
 private:
-    void ConvertFrom(const Module* input, const ConversionOptionsPtr& options) override
-    {
-        // Not implemented
-    }
+    void ImportRaw(const std::string& filename) override;
+    void ExportRaw(const std::string& filename) override;
+    void ConvertRaw(const Module* input, const ConversionOptionsPtr& options) override;
 
     DMFSystem GetSystem(uint8_t systemByte) const;
     void LoadVisualInfo(zstr::ifstream& fin);

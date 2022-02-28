@@ -83,20 +83,19 @@ bool ModuleImport(std::string filename)
     }
 
     G_InputFilename = filename;
-    try
+
+    G_Module = Module::CreateAndImport(filename);
+    if (!G_Module)
     {
-        G_Module = Module::CreateAndImport(filename);
-        if (!G_Module)
-        {
-            std::cerr << "Error during import:\n";
-            std::cerr << "ERROR: The module type may not be registered.\n\n";
-            return true;
-        }
+        std::cerr << "Error during import:\n";
+        std::cerr << "ERROR: The module type may not be registered.\n\n";
+        return true;
     }
-    catch (const ModuleException& e)
+    
+    if (G_Module->GetStatus().ErrorOccurred())
     {
         std::cerr << "Errors during import:\n";
-        e.Print();
+        G_Module->GetStatus().PrintError();
         return true;
     }
     
@@ -159,18 +158,15 @@ std::string ModuleConvert(std::string outputFilename, std::string commandLineArg
         return ""; // Failed to parse args
     }
 
-    ModulePtr output;
-    try
-    {
-        output = G_Module->Convert(moduleType, options);
-        if (!output)
-            return "";
-    }
-    catch (const ModuleException& e)
+    ModulePtr output = G_Module->Convert(moduleType, options);
+    if (!output)
+        return "";
+    
+    if (output->GetStatus().ErrorOccurred())
     {
         SetStatusType(true);
         std::cerr << "Error during conversion:\n";
-        e.Print();
+        output->GetStatus().PrintError();
         return "";
     }
 
@@ -183,14 +179,10 @@ std::string ModuleConvert(std::string outputFilename, std::string commandLineArg
 
     SetStatusType(true);
 
-    try
-    {
-        output->Export(outputFilename);
-    }
-    catch (const ModuleException& e)
+    if (output->Export(outputFilename))
     {
         std::cerr << "Error during export:\n";
-        e.Print();
+        output->GetStatus().PrintError();
         return "";
     }
     

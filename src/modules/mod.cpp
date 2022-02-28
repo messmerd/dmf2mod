@@ -193,10 +193,14 @@ void MODConversionOptions::PrintHelp()
 
 MOD::MOD() {}
 
-void MOD::ConvertFrom(const Module* input, const ConversionOptionsPtr& options)
+void MOD::ImportRaw(const std::string& filename)
 {
-    m_Status.Clear();
+    // Not implemented
+    throw NotImplementedException();
+}
 
+void MOD::ConvertRaw(const Module* input, const ConversionOptionsPtr& options)
+{
     if (!input)
     {
         throw MODException(ModuleException::Category::Convert, ModuleException::ConvertError::InvalidArgument);
@@ -1665,7 +1669,7 @@ mod_sample_id_t DMFSampleMapper::GetMODSampleId(NoteRange modNoteRange) const
     // Returns the MOD sample id of the given MOD sample in the collection (1st, 2nd, or 3rd)
     const int modNoteRangeInt = static_cast<int>(modNoteRange);
     if (modNoteRangeInt + 1 > m_NumMODSamples)
-        throw std::invalid_argument("In SampleMapper::GetMODSampleId: The provided MOD note range is invalid for this SampleMapper object.");
+        throw std::range_error("In SampleMapper::GetMODSampleId: The provided MOD note range is invalid for this SampleMapper object.");
 
     return m_ModIds[modNoteRangeInt];
 }
@@ -1675,7 +1679,7 @@ unsigned DMFSampleMapper::GetMODSampleLength(NoteRange modNoteRange) const
     // Returns the sample length of the given MOD sample in the collection (1st, 2nd, or 3rd)
     const int modNoteRangeInt = static_cast<int>(modNoteRange);
     if (modNoteRangeInt + 1 > m_NumMODSamples)
-        throw std::invalid_argument("In SampleMapper::GetMODSampleLength: The provided MOD note range is invalid for this SampleMapper object.");
+        throw std::range_error("In SampleMapper::GetMODSampleLength: The provided MOD note range is invalid for this SampleMapper object.");
 
     return m_ModSampleLengths[modNoteRangeInt];
 }
@@ -1692,7 +1696,7 @@ DMFSampleMapper::NoteRange DMFSampleMapper::GetMODNoteRange(mod_sample_id_t modS
         case 2:
             return NoteRange::Third;
         default:
-            throw std::invalid_argument("In SampleMapper::GetMODNoteRange: The provided MOD sample id was invalid for this SampleMapper object.");
+            throw std::range_error("In SampleMapper::GetMODNoteRange: The provided MOD sample id was invalid for this SampleMapper object.");
     }
 }
 
@@ -1712,16 +1716,15 @@ DMFSampleMapper::NoteRangeName DMFSampleMapper::GetMODNoteRangeName(NoteRange mo
         case NoteRange::Third:
             return NoteRangeName::High;
         default:
-            throw std::invalid_argument("In SampleMapper::GetMODNoteRangeName: The provided MOD note range is invalid for this SampleMapper object.");
+            throw std::range_error("In SampleMapper::GetMODNoteRangeName: The provided MOD note range is invalid for this SampleMapper object.");
     }
 }
 
 
 ///////// EXPORT /////////
 
-void MOD::Export(const std::string& filename)
+void MOD::ExportRaw(const std::string& filename)
 {
-    m_Status.Clear();
     std::ofstream outFile(filename, std::ios::binary);
     if (!outFile.is_open())
     {
@@ -1763,7 +1766,7 @@ void MOD::ExportSampleInfo(std::ofstream& fout) const
         const auto& sample = mapPair.second;
         
         if (sample.name.size() > 22)
-            throw std::invalid_argument("Sample name must be 22 characters or less");
+            throw std::length_error("Sample name must be 22 characters or less");
 
         // Pad name with zeros
         std::string nameCopy = sample.name;
@@ -1875,6 +1878,8 @@ std::string MODException::CreateErrorMessage(Category category, int errorCode, c
 {
     switch (category)
     {
+        case Category::None:
+            return "No error.";
         case Category::Import:
             return "No error.";
         case Category::Export:

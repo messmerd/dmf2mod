@@ -148,10 +148,9 @@ void DMFConversionOptions::PrintHelp()
     std::cout << "DMF files have no conversion options.\n";
 }
 
-void DMF::Import(const std::string& filename)
+void DMF::ImportRaw(const std::string& filename)
 {
     CleanUp();
-    m_Status.Clear();
 
     const bool silent = ModuleUtils::GetCoreOptions().silent;
 
@@ -261,9 +260,16 @@ void DMF::Import(const std::string& filename)
         std::cout << "Done importing DMF file.\n\n";
 }
 
-void DMF::Export(const std::string& filename)
+void DMF::ExportRaw(const std::string& filename)
 {
     // Not implemented
+    throw NotImplementedException();
+}
+
+void DMF::ConvertRaw(const Module* input, const ConversionOptionsPtr& options)
+{
+    // Not implemented
+    throw NotImplementedException();
 }
 
 DMFSystem DMF::GetSystem(uint8_t systemByte) const

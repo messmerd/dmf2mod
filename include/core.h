@@ -108,8 +108,9 @@ public:
     enum class ConvertError
     {
         Success=0,
-        InvalidArgument=-1,
-        UnsupportedInputType=-2
+        Unsuccessful=-1, // Applied to the input module
+        InvalidArgument=-2,
+        UnsupportedInputType=-3
     };
 
     // The type of error
@@ -402,8 +403,6 @@ public:
         if (!m)
             return nullptr;
         
-        m->m_Status.Reset(Status::Category::Import);
-
         try
         {
             m->Import(filename);
@@ -461,8 +460,11 @@ public:
      */
     ModulePtr Convert(ModuleType type, const ConversionOptionsPtr& options)
     {
+        ModuleBase* input = this; // For clarity
+        input->m_Status.Reset(Status::Category::Convert);
+
         // Don't convert if the types are the same
-        if (type == GetType())
+        if (type == input->GetType())
             return nullptr;
 
         // Create new module object
@@ -479,7 +481,8 @@ public:
         }
         catch (ModuleException& e)
         {
-            m_Status.AddError(std::move(e));
+            output->m_Status.AddError(std::move(e));
+            input->m_Status.AddError(ModuleException(ModuleException::Category::Convert, ModuleException::ConvertError::Unsuccessful));
         }
         
         return output;

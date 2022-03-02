@@ -466,6 +466,8 @@ std::string ModuleException::CommonErrorMessageCreator(Category category, int er
             {
                 case (int)ConvertError::Success:
                     return "No error.";
+                case (int)ConvertError::Unsuccessful: // This is the only convert error applied to the input module.
+                    return "Module conversion was unsuccessful. See the output module's status for more information.";
                 case (int)ConvertError::InvalidArgument:
                     return "Invalid argument.";
                 case (int)ConvertError::UnsupportedInputType:

@@ -49,7 +49,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    if (input->HandleResults())
+    if (output->HandleResults())
         return 1;
 
     ////////// EXPORT //////////

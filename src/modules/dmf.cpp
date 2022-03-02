@@ -14,8 +14,8 @@
 #include "dmf.h"
 
 // For inflating .dmf files so that they can be read
-#include "zlib.h"
-#include "zconf.h"
+#include <zlib.h>
+#include <zconf.h>
 
 #include <iostream>
 #include <iomanip>
@@ -27,33 +27,36 @@
 const std::vector<std::string> DMFOptions = {};
 REGISTER_MODULE_CPP(DMF, DMFConversionOptions, ModuleType::DMF, "dmf", DMFOptions)
 
-#define DMF_FILE_VERSION 17 // DMF files as old as version 17 (0x11) are supported
+#define DMF_FILE_VERSION_MIN 17 // DMF files as old as version 17 (0x11) are supported
+#define DMF_FILE_VERSION_MAX 25 // DMF files as new as version 25 (0x19) are supported
 
 // Information about all the systems Deflemask supports
 static const std::map<DMF::SystemType, DMFSystem> DMFSystems =
 {
-    {DMF::SystemType::Error, DMFSystem(0x00, "ERROR", 0)},
-    {DMF::SystemType::YMU759, DMFSystem(0x01, "YMU759", 17)}, // Removed since DMF version 19 (0x13)
-    {DMF::SystemType::Genesis, DMFSystem(0x02, "GENESIS", 10)},
-    {DMF::SystemType::Genesis_CH3, DMFSystem(0x42, "GENESIS_CH3", 13)},
-    {DMF::SystemType::SMS, DMFSystem(0x03, "SMS", 4)},
-    {DMF::SystemType::GameBoy, DMFSystem(0x04, "GAMEBOY", 4)},
-    {DMF::SystemType::PCEngine, DMFSystem(0x05, "PCENGINE", 6)},
-    {DMF::SystemType::NES, DMFSystem(0x06, "NES", 5)},
-    {DMF::SystemType::C64_SID_8580, DMFSystem(0x07, "C64_SID_8580", 3)},
-    {DMF::SystemType::C64_SID_6581, DMFSystem(0x47, "C64_SID_6581", 3)},
-    {DMF::SystemType::Arcade, DMFSystem(0x08, "ARCADE", 13)},
-    {DMF::SystemType::NeoGeo, DMFSystem(0x09, "NEOGEO", 13)},
-    {DMF::SystemType::NeoGeo_CH2, DMFSystem(0x49, "NEOGEO_CH2", 16)}
+    {DMF::SystemType::Error, DMFSystem(DMF::SystemType::Error, 0x00, "ERROR", 0)},
+    {DMF::SystemType::YMU759, DMFSystem(DMF::SystemType::YMU759, 0x01, "YMU759", 17)}, // Removed since DMF version 19 (0x13)
+    {DMF::SystemType::Genesis, DMFSystem(DMF::SystemType::Genesis, 0x02, "Genesis", 10)},
+    {DMF::SystemType::Genesis_CH3, DMFSystem(DMF::SystemType::Genesis_CH3, 0x42, "Genesis (Ext. CH3)", 13)},
+    {DMF::SystemType::SMS, DMFSystem(DMF::SystemType::SMS, 0x03, "SMS", 4)},
+    {DMF::SystemType::SMS_OPLL, DMFSystem(DMF::SystemType::SMS_OPLL, 0x43, "SMS + OPLL", 13)},
+    {DMF::SystemType::GameBoy, DMFSystem(DMF::SystemType::GameBoy, 0x04, "Game Boy", 4)},
+    {DMF::SystemType::PCEngine, DMFSystem(DMF::SystemType::PCEngine, 0x05, "PC Engine", 6)},
+    {DMF::SystemType::NES, DMFSystem(DMF::SystemType::NES, 0x06, "NES", 5)},
+    {DMF::SystemType::NES_VRC7, DMFSystem(DMF::SystemType::NES_VRC7, 0x46, "NES + VRC7", 11)},
+    {DMF::SystemType::C64_SID_8580, DMFSystem(DMF::SystemType::C64_SID_8580, 0x07, "C64 (SID 8580)", 3)},
+    {DMF::SystemType::C64_SID_6581, DMFSystem(DMF::SystemType::C64_SID_6581, 0x47, "C64 (SID 6581)", 3)},
+    {DMF::SystemType::Arcade, DMFSystem(DMF::SystemType::Arcade, 0x08, "Arcade", 13)},
+    {DMF::SystemType::NeoGeo, DMFSystem(DMF::SystemType::NeoGeo, 0x09, "Neo Geo", 13)},
+    {DMF::SystemType::NeoGeo_CH2, DMFSystem(DMF::SystemType::NeoGeo_CH2, 0x49, "Neo Geo (Ext. CH2)", 16)}
 };
 
-const DMFSystem DMF::Systems(DMF::SystemType systemType) { return DMFSystems.at(systemType); }
+const DMFSystem& DMF::Systems(DMF::SystemType systemType) { return DMFSystems.at(systemType); }
 
 DMF::DMF()
 {
     // Initialize pointers to nullptr to prevent segfault when freeing memory if the import fails:
-    m_VisualInfo.songName = "";
-    m_VisualInfo.songAuthor = "";
+    m_VisualInfo.songName.clear();
+    m_VisualInfo.songAuthor.clear();
     m_PatternValues = nullptr;
     m_ChannelEffectsColumnsCount = nullptr;
     m_PatternMatrixValues = nullptr;
@@ -62,6 +65,7 @@ DMF::DMF()
     m_WavetableSizes = nullptr;
     m_WavetableValues = nullptr;
     m_PCMSamples = nullptr;
+    m_PatternNames.clear();
 }
 
 DMF::~DMF()
@@ -106,10 +110,13 @@ void DMF::CleanUp()
     {
         for (int i = 0; i < m_TotalInstruments; i++) 
         {
-            delete[] m_Instruments[i].stdArpEnvValue;
-            delete[] m_Instruments[i].stdDutyNoiseEnvValue;
-            delete[] m_Instruments[i].stdVolEnvValue;
-            delete[] m_Instruments[i].stdWavetableEnvValue;
+            if (m_Instruments[i].mode == DMFInstrument::StandardMode)
+            {
+                delete[] m_Instruments[i].std.arpEnvValue;
+                delete[] m_Instruments[i].std.dutyNoiseEnvValue;
+                delete[] m_Instruments[i].std.volEnvValue;
+                delete[] m_Instruments[i].std.wavetableEnvValue;
+            }
         }
         delete[] m_Instruments;
         m_Instruments = nullptr;
@@ -141,6 +148,8 @@ void DMF::CleanUp()
         delete[] m_PCMSamples;
         m_PCMSamples = nullptr;
     }
+
+    m_PatternNames.clear();
 }
 
 void DMFConversionOptions::PrintHelp()
@@ -183,13 +192,17 @@ void DMF::ImportRaw(const std::string& filename)
     }
 
     m_DMFFileVersion = fin.get();
-    if (m_DMFFileVersion < DMF_FILE_VERSION)
+    if (m_DMFFileVersion < DMF_FILE_VERSION_MIN || m_DMFFileVersion > DMF_FILE_VERSION_MAX)
     {
+        const bool tooHigh = m_DMFFileVersion > DMF_FILE_VERSION_MAX;
+        const int extremeVersion = tooHigh ? DMF_FILE_VERSION_MAX : DMF_FILE_VERSION_MIN;
+
         std::stringstream stream;
-        stream << "0x" << std::setfill('0') << std::setw(2) << std::hex << DMF_FILE_VERSION;
+        stream << "0x" << std::setfill('0') << std::setw(2) << std::hex << extremeVersion;
         std::string hex = stream.str();
 
-        std::string errorMsg = "Deflemask file version must be " + std::to_string(DMF_FILE_VERSION) + " (" + hex + ") or higher.\n";
+        std::string errorMsg = "Deflemask file version must be " + std::to_string(extremeVersion) + " (" + hex + ") or ";
+        errorMsg += tooHigh ? "lower.\n" : "higher.\n";
         
         stream.clear();
         stream.str("");
@@ -197,7 +210,10 @@ void DMF::ImportRaw(const std::string& filename)
         hex = stream.str();
 
         errorMsg += "The given DMF file is version " + std::to_string(m_DMFFileVersion) + " (" + hex + ").\n";
-        errorMsg += "       You can convert older DMF files to a supported version by opening them in a newer version of DefleMask and then saving them.";
+        if (tooHigh)
+            errorMsg += "       Dmf2mod needs to be updated to support this newer version.";
+        else
+            errorMsg += "       You can convert older DMF files to a supported version by opening them in a newer version of DefleMask and then saving them.";
         
         throw ModuleException(ModuleException::Category::Import, DMF::ImportError::UnspecifiedError, errorMsg);
     }
@@ -359,6 +375,17 @@ void DMF::LoadPatternMatrixValues(zstr::ifstream& fin)
             {
                 m_PatternMatrixMaxValues[i] = m_PatternMatrixValues[i][j];
             }
+
+            // Version 1.1 introduces pattern names
+            if (m_DMFFileVersion >= 25) // DMF version 25 (0x19) and newer
+            {
+                const int patternNameLength = fin.get();
+                char* tempStr = new char[patternNameLength + 1];
+                fin.read(tempStr, patternNameLength);
+                tempStr[patternNameLength] = '\0';
+                m_PatternNames[(j * m_System.channels) + i] = tempStr;
+                delete[] tempStr;
+            }
         }
     }
 }
@@ -370,13 +397,13 @@ void DMF::LoadInstrumentsData(zstr::ifstream& fin)
 
     for (int i = 0; i < m_TotalInstruments; i++)
     {
-        m_Instruments[i] = LoadInstrument(fin, m_System);
+        m_Instruments[i] = LoadInstrument(fin, m_System.type);
     }
 }
 
-DMFInstrument DMF::LoadInstrument(zstr::ifstream& fin, DMFSystem systemType)
+DMFInstrument DMF::LoadInstrument(zstr::ifstream& fin, DMF::SystemType systemType)
 {
-    DMFInstrument inst;
+    DMFInstrument inst = {};
 
     uint8_t name_size = fin.get();
 
@@ -386,204 +413,240 @@ DMFInstrument DMF::LoadInstrument(zstr::ifstream& fin, DMFSystem systemType)
     inst.name = tempStr;
     delete[] tempStr;
 
-    inst.mode = fin.get(); // 1 = FM; 0 = Standard
-
-    // Initialize to nullptr to prevent issues if they are freed later without ever dynamically allocating memory
-    inst.stdVolEnvValue = nullptr;
-    inst.stdArpEnvValue = nullptr;
-    inst.stdDutyNoiseEnvValue = nullptr;
-    inst.stdWavetableEnvValue = nullptr;
-
-    if (inst.mode == 1) // FM instrument
+    // Get instrument mode (Standard or FM)
+    inst.mode = DMFInstrument::InvalidMode;
+    switch (fin.get())
     {
-        int totalOperators;
-
-        if (m_DMFFileVersion > 18) // Newer than DMF version 18 (0x12)
-        {
-            inst.fmALG = fin.get();
-            inst.fmFB = fin.get();
-            inst.fmLFO = fin.get();
-            inst.fmLFO2 = fin.get();
-            totalOperators = 4;
-        }
-        else
-        {
-            inst.fmALG = fin.get();
-            fin.get(); // Reserved byte (must be 0)
-            inst.fmFB = fin.get();
-            fin.get(); // Reserved byte (must be 0)
-            inst.fmLFO = fin.get();
-            fin.get(); // Reserved byte (must be 0)
-
-            const bool totalOperatorsBool = fin.get();
-            totalOperators = totalOperatorsBool ? 4 : 2;
-
-            inst.fmLFO2 = fin.get();
-        }
-
-        for (int i = 0; i < totalOperators; i++)
-        {
-            if (m_DMFFileVersion > 18) // Newer than DMF version 18 (0x12)
-            {
-                inst.fmAM = fin.get();
-                inst.fmAR = fin.get();
-                inst.fmDR = fin.get();
-                inst.fmMULT = fin.get();
-                inst.fmRR = fin.get();
-                inst.fmSL = fin.get();
-                inst.fmTL = fin.get();
-                inst.fmDT2 = fin.get();
-                inst.fmRS = fin.get();
-                inst.fmDT = fin.get();
-                inst.fmD2R = fin.get();
-                inst.fmSSGMODE = fin.get();
-            }
-            else // DMF version 17 (0x11) or older
-            {
-                inst.fmAM = fin.get();
-                inst.fmAR = fin.get();
-                inst.fmDAM = fin.get();
-                inst.fmDR = fin.get();
-                inst.fmDVB = fin.get();
-                inst.fmEGT = fin.get();
-                inst.fmKSL = fin.get();
-                inst.fmMULT = fin.get();
-                inst.fmRR = fin.get();
-                inst.fmSL = fin.get();
-                inst.fmSUS = fin.get();
-                inst.fmTL = fin.get();
-                inst.fmVIB = fin.get();
-                inst.fmWS = fin.get();
-                inst.fmKSR = fin.get(); // RS on SEGA Genesis
-                inst.fmDT = fin.get();
-                inst.fmD2R = fin.get();
-                inst.fmSSGMODE = fin.get();
-            }
-        }
+        case 0:
+            inst.mode = DMFInstrument::StandardMode; break;
+        case 1:
+            inst.mode = DMFInstrument::FMMode; break;
+        default:
+            throw ModuleException(Status::Category::Import, DMF::ImportError::UnspecifiedError, "Invalid instrument mode");
     }
-    else if (inst.mode == 0) // Standard instrument
+
+    // Now we can import the instrument depending on the mode (Standard/FM)
+    
+    if (inst.mode == DMFInstrument::StandardMode)
     {
         if (m_DMFFileVersion <= 17) // DMF version 17 (0x11) or older
         {
             // Volume macro
-            inst.stdVolEnvSize = fin.get();
-            inst.stdVolEnvValue = new int32_t[inst.stdVolEnvSize];
+            inst.std.volEnvSize = fin.get();
+            inst.std.volEnvValue = new int32_t[inst.std.volEnvSize];
             
-            for (int i = 0; i < inst.stdVolEnvSize; i++)
+            for (int i = 0; i < inst.std.volEnvSize; i++)
             {
                 // 4 bytes, little-endian
-                inst.stdVolEnvValue[i] = fin.get();
-                inst.stdVolEnvValue[i] |= fin.get() << 8;
-                inst.stdVolEnvValue[i] |= fin.get() << 16;
-                inst.stdVolEnvValue[i] |= fin.get() << 24;
+                inst.std.volEnvValue[i] = fin.get();
+                inst.std.volEnvValue[i] |= fin.get() << 8;
+                inst.std.volEnvValue[i] |= fin.get() << 16;
+                inst.std.volEnvValue[i] |= fin.get() << 24;
             }
 
             // Always get envelope loop position byte regardless of envelope size
-            inst.stdVolEnvLoopPos = fin.get();
+            inst.std.volEnvLoopPos = fin.get();
         }
-        else if (systemType.id != DMFSystems.at(DMF::SystemType::GameBoy).id) // Not a Game Boy and DMF version 18 (0x12) or newer
+        else if (systemType != DMF::SystemType::GameBoy) // Not a Game Boy and DMF version 18 (0x12) or newer
         {
             // Volume macro
-            inst.stdVolEnvSize = fin.get();
-            inst.stdVolEnvValue = new int32_t[inst.stdVolEnvSize];
+            inst.std.volEnvSize = fin.get();
+            inst.std.volEnvValue = new int32_t[inst.std.volEnvSize];
             
-            for (int i = 0; i < inst.stdVolEnvSize; i++)
+            for (int i = 0; i < inst.std.volEnvSize; i++)
             {
                 // 4 bytes, little-endian
-                inst.stdVolEnvValue[i] = fin.get();
-                inst.stdVolEnvValue[i] |= fin.get() << 8;
-                inst.stdVolEnvValue[i] |= fin.get() << 16;
-                inst.stdVolEnvValue[i] |= fin.get() << 24;
+                inst.std.volEnvValue[i] = fin.get();
+                inst.std.volEnvValue[i] |= fin.get() << 8;
+                inst.std.volEnvValue[i] |= fin.get() << 16;
+                inst.std.volEnvValue[i] |= fin.get() << 24;
             }
 
-            if (inst.stdVolEnvSize > 0)
-                inst.stdVolEnvLoopPos = fin.get();
+            if (inst.std.volEnvSize > 0)
+                inst.std.volEnvLoopPos = fin.get();
         }
 
         // Arpeggio macro
-        inst.stdArpEnvSize = fin.get();
-        inst.stdArpEnvValue = new int32_t[inst.stdArpEnvSize];
+        inst.std.arpEnvSize = fin.get();
+        inst.std.arpEnvValue = new int32_t[inst.std.arpEnvSize];
         
-        for (int i = 0; i < inst.stdArpEnvSize; i++)
+        for (int i = 0; i < inst.std.arpEnvSize; i++)
         {
             // 4 bytes, little-endian
-            inst.stdArpEnvValue[i] = fin.get();
-            inst.stdArpEnvValue[i] |= fin.get() << 8;
-            inst.stdArpEnvValue[i] |= fin.get() << 16;
-            inst.stdArpEnvValue[i] |= fin.get() << 24;
+            inst.std.arpEnvValue[i] = fin.get();
+            inst.std.arpEnvValue[i] |= fin.get() << 8;
+            inst.std.arpEnvValue[i] |= fin.get() << 16;
+            inst.std.arpEnvValue[i] |= fin.get() << 24;
         }
 
-        if (inst.stdArpEnvSize > 0 || m_DMFFileVersion <= 17) // DMF version 17 and older always gets envelope loop position byte
-            inst.stdArpEnvLoopPos = fin.get();
+        if (inst.std.arpEnvSize > 0 || m_DMFFileVersion <= 17) // DMF version 17 and older always gets envelope loop position byte
+            inst.std.arpEnvLoopPos = fin.get();
         
-        inst.stdArpMacroMode = fin.get();
+        inst.std.arpMacroMode = fin.get();
 
         // Duty/Noise macro
-        inst.stdDutyNoiseEnvSize = fin.get();
-        inst.stdDutyNoiseEnvValue = new int32_t[inst.stdDutyNoiseEnvSize];
+        inst.std.dutyNoiseEnvSize = fin.get();
+        inst.std.dutyNoiseEnvValue = new int32_t[inst.std.dutyNoiseEnvSize];
         
-        for (int i = 0; i < inst.stdDutyNoiseEnvSize; i++)
+        for (int i = 0; i < inst.std.dutyNoiseEnvSize; i++)
         {
             // 4 bytes, little-endian
-            inst.stdDutyNoiseEnvValue[i] = fin.get();
-            inst.stdDutyNoiseEnvValue[i] |= fin.get() << 8;
-            inst.stdDutyNoiseEnvValue[i] |= fin.get() << 16;
-            inst.stdDutyNoiseEnvValue[i] |= fin.get() << 24;
+            inst.std.dutyNoiseEnvValue[i] = fin.get();
+            inst.std.dutyNoiseEnvValue[i] |= fin.get() << 8;
+            inst.std.dutyNoiseEnvValue[i] |= fin.get() << 16;
+            inst.std.dutyNoiseEnvValue[i] |= fin.get() << 24;
         }
 
-        if (inst.stdDutyNoiseEnvSize > 0 || m_DMFFileVersion <= 17) // DMF version 17 and older always gets envelope loop position byte
-            inst.stdDutyNoiseEnvLoopPos = fin.get();
+        if (inst.std.dutyNoiseEnvSize > 0 || m_DMFFileVersion <= 17) // DMF version 17 and older always gets envelope loop position byte
+            inst.std.dutyNoiseEnvLoopPos = fin.get();
 
         // Wavetable macro
-        inst.stdWavetableEnvSize = fin.get();
-        inst.stdWavetableEnvValue = new int32_t[inst.stdWavetableEnvSize];
+        inst.std.wavetableEnvSize = fin.get();
+        inst.std.wavetableEnvValue = new int32_t[inst.std.wavetableEnvSize];
         
-        for (int i = 0; i < inst.stdWavetableEnvSize; i++)
+        for (int i = 0; i < inst.std.wavetableEnvSize; i++)
         {
             // 4 bytes, little-endian
-            inst.stdWavetableEnvValue[i] = fin.get();
-            inst.stdWavetableEnvValue[i] |= fin.get() << 8;
-            inst.stdWavetableEnvValue[i] |= fin.get() << 16;
-            inst.stdWavetableEnvValue[i] |= fin.get() << 24;
+            inst.std.wavetableEnvValue[i] = fin.get();
+            inst.std.wavetableEnvValue[i] |= fin.get() << 8;
+            inst.std.wavetableEnvValue[i] |= fin.get() << 16;
+            inst.std.wavetableEnvValue[i] |= fin.get() << 24;
         }
 
-        if (inst.stdWavetableEnvSize > 0 || m_DMFFileVersion <= 17) // DMF version 17 and older always gets envelope loop position byte
-            inst.stdWavetableEnvLoopPos = fin.get();
+        if (inst.std.wavetableEnvSize > 0 || m_DMFFileVersion <= 17) // DMF version 17 and older always gets envelope loop position byte
+            inst.std.wavetableEnvLoopPos = fin.get();
 
         // Per system data
-        if (systemType.id == DMFSystems.at(DMF::SystemType::C64_SID_8580).id || systemType.id == DMFSystems.at(DMF::SystemType::C64_SID_6581).id) // Using Commodore 64
+        if (systemType == DMF::SystemType::C64_SID_8580 || systemType == DMF::SystemType::C64_SID_6581) // Using Commodore 64
         {
-            inst.stdC64TriWaveEn = fin.get();
-            inst.stdC64SawWaveEn = fin.get();
-            inst.stdC64PulseWaveEn = fin.get();
-            inst.stdC64NoiseWaveEn = fin.get();
-            inst.stdC64Attack = fin.get();
-            inst.stdC64Decay = fin.get();
-            inst.stdC64Sustain = fin.get();
-            inst.stdC64Release = fin.get();
-            inst.stdC64PulseWidth = fin.get();
-            inst.stdC64RingModEn = fin.get();
-            inst.stdC64SyncModEn = fin.get();
-            inst.stdC64ToFilter = fin.get();
-            inst.stdC64VolMacroToFilterCutoffEn = fin.get();
-            inst.stdC64UseFilterValuesFromInst = fin.get();
+            inst.std.c64TriWaveEn = fin.get();
+            inst.std.c64SawWaveEn = fin.get();
+            inst.std.c64PulseWaveEn = fin.get();
+            inst.std.c64NoiseWaveEn = fin.get();
+            inst.std.c64Attack = fin.get();
+            inst.std.c64Decay = fin.get();
+            inst.std.c64Sustain = fin.get();
+            inst.std.c64Release = fin.get();
+            inst.std.c64PulseWidth = fin.get();
+            inst.std.c64RingModEn = fin.get();
+            inst.std.c64SyncModEn = fin.get();
+            inst.std.c64ToFilter = fin.get();
+            inst.std.c64VolMacroToFilterCutoffEn = fin.get();
+            inst.std.c64UseFilterValuesFromInst = fin.get();
             
             // Filter globals
-            inst.stdC64FilterResonance = fin.get();
-            inst.stdC64FilterCutoff = fin.get();
-            inst.stdC64FilterHighPass = fin.get();
-            inst.stdC64FilterLowPass = fin.get();
-            inst.stdC64FilterCH2Off = fin.get();
+            inst.std.c64FilterResonance = fin.get();
+            inst.std.c64FilterCutoff = fin.get();
+            inst.std.c64FilterHighPass = fin.get();
+            inst.std.c64FilterLowPass = fin.get();
+            inst.std.c64FilterCH2Off = fin.get();
         }
-        else if (systemType.id == DMFSystems.at(DMF::SystemType::GameBoy).id && m_DMFFileVersion >= 18) // Using Game Boy and DMF version is 18 or newer
+        else if (systemType == DMF::SystemType::GameBoy && m_DMFFileVersion >= 18) // Using Game Boy and DMF version is 18 or newer
         {
-            inst.stdGBEnvVol = fin.get();
-            inst.stdGBEnvDir = fin.get();
-            inst.stdGBEnvLen = fin.get();
-            inst.stdGBSoundLen = fin.get();
+            inst.std.gbEnvVol = fin.get();
+            inst.std.gbEnvDir = fin.get();
+            inst.std.gbEnvLen = fin.get();
+            inst.std.gbSoundLen = fin.get();
         }
     }
+    else if (inst.mode == DMFInstrument::FMMode)
+    {
+        // Initialize to nullptr just in case
+        inst.std.volEnvValue = nullptr;
+        inst.std.arpEnvValue = nullptr;
+        inst.std.dutyNoiseEnvValue = nullptr;
+        inst.std.wavetableEnvValue = nullptr;
 
+        if (m_DMFFileVersion > 18) // Newer than DMF version 18 (0x12)
+        {
+            if (systemType == DMF::SystemType::SMS_OPLL || systemType == DMF::SystemType::NES_VRC7)
+            {
+                inst.fm.sus = fin.get();
+                inst.fm.fb = fin.get();
+                inst.fm.dc = fin.get();
+                inst.fm.dm = fin.get();
+            }
+            else
+            {
+                inst.fm.alg = fin.get();
+                inst.fm.fb = fin.get();
+                inst.fm.lfo = fin.get();
+                inst.fm.lfo2 = fin.get();
+            }
+
+            inst.fm.numOperators = 4;
+        }
+        else
+        {
+            inst.fm.alg = fin.get();
+            fin.get(); // Reserved byte (must be 0)
+            inst.fm.fb = fin.get();
+            fin.get(); // Reserved byte (must be 0)
+            inst.fm.lfo = fin.get();
+            fin.get(); // Reserved byte (must be 0)
+
+            const bool totalOperatorsBool = fin.get();
+            inst.fm.numOperators = totalOperatorsBool ? 4 : 2;
+
+            inst.fm.lfo2 = fin.get();
+        }
+
+        for (int i = 0; i < inst.fm.numOperators; i++)
+        {
+            if (m_DMFFileVersion > 18) // Newer than DMF version 18 (0x12)
+            {
+                inst.fm.ops[i].am = fin.get();
+                inst.fm.ops[i].ar = fin.get();
+                inst.fm.ops[i].dr = fin.get();
+                inst.fm.ops[i].mult = fin.get();
+                inst.fm.ops[i].rr = fin.get();
+                inst.fm.ops[i].sl = fin.get();
+                inst.fm.ops[i].tl = fin.get();
+
+                if (systemType == DMF::SystemType::SMS_OPLL || systemType == DMF::SystemType::NES_VRC7)
+                {
+                    const uint8_t opllPreset = fin.get();
+                    if (i == 0)
+                        inst.fm.opllPreset = opllPreset;
+                    
+                    inst.fm.ops[i].ksr = fin.get();
+                    inst.fm.ops[i].vib = fin.get();
+                    inst.fm.ops[i].ksl = fin.get();
+                    inst.fm.ops[i].egs = fin.get(); // EG-S in Deflemask. 0 if OFF; 8 if ON.
+                }
+                else
+                {
+                    inst.fm.ops[i].dt2 = fin.get();
+                    inst.fm.ops[i].rs = fin.get();
+                    inst.fm.ops[i].dt = fin.get();
+                    inst.fm.ops[i].d2r = fin.get();
+                    inst.fm.ops[i].SSGMode = fin.get();
+                }
+            }
+            else // DMF version 17 (0x11) or older
+            {
+                inst.fm.ops[i].am = fin.get();
+                inst.fm.ops[i].ar = fin.get();
+                inst.fm.ops[i].dam = fin.get();
+                inst.fm.ops[i].dr = fin.get();
+                inst.fm.ops[i].dvb = fin.get();
+                inst.fm.ops[i].egt = fin.get();
+                inst.fm.ops[i].ksl = fin.get();
+                inst.fm.ops[i].mult = fin.get();
+                inst.fm.ops[i].rr = fin.get();
+                inst.fm.ops[i].sl = fin.get();
+                inst.fm.ops[i].sus = fin.get();
+                inst.fm.ops[i].tl = fin.get();
+                inst.fm.ops[i].vib = fin.get();
+                inst.fm.ops[i].ws = fin.get();
+                inst.fm.ops[i].ksr = fin.get(); // RS on SEGA Genesis
+                inst.fm.ops[i].dt = fin.get();
+                inst.fm.ops[i].d2r = fin.get();
+                inst.fm.ops[i].SSGMode = fin.get();
+            }
+        }
+    }
+    
     return inst;
 }
 

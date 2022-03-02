@@ -14,9 +14,10 @@
 #pragma once
 
 #include "modules.h"
-#include "zstr/zstr.hpp"
+#include <zstr/zstr.hpp>
 
 #include <string>
+#include <map>
 
 // Begin setup
 REGISTER_MODULE_HEADER(DMF, DMFConversionOptions)
@@ -134,16 +135,23 @@ bool operator!=(T lhs, const U& rhs)
 
 struct DMFSystem
 {
+    enum class Type
+    {
+        Error=0, YMU759, Genesis, Genesis_CH3, SMS, GameBoy,
+        PCEngine, NES, C64_SID_8580, C64_SID_6581, Arcade,
+        NeoGeo, NeoGeo_CH2, SMS_OPLL, NES_VRC7
+    };
+
+    Type type;
     uint8_t id;
     std::string name;
     uint8_t channels;
 
     DMFSystem() = default;
-    DMFSystem(uint8_t id, std::string name, uint8_t channels)
-        : id(id), name(name), channels(channels)
+    DMFSystem(Type type, uint8_t id, std::string name, uint8_t channels)
+        : type(type), id(id), name(name), channels(channels)
     {}
 };
-
 struct DMFVisualInfo
 {
     uint8_t songNameLength;
@@ -161,31 +169,89 @@ struct DMFModuleInfo
     uint8_t totalRowsInPatternMatrix;
 };
 
+struct DMFFMOps
+{
+    // TODO: Use unions depending on DMF version?
+    uint8_t am;
+    uint8_t ar;     // Attack
+    uint8_t dr;     // Delay?
+    uint8_t mult;
+    uint8_t rr;     // Release
+    uint8_t sl;     // Sustain
+    uint8_t tl;
+
+    uint8_t dt2;
+    uint8_t rs;
+    uint8_t dt;
+    uint8_t d2r;
+    
+    union
+    {
+        uint8_t SSGMode;
+        uint8_t egs; // EG-S in SMS OPLL / NES VRC7. 0 if OFF; 8 if ON.
+    };
+    
+    uint8_t dam, dvb, egt, ksl, sus, vib, ws, ksr; // Exclusive to DMF version 18 (0x12) and older
+};
+
 struct DMFInstrument
 {
+    enum InstrumentMode
+    {
+        InvalidMode=0,
+        StandardMode,
+        FMMode
+    };
+
     std::string name;
-    uint8_t mode;
+    InstrumentMode mode; // TODO: Use union depending on mode? Would save space
 
-    // FM Instruments
-    uint8_t fmALG, fmFB, fmLFO, fmLFO2;
-    uint8_t fmAM, fmAR, fmDR, fmMULT, fmRR, fmSL, fmTL, fmDT2, fmRS, fmDT, fmD2R, fmSSGMODE;
-    uint8_t fmDAM, fmDVB, fmEGT, fmKSL, fmSUS, fmVIB, fmWS, fmKSR; // Exclusive to DMF version 18 (0x12) and older
+    union
+    {
+        // Standard Instruments
+        struct
+        {
+            uint8_t volEnvSize, arpEnvSize, dutyNoiseEnvSize, wavetableEnvSize;
+            int32_t *volEnvValue, *arpEnvValue, *dutyNoiseEnvValue, *wavetableEnvValue;
+            int8_t volEnvLoopPos, arpEnvLoopPos, dutyNoiseEnvLoopPos, wavetableEnvLoopPos;
+            uint8_t arpMacroMode;
 
-    // Standard Instruments
-    uint8_t stdVolEnvSize, stdArpEnvSize, stdDutyNoiseEnvSize, stdWavetableEnvSize;
-    int32_t *stdVolEnvValue, *stdArpEnvValue, *stdDutyNoiseEnvValue, *stdWavetableEnvValue;
-    int8_t stdVolEnvLoopPos, stdArpEnvLoopPos, stdDutyNoiseEnvLoopPos, stdWavetableEnvLoopPos;
-    uint8_t stdArpMacroMode;
+            // Commodore 64 exclusive
+            uint8_t c64TriWaveEn, c64SawWaveEn, c64PulseWaveEn, c64NoiseWaveEn,
+                c64Attack, c64Decay, c64Sustain, c64Release, c64PulseWidth, c64RingModEn,
+                c64SyncModEn, c64ToFilter, c64VolMacroToFilterCutoffEn, c64UseFilterValuesFromInst;
+            uint8_t c64FilterResonance, c64FilterCutoff, c64FilterHighPass, c64FilterLowPass, c64FilterCH2Off;
 
-    // Standard Instruments - Commodore 64 exclusive
-    uint8_t stdC64TriWaveEn, stdC64SawWaveEn, stdC64PulseWaveEn, stdC64NoiseWaveEn,
-        stdC64Attack, stdC64Decay, stdC64Sustain, stdC64Release, stdC64PulseWidth, stdC64RingModEn,
-        stdC64SyncModEn, stdC64ToFilter, stdC64VolMacroToFilterCutoffEn, stdC64UseFilterValuesFromInst;
-    uint8_t stdC64FilterResonance, stdC64FilterCutoff, stdC64FilterHighPass, stdC64FilterLowPass, stdC64FilterCH2Off;
+            // Game Boy exclusive
+            uint8_t gbEnvVol, gbEnvDir, gbEnvLen, gbSoundLen;
+        } std;
 
-    // Standard Instruments - Game Boy exclusive
-    uint8_t stdGBEnvVol, stdGBEnvDir, stdGBEnvLen, stdGBSoundLen;
+        // FM Instruments
+        struct
+        {
+            uint8_t numOperators;
+            
+            union
+            {
+                uint8_t alg;
+                uint8_t sus; // SMS OPLL / NES VRC7 exclusive
+            };
+            
+            uint8_t fb;
+            uint8_t opllPreset; // SMS OPLL / NES VRC7 exclusive
 
+            union {
+                struct {
+                    uint8_t lfo, lfo2;
+                };
+                struct {
+                    uint8_t dc, dm; // SMS OPLL / NES VRC7 exclusive
+                };
+            };
+            
+            DMFFMOps ops[4];
+        } fm;
+    };
 };
 
 struct DMFPCMSample
@@ -241,14 +307,9 @@ public:
     enum class ConvertError {};
     enum class ConvertWarning {};
 
-    enum class SystemType
-    {
-        Error=0, YMU759, Genesis, Genesis_CH3, SMS, GameBoy,
-        PCEngine, NES, C64_SID_8580, C64_SID_6581, Arcade,
-        NeoGeo, NeoGeo_CH2
-    };
+    using SystemType = DMFSystem::Type;
 
-    static const DMFSystem Systems(SystemType systemType);
+    static const DMFSystem& Systems(SystemType systemType);
 
 public:
     DMF();
@@ -280,6 +341,11 @@ public:
         return m_PatternValues[channel][m_PatternMatrixValues[channel][patternMatrixRow]][patternRow];
     }
 
+    std::string GetPatternName(unsigned channel, unsigned patternMatrixRow) const
+    {
+        return m_PatternNames.at((patternMatrixRow * m_System.channels) + channel);
+    }
+
 private:
     void ImportRaw(const std::string& filename) override;
     void ExportRaw(const std::string& filename) override;
@@ -290,7 +356,7 @@ private:
     void LoadModuleInfo(zstr::ifstream& fin);
     void LoadPatternMatrixValues(zstr::ifstream& fin);
     void LoadInstrumentsData(zstr::ifstream& fin);
-    DMFInstrument LoadInstrument(zstr::ifstream& fin, DMFSystem systemType);
+    DMFInstrument LoadInstrument(zstr::ifstream& fin, SystemType systemType);
     void LoadWavetablesData(zstr::ifstream& fin);
     void LoadPatternsData(zstr::ifstream& fin);
     DMFChannelRow LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount);
@@ -313,8 +379,7 @@ private:
     uint8_t*        m_ChannelEffectsColumnsCount;
     uint8_t         m_TotalPCMSamples;
     DMFPCMSample*      m_PCMSamples;
-
-    //static const DMFSystem m_Systems[];
+    std::map<unsigned, std::string> m_PatternNames;
 };
 
 

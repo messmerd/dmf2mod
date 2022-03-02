@@ -41,14 +41,21 @@ endif()
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 
-if(NOT MSVC)
-    set(WARNING_FLAGS "-Wall -Wno-unknown-pragmas")
+# Compiler-specific warnings
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(WARNING_FLAGS "-Wall -Wno-unknown-pragmas -Werror -Wno-error=cpp")
+elseif(EMSCRIPTEN)
+    set(WARNING_FLAGS "-Wall -Wno-unknown-pragmas -Wno-\#warnings -Werror")
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(WARNING_FLAGS "-Wall -Wno-unknown-pragmas -Wno-\#warnings -Werror")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    set(WARNING_FLAGS "/W3")
 else()
     set(WARNING_FLAGS "")
 endif()
 
-# WASM flags
-set(WASM_COMMON_FLAGS "-s DISABLE_EXCEPTION_CATCHING=0")
+# WebAssembly flags
+set(WASM_COMMON_FLAGS "-fexceptions -s DISABLE_EXCEPTION_CATCHING=0")
 set(WASM_COMPILE_FLAGS "-s INLINING_LIMIT=1")
 set(WASM_LINKER_FLAGS "-s USE_ZLIB=1 -s ASSERTIONS=1 -s MODULARIZE=0 -s AGGRESSIVE_VARIABLE_ELIMINATION=1 -s NO_EXIT_RUNTIME=1")
 set(WASM_LINKER_FLAGS "${WASM_LINKER_FLAGS} -s FORCE_FILESYSTEM=1 -s EXPORTED_RUNTIME_METHODS='[\"FS\"]'")
@@ -71,12 +78,17 @@ if(EMSCRIPTEN)
         set(USE_WASM_FLAG "-s WASM=0")
     endif()
     
-    # Set compiler and linker flags
-    set(CMAKE_CXX_FLAGS "${WASM_LFLAGS} ${USE_WASM_FLAG} ${EMCC_CFLAGS} ${CMAKE_CXX_FLAGS} ${WASM_FLAGS} ${WARNING_FLAGS} --pre-js ${SRC}/webapp/pre.js")
-    message(STATUS "em++ compile/link flags: ${CMAKE_CXX_FLAGS}")
-    # Only CMAKE_CXX_FLAGS has been working for me. Don't bother with EMCC_CFLAGS or CMAKE_EXE_LINKER_FLAGS
+    # Set compiler flags
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${WASM_FLAGS} ${WARNING_FLAGS}")
+    message(STATUS "em++ compile flags: ${CMAKE_CXX_FLAGS}")
+
+    # Only CMAKE_CXX_FLAGS and the LINK_FLAGS property have been working for me. Don't bother with EMCC_CFLAGS or CMAKE_EXE_LINKER_FLAGS.
 
     add_executable(dmf2mod ${WEB_APP_SOURCES} ${CORE_SOURCES} ${MODULE_SOURCES})
+
+    # Set linker flags
+    set_target_properties(dmf2mod PROPERTIES LINK_FLAGS "${WASM_LFLAGS} ${USE_WASM_FLAG} ${WARNING_FLAGS} --pre-js ${SRC}/webapp/pre.js")
+    message(STATUS "em++ linker flags: ${WASM_LFLAGS} ${USE_WASM_FLAG} ${WARNING_FLAGS} --pre-js ${SRC}/webapp/pre.js")
 
     add_custom_command(
     TARGET dmf2mod 

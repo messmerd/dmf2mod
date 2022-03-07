@@ -11,16 +11,23 @@ configure_file(${PROJECT_SOURCE_DIR}/dmf2mod_config.h.in ${PROJECT_SOURCE_DIR}/i
 
 # set sources
 set(CONSOLE_SOURCES
-    ${SRC}/dmf2mod.cpp
+    ${SRC}/console/console.cpp
+    ${SRC}/utils/utils.cpp
 )
 
 set(WEB_APP_SOURCES
     ${SRC}/webapp/webapp.cpp
+    ${SRC}/utils/utils.cpp
 )
 
 set(CORE_SOURCES
-    ${SRC}/modules.cpp
-    ${SRC}/core.cpp
+    ${SRC}/dmf2mod.cpp
+    ${SRC}/core/module.cpp
+    ${SRC}/core/module_base.cpp
+    ${SRC}/core/options.cpp
+    ${SRC}/core/options_base.cpp
+    ${SRC}/core/status.cpp
+    ${SRC}/core/registrar.cpp
 )
 
 set(MODULE_SOURCES
@@ -118,7 +125,9 @@ target_include_directories(dmf2mod PRIVATE
         ${PROJECT_SOURCE_DIR}/extern/zstr
         ${PROJECT_SOURCE_DIR}/extern/zlib
         ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/include/core
         ${PROJECT_SOURCE_DIR}/include/modules
+        ${PROJECT_SOURCE_DIR}/include/utils
         ${PROJECT_BINARY_DIR}
 )
 

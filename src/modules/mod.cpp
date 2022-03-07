@@ -2,7 +2,7 @@
     mod.cpp
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Implements the ModuleInterface-derived class for ProTracker's 
+    Implements a ModuleInterface-derived class for ProTracker's 
     MOD files.
 
     Several limitations apply in order to export. For example, 
@@ -16,6 +16,7 @@
 // TODO: Delete output file if an error occurred while creating it?
 
 #include "mod.h"
+#include "utils/utils.h"
 
 #include <iostream>
 #include <iomanip>
@@ -27,9 +28,9 @@
 
 #include <cassert>
 
-// Finish setup
+// Register info about this module
 const std::vector<std::string> MODOptions = {"--downsample", "--effects=[min,max]"};
-REGISTER_MODULE_CPP(MOD, MODConversionOptions, ModuleType::MOD, "mod", MODOptions)
+REGISTER_MODULE_INFO(MOD, MODConversionOptions, ModuleType::MOD, "mod", MODOptions)
 
 #define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 

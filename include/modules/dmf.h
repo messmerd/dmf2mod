@@ -2,24 +2,18 @@
     dmf.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Declares the ModuleInterface-derived class for Deflemask's 
+    Declares a ModuleInterface-derived class for Deflemask's 
     DMF files.
-
-    DMF file support was written according to the specs at 
-    http://www.deflemask.com/DMF_SPECS.txt.
-
-    Requires the zlib compression library from https://zlib.net.
 */
 
 #pragma once
 
-#include "modules.h"
+#include "core/module.h"
 #include <zstr/zstr.hpp>
 
 #include <string>
 #include <map>
 
-// Begin setup
 REGISTER_MODULE_HEADER(DMF, DMFConversionOptions)
 
 // Deflemask allows four effects columns per channel regardless of the system 

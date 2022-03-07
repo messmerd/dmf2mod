@@ -2,16 +2,15 @@
     dmf.cpp
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Implements the ModuleInterface-derived class for Deflemask's 
+    Implements a ModuleInterface-derived class for Deflemask's 
     DMF files.
 
     DMF file support was written according to the specs at 
     http://www.deflemask.com/DMF_SPECS.txt.
-
-    Requires the zlib compression library from https://zlib.net.
 */
 
 #include "dmf.h"
+#include "utils/utils.h"
 
 // For inflating .dmf files so that they can be read
 #include <zlib.h>
@@ -23,9 +22,9 @@
 #include <fstream>
 #include <map>
 
-// Finish setup
+// Register info about this module
 const std::vector<std::string> DMFOptions = {};
-REGISTER_MODULE_CPP(DMF, DMFConversionOptions, ModuleType::DMF, "dmf", DMFOptions)
+REGISTER_MODULE_INFO(DMF, DMFConversionOptions, ModuleType::DMF, "dmf", DMFOptions)
 
 #define DMF_FILE_VERSION_MIN 17 // DMF files as old as version 17 (0x11) are supported
 #define DMF_FILE_VERSION_MAX 25 // DMF files as new as version 25 (0x19) are supported
@@ -166,7 +165,7 @@ void DMF::ImportRaw(const std::string& filename)
     if (!silent)
         std::cout << "Starting to import the DMF file...\n";
 
-    if (ModuleUtils::GetTypeFromFilename(filename) != ModuleType::DMF)
+    if (Registrar::GetTypeFromFilename(filename) != ModuleType::DMF)
     {
         throw ModuleException(ModuleException::Category::Import, DMF::ImportError::UnspecifiedError, "Input file has the wrong file extension.\nPlease use a DMF file.");
     }
@@ -876,9 +875,7 @@ bool operator!=(const DMFNote& lhs, const DMFNote& rhs)
     return lhs.octave != rhs.octave || lhs.pitch != rhs.pitch;
 }
 
-// For the following operators:
-// Assumes note isn't Note OFF or Empty note
-// Notes must use the DMF convention where the note C# is the 1st note of an octave rather than C-
+// The following operators assume notes aren't Note OFF or Empty note
 
 bool operator>(const DMFNote& lhs, const DMFNote& rhs)
 {

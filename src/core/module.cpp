@@ -1,8 +1,8 @@
 /*
-    dmf2mod.cpp
+    module.cpp
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    See dmf2mod.h.
+    See module.h.
 */
 
-#include "dmf2mod.h"
+#include "module.h"

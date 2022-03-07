@@ -1,15 +1,12 @@
 /*
-    core.cpp
+    utils.cpp
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Defines various classes used by dmf2mod.
-
-    Everything in core.h/core.cpp is written to be 
-    module-independent.
+    Defines various utility methods used by dmf2mod.
 */
 
-#include "core.h"
-#include "modules.h"
+#include "utils.h"
+#include "core/options.h"
 #include "dmf2mod_config.h"
 
 #include <string>
@@ -20,27 +17,11 @@
 #include <fstream>
 //#include <filesystem>
 
-// Initialize module registration maps
-std::map<ModuleType, std::function<ModuleBase*(void)>> ModuleUtils::RegistrationMap = {};
-std::map<std::string, ModuleType> ModuleUtils::FileExtensionMap = {};
-std::map<ModuleType, std::function<ConversionOptionsBase*(void)>> ModuleUtils::ConversionOptionsRegistrationMap = {};
-std::map<ModuleType, std::vector<std::string>> ModuleUtils::AvailableOptionsMap = {};
-
 CommonFlags ModuleUtils::m_CoreOptions = {};
 
 static bool ParseFlags(std::vector<std::string>& args, CommonFlags& flags);
 
 // ModuleUtils class
-
-std::vector<std::string> ModuleUtils::GetAvailableModules()
-{
-    std::vector<std::string> vec;
-    for (const auto& mapPair : FileExtensionMap)
-    {
-        vec.push_back(mapPair.first);
-    }
-    return vec;
-}
 
 bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo, ConversionOptionsPtr& options)
 {
@@ -75,7 +56,7 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
     {
         if (args[1] == "--help")
         {
-            return PrintHelp(args[0], GetTypeFromFileExtension(args[2]));
+            return PrintHelp(args[0], Registrar::GetTypeFromFileExtension(args[2]));
         }
 
         CommonFlags flags;
@@ -89,7 +70,7 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
         // Get input file
         if (FileExists(args[2]))
         {
-            if (GetTypeFromFilename(args[2]) != ModuleType::NONE)
+            if (Registrar::GetTypeFromFilename(args[2]) != ModuleType::NONE)
             {
                 inputFile = args[2];
             }
@@ -108,7 +89,7 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
         // Get output file
         if (GetFileExtension(args[1]).empty())
         {
-            if (GetTypeFromFileExtension(args[1]) != ModuleType::NONE)
+            if (Registrar::GetTypeFromFileExtension(args[1]) != ModuleType::NONE)
             {
                 const size_t dotPos = inputFile.rfind('.');
                 if (dotPos == 0 || dotPos + 1 >= inputFile.size())
@@ -129,7 +110,7 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
         else
         {
             outputFile = args[1];
-            if (GetTypeFromFilename(args[1]) == ModuleType::NONE)
+            if (Registrar::GetTypeFromFilename(args[1]) == ModuleType::NONE)
             {
                 std::cerr << "ERROR: '" << GetFileExtension(args[1]) << "' is not a valid module type.\n";
                 return true;
@@ -143,9 +124,9 @@ bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo
         }
 
         inputOutputInfo.InputFile = inputFile;
-        inputOutputInfo.InputType = GetTypeFromFilename(inputFile);
+        inputOutputInfo.InputType = Registrar::GetTypeFromFilename(inputFile);
         inputOutputInfo.OutputFile = outputFile;
-        inputOutputInfo.OutputType = GetTypeFromFilename(outputFile);
+        inputOutputInfo.OutputType = Registrar::GetTypeFromFilename(outputFile);
 
         if (inputOutputInfo.InputType == inputOutputInfo.OutputType)
         {
@@ -238,31 +219,6 @@ bool ParseFlags(std::vector<std::string>& args, CommonFlags& flags)
     return false;
 }
 
-ModuleType ModuleUtils::GetTypeFromFilename(const std::string& filename)
-{
-    std::string ext = GetFileExtension(filename);
-    if (ext.empty())
-        return ModuleType::NONE;
-    
-    const auto iter = ModuleUtils::FileExtensionMap.find(ext);
-    if (iter != ModuleUtils::FileExtensionMap.end())
-        return iter->second;
-
-    return ModuleType::NONE;
-}
-
-ModuleType ModuleUtils::GetTypeFromFileExtension(const std::string& extension)
-{
-    if (extension.empty())
-        return ModuleType::NONE;
-    
-    const auto iter = ModuleUtils::FileExtensionMap.find(extension);
-    if (iter != ModuleUtils::FileExtensionMap.end())
-        return iter->second;
-
-    return ModuleType::NONE;
-}
-
 std::string ModuleUtils::GetBaseNameFromFilename(const std::string& filename)
 {
     // Filename must contain base name, a dot, then the extension
@@ -317,23 +273,6 @@ bool ModuleUtils::FileExists(const std::string& filename)
     return file.is_open();
 }
 
-std::string ModuleUtils::GetExtensionFromType(ModuleType moduleType)
-{
-    for (const auto& mapPair : FileExtensionMap)
-    {
-        if (mapPair.second == moduleType)
-            return mapPair.first;
-    }
-    return "";
-}
-
-std::vector<std::string> ModuleUtils::GetAvailableOptions(ModuleType moduleType)
-{
-    if (AvailableOptionsMap.count(moduleType) > 0)
-        return AvailableOptionsMap[moduleType];
-    return {};
-}
-
 bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType)
 {
     // If module-specific help was requested
@@ -342,10 +281,10 @@ bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType
         ConversionOptionsPtr options = ConversionOptions::Create(moduleType);
         if (!options)
         {
-            std::string extension = GetExtensionFromType(moduleType);
+            std::string extension = Registrar::GetExtensionFromType(moduleType);
             if (extension.empty())
             {
-                std::cerr << "ERROR: The module is not propery registered with dmf2mod.\n";
+                std::cerr << "ERROR: The module is not properly registered with dmf2mod.\n";
             }
             else
             {
@@ -376,186 +315,4 @@ bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType
     std::cout << std::setw(30) << "  -s, --silent" << "Print nothing to console except errors and/or warnings.\n";
 
     return false;
-}
-
-// Status class
-
-void Status::PrintError(bool useStdErr) const
-{
-    if (!ErrorOccurred())
-        return;
-
-    if (useStdErr)
-        std::cerr << m_Error.second.what() << "\n\n";
-    else
-        std::cout << m_Error.second.what() << "\n\n";
-}
-
-void Status::PrintWarnings(bool useStdErr) const
-{
-    if (!m_WarningMessages.empty())
-    {
-        for (const auto& message : m_WarningMessages)
-        {
-            if (useStdErr)
-                std::cerr << message << "\n";
-            else
-                std::cout << message << "\n";
-        }
-        if (useStdErr)
-            std::cerr << "\n";
-        else
-            std::cout << "\n";
-    }
-}
-
-bool Status::HandleResults() const
-{
-    PrintError();
-
-    std::string actionStr;
-    switch (m_Category)
-    {
-        case Category::None:
-            actionStr = "init"; break;
-        case Category::Import:
-            actionStr = "import"; break;
-        case Category::Export:
-            actionStr = "export"; break;
-        case Category::Convert:
-            actionStr = "conversion"; break;
-    }
-
-    if (WarningsIssued())
-    {
-        const std::string plural = m_WarningMessages.size() > 1 ? "s" : "";
-        std::cout << "Warning" << plural << " issued during " << actionStr << ":\n";
-        PrintWarnings();
-    }
-    return ErrorOccurred();
-}
-
-std::string ModuleException::CommonErrorMessageCreator(Category category, int errorCode, const std::string& arg)
-{
-    switch (category)
-    {
-        case Category::None:
-            return "";
-        case Category::Import:
-            switch (errorCode)
-            {
-                case (int)ImportError::Success:
-                    return "No error.";
-                default:
-                    return "";
-            }
-            break;
-        case Category::Export:
-            switch (errorCode)
-            {
-                case (int)ExportError::Success:
-                    return "No error.";
-                case (int)ExportError::FileOpen:
-                    return "Failed to open file for writing.";
-                default:
-                    return "";
-            }
-            break;
-        case Category::Convert:
-            switch (errorCode)
-            {
-                case (int)ConvertError::Success:
-                    return "No error.";
-                case (int)ConvertError::Unsuccessful: // This is the only convert error applied to the input module.
-                    return "Module conversion was unsuccessful. See the output module's status for more information.";
-                case (int)ConvertError::InvalidArgument:
-                    return "Invalid argument.";
-                case (int)ConvertError::UnsupportedInputType:
-                    return "Input type '" + arg + "' is unsupported for this module.";
-                default:
-                    return "";
-            }
-            break;
-    }
-    return "";
-}
-
-// ModuleStatic class
-
-template <typename T>
-Module* ModuleStatic<T>::CreateStatic()
-{
-    return new T;
-}
-
-template <typename T>
-ModuleType ModuleStatic<T>::GetTypeStatic()
-{
-    return m_Type;
-}
-
-template <typename T>
-std::string ModuleStatic<T>::GetFileExtensionStatic()
-{
-    return m_FileExtension;
-}
-
-// ConversionOptionsStatic class
-
-template <typename T>
-ConversionOptionsBase* ConversionOptionsStatic<T>::CreateStatic()
-{
-    return new T;
-}
-
-template <typename T>
-ModuleType ConversionOptionsStatic<T>::GetTypeStatic()
-{
-    return m_Type;
-}
-
-// Base classes
-
-template <class T, class>
-ModulePtr ModuleBase::Create()
-{
-    return ModulePtr(new T);
-}
-
-template <class moduleClass, class>
-ConversionOptionsPtr ConversionOptionsBase::Create()
-{
-    return ConversionOptionsPtr(ModuleStatic<moduleClass>::m_CreateConversionOptionsStatic());
-}
-
-// Interface classes
-
-template <typename T, typename O>
-ModuleType ModuleInterface<T, O>::GetType() const
-{
-    return ModuleStatic<T>::GetTypeStatic();
-}
-
-template <typename T, typename O>
-std::string ModuleInterface<T, O>::GetFileExtension() const
-{
-    return ModuleStatic<T>::GetFileExtensionStatic();
-}
-
-template <typename T, typename O>
-std::vector<std::string> ModuleInterface<T, O>::GetAvailableOptions() const
-{
-    return ConversionOptionsStatic<O>::GetAvailableOptionsStatic();
-}
-
-template <typename T>
-ModuleType ConversionOptionsInterface<T>::GetType() const
-{
-    return ConversionOptionsStatic<T>::GetTypeStatic();
-}
-
-template <typename T>
-std::vector<std::string> ConversionOptionsInterface<T>::GetAvailableOptions() const
-{
-    return ConversionOptionsStatic<T>::GetAvailableOptionsStatic();
 }

@@ -5,7 +5,9 @@
     WebAssembly backend for dmf2mod.
 */
 
-#include "modules.h"
+#include "dmf2mod.h"
+#include "utils.h"
+
 #include <emscripten/emscripten.h>
 #include <emscripten/bind.h>
 
@@ -22,7 +24,7 @@ static void SetStatusType(bool isError);
 
 int main()
 {
-    ModuleUtils::RegisterModules();
+    Registrar::RegisterModules();
 
     // Initialize core options (for web app, user won't provide them)
     G_CoreOptions.force = true;
@@ -38,7 +40,7 @@ int main()
  */
 std::string GetAvailableModules()
 {
-    auto modules = ModuleUtils::GetAvailableModules();
+    auto modules = Registrar::GetAvailableModules();
     std::string modulesString;
     for (unsigned i = 0; i < modules.size(); i++)
     {
@@ -56,7 +58,7 @@ std::string GetAvailableModules()
  */
 std::string GetAvailableOptions(std::string moduleType)
 {
-    ModuleType moduleTypeEnum = ModuleUtils::GetTypeFromFileExtension(moduleType);
+    ModuleType moduleTypeEnum = Registrar::GetTypeFromFileExtension(moduleType);
     auto options = Module::GetAvailableOptions(moduleTypeEnum);
     
     std::string optionsString;
@@ -76,7 +78,7 @@ std::string GetAvailableOptions(std::string moduleType)
 bool ModuleImport(std::string filename)
 {
     SetStatusType(true);
-    if (ModuleUtils::GetTypeFromFilename(filename) == ModuleType::NONE)
+    if (Registrar::GetTypeFromFilename(filename) == ModuleType::NONE)
     {
         std::cerr << "The input file is not recognized as a supported module type.\n\n";
         return true;
@@ -126,7 +128,7 @@ std::string ModuleConvert(std::string outputFilename, std::string commandLineArg
         return ""; // Same type; No conversion necessary
 
     SetStatusType(true);
-    const auto moduleType = ModuleUtils::GetTypeFromFilename(outputFilename);
+    const auto moduleType = Registrar::GetTypeFromFilename(outputFilename);
     if (moduleType == ModuleType::NONE)
     {
         std::cerr << "The output file is not recognized as a supported module type.\n\n";

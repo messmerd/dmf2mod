@@ -2,22 +2,22 @@
     mod.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Declares the ModuleInterface-derived class for ProTracker's 
+    Declares a ModuleInterface-derived class for ProTracker's 
     MOD files.
 */
 
 #pragma once
 
-#include "modules.h"
+#include "core/module.h"
+#include "dmf.h"
 
 #include <string>
 #include <sstream>
 #include <map>
 
-// Begin setup
 REGISTER_MODULE_HEADER(MOD, MODConversionOptions)
 
-// Forward defines
+// Forward declares
 struct DMFNote;
 struct DMFChannelRow;
 enum class DMFNotePitch;

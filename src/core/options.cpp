@@ -1,8 +1,8 @@
 /*
-    dmf2mod.cpp
+    options.cpp
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    See dmf2mod.h.
+    See options.h.
 */
 
-#include "dmf2mod.h"
+#include "options.h"

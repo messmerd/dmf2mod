@@ -36,24 +36,29 @@ protected:
 };
 
 /*
-    Helper macro for declaring explicit instantiation of module and
+    Helper macro for declaring explicit instantiation of module and 
+    conversion options.
     Must be called in a module's header file AFTER including module.h.
 */
-#define REGISTER_MODULE_HEADER(moduleClass, optionsClass) \
+#define MODULE_DECLARE(moduleClass, optionsClass) \
 class moduleClass; \
 class optionsClass; \
-template<> const ModuleType ModuleStatic<moduleClass>::m_Type; \
-template<> const std::string ModuleStatic<moduleClass>::m_FileExtension; \
-template<> const ModuleType ConversionOptionsStatic<optionsClass>::m_Type; \
-template<> const std::vector<std::string> ConversionOptionsStatic<optionsClass>::m_AvailableOptions;
+template<> ModuleBase* ModuleStatic<moduleClass>::CreateStatic(); \
+template<> ConversionOptionsBase* ConversionOptionsStatic<optionsClass>::CreateStatic(); \
+template<> std::string ModuleStatic<moduleClass>::GetFileExtensionStatic(); \
+template<> std::vector<std::string> ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic();
 
 /*
-    Helper macro for setting static data members for a template specialization
+    Helper macro for defining static data members for a template specialization 
     of module and conversion options.
     Must be called in a module's cpp file AFTER including the header.
 */
-#define REGISTER_MODULE_INFO(moduleClass, optionsClass, enumType, fileExt, availOptions) \
+#define MODULE_DEFINE(moduleClass, optionsClass, enumType, fileExt, availOptions) \
 template<> const ModuleType ModuleStatic<moduleClass>::m_Type = enumType; \
 template<> const std::string ModuleStatic<moduleClass>::m_FileExtension = fileExt; \
 template<> const ModuleType ConversionOptionsStatic<optionsClass>::m_Type = enumType; \
-template<> const std::vector<std::string> ConversionOptionsStatic<optionsClass>::m_AvailableOptions = availOptions;
+template<> const std::vector<std::string> ConversionOptionsStatic<optionsClass>::m_AvailableOptions = availOptions; \
+template<> ModuleBase* ModuleStatic<moduleClass>::CreateStatic() { return new moduleClass; } \
+template<> ConversionOptionsBase* ConversionOptionsStatic<optionsClass>::CreateStatic() { return new optionsClass; } \
+template<> std::string ModuleStatic<moduleClass>::GetFileExtensionStatic() { return m_FileExtension; } \
+template<> std::vector<std::string> ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic() { return m_AvailableOptions; };

@@ -21,28 +21,20 @@ template <typename T> class ConversionOptionsInterface;
 template <typename T>
 class ConversionOptionsStatic
 {
-public:
-    // Unfortunately with the way I'm doing things currently, this needs to be public:
-    static ConversionOptionsBase* CreateStatic()
-    {
-        return new T;
-    }
-
-    // TODO: Figure out how to make this protected or private
-    // Returns a list of strings of the format: "-o, --option=[min,max]" or "-a" or "--flag" or "--flag=[]" etc.
-    //  representing the command-line options for this module and their acceptable values
-    static std::vector<std::string> GetAvailableOptionsStatic()
-    {
-        return m_AvailableOptions;
-    }
-
 protected:
     friend class Registrar;
+    template<class A, class B> friend class ModuleInterface;
 
     // This class needs to be inherited
     ConversionOptionsStatic() = default;
     ConversionOptionsStatic(const ConversionOptionsStatic&) = default;
     ConversionOptionsStatic(ConversionOptionsStatic&&) = default;
+
+    static ConversionOptionsBase* CreateStatic();
+
+    // Returns a list of strings of the format: "-o, --option=[min,max]" or "-a" or "--flag" or "--flag=[]" etc.
+    //  representing the command-line options for this module and their acceptable values
+    static std::vector<std::string> GetAvailableOptionsStatic();
 
     // The output module type
     static ModuleType GetTypeStatic()
@@ -51,8 +43,8 @@ protected:
     }
 
 private:
-    const static ModuleType m_Type;
-    const static std::vector<std::string> m_AvailableOptions;
+    static const ModuleType m_Type;
+    static const std::vector<std::string> m_AvailableOptions;
 };
 
 

@@ -28,9 +28,9 @@
 
 #include <cassert>
 
-// Register info about this module
+// Register module info
 const std::vector<std::string> MODOptions = {"--downsample", "--effects=[min,max]"};
-REGISTER_MODULE_INFO(MOD, MODConversionOptions, ModuleType::MOD, "mod", MODOptions)
+MODULE_DEFINE(MOD, MODConversionOptions, ModuleType::MOD, "mod", MODOptions)
 
 #define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 
@@ -48,8 +48,8 @@ static unsigned GCD(unsigned u, unsigned v);
 struct MODChannelState
 {
     int channel;
-    uint8_t dutyCycle;
-    uint8_t wavetable;
+    uint16_t dutyCycle;
+    uint16_t wavetable;
     bool sampleChanged; // MOD sample
     int16_t volume;
     bool notePlaying;
@@ -964,7 +964,7 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, MODState& state, const DMFChan
         // The WAVE channel volume changes whether a note is attached or not, but SQ1/SQ2 need a note
         if (chanState.channel == DMFGameBoyChannel::WAVE || pat.note.HasPitch())
         {
-            uint8_t newVolume = std::round(newChanVol / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
+            uint8_t newVolume = (uint8_t)std::round(newChanVol / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
 
             modEffects.insert({EffectPriorityVolumeChange, {MODEffectCode::SetVolume, newVolume}});
 
@@ -1114,7 +1114,7 @@ MODNote MOD::DMFConvertNote(MODState& state, const DMFChannelRow& pat, const MOD
 
             if (chanState.volume != DMFVolumeMax) // Currently, the default volume for all samples is the maximum. TODO: Can optimize
             {
-                uint8_t newVolume = std::round(chanState.volume / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
+                uint8_t newVolume = (uint8_t)std::round(chanState.volume / (double)DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
 
                 modEffects.insert({EffectPriorityVolumeChange, {MODEffectCode::SetVolume, newVolume}});
 
@@ -1348,7 +1348,7 @@ void MOD::DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed)
             // Make d the highest valid value.
             double divisor = d / 32.0;
             
-            unsigned newN = n / divisor;
+            unsigned newN = static_cast<unsigned>(n / divisor);
             if (newN < 33)
             {
                 // n can't handle the adjustment.
@@ -1386,11 +1386,11 @@ void MOD::DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed)
 
             // Make d the highest valid value.
             double divisorD = d / 32.0;
-            unsigned newN = n / divisorD;
+            unsigned newN = static_cast<unsigned>(n / divisorD);
 
             // Make n the highest valid value.
             double divisorN = n / 255.0;
-            unsigned newD = d / divisorN;
+            unsigned newD = static_cast<unsigned>(d / divisorN);
 
             // Check which option loses the least precision?
             if (32 <= newN && newN <= 255)
@@ -1929,7 +1929,7 @@ uint8_t MOD::GetMODTempo(double bpm)
     else // Tempo is okay for ProTracker
     {
         // ProTracker tempo is twice the Deflemask bpm.
-        return bpm * 2;
+        return static_cast<uint8_t>(bpm * 2);
     }
 }
 

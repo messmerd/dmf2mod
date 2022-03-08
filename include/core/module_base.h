@@ -25,20 +25,14 @@ protected:
     ModuleStatic(const ModuleStatic&) = default;
     ModuleStatic(ModuleStatic&&) = default;
 
-    static Module* CreateStatic()
-    {
-        return new T;
-    }
+    static ModuleBase* CreateStatic();
 
     static ModuleType GetTypeStatic()
     {
         return m_Type;
     }
 
-    static std::string GetFileExtensionStatic()
-    {
-        return m_FileExtension;
-    }
+    static std::string GetFileExtensionStatic();
     
 private:
     const static ModuleType m_Type;

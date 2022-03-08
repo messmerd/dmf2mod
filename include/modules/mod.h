@@ -15,7 +15,8 @@
 #include <sstream>
 #include <map>
 
-REGISTER_MODULE_HEADER(MOD, MODConversionOptions)
+// Declare module
+MODULE_DECLARE(MOD, MODConversionOptions)
 
 // Forward declares
 struct DMFNote;
@@ -113,7 +114,7 @@ struct MODChannelRow
     uint8_t SampleNumber;
     uint16_t SamplePeriod;
     unsigned EffectCode;
-    uint8_t EffectValue;
+    unsigned EffectValue;
 };
 
 typedef int dmf_sample_id_t;

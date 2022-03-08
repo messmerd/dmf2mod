@@ -10,3 +10,13 @@
 // Non-specialized class template data member values:
 template<typename T> const ModuleType ModuleStatic<T>::m_Type = ModuleType::NONE;
 template<typename T> const std::string ModuleStatic<T>::m_FileExtension = "";
+
+template<typename T> ModuleBase* ModuleStatic<T>::CreateStatic()
+{
+    return nullptr;
+}
+
+template<typename T> std::string ModuleStatic<T>::GetFileExtensionStatic()
+{
+    return m_FileExtension;
+}

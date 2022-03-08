@@ -49,6 +49,24 @@ void Registrar::RegisterModules()
     Register<MOD>();
 }
 
+template <class T, class>
+void Registrar::Register()
+{
+    const ModuleType moduleType = T::GetTypeStatic();
+    const std::string fileExtension = T::GetFileExtensionStatic();
+
+    // TODO: Check for file extension clashes here.
+    // In order to make modules fully dynamically loaded, would need to make ModuleType an int and 
+    // assign it to the module here rather than let them choose their own ModuleType.
+    m_RegistrationMap[moduleType] = &T::CreateStatic;
+    m_FileExtensionMap[fileExtension] = moduleType;
+
+    m_ConversionOptionsRegistrationMap[moduleType] = &T::OptionsType::CreateStatic;
+    
+    //typedef typename T::OptionsType OPT;
+    m_AvailableOptionsMap[moduleType] = T::OptionsType::GetAvailableOptionsStatic();
+}
+
 ModulePtr Registrar::CreateModule(ModuleType moduleType)
 {
     const auto iter = m_RegistrationMap.find(moduleType);

@@ -14,7 +14,8 @@
 #include <string>
 #include <map>
 
-REGISTER_MODULE_HEADER(DMF, DMFConversionOptions)
+// Declare module
+MODULE_DECLARE(DMF, DMFConversionOptions)
 
 // Deflemask allows four effects columns per channel regardless of the system 
 #define DMF_MAX_EFFECTS_COLUMN_COUNT 4

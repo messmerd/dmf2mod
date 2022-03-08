@@ -22,9 +22,9 @@
 #include <fstream>
 #include <map>
 
-// Register info about this module
+// Define module info
 const std::vector<std::string> DMFOptions = {};
-REGISTER_MODULE_INFO(DMF, DMFConversionOptions, ModuleType::DMF, "dmf", DMFOptions)
+MODULE_DEFINE(DMF, DMFConversionOptions, ModuleType::DMF, "dmf", DMFOptions)
 
 #define DMF_FILE_VERSION_MIN 17 // DMF files as old as version 17 (0x11) are supported
 #define DMF_FILE_VERSION_MAX 25 // DMF files as new as version 25 (0x19) are supported
@@ -840,7 +840,7 @@ void DMF::GetBPM(unsigned& numerator, unsigned& denominator) const
     }
     
     // Experimentally determined equation for BPM:
-    numerator = 15.0 * globalTick;
+    numerator = 15 * globalTick;
     denominator = (m_ModuleInfo.timeBase + 1) * (m_ModuleInfo.tickTime1 + m_ModuleInfo.tickTime2);
 
     if (denominator == 0)

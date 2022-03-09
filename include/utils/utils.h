@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include "options.h"
 #include "registrar.h"
 #include "status.h"
 
@@ -37,13 +38,15 @@ class ModuleUtils
 public:
     static bool ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo, ConversionOptionsPtr& options);
     static CommonFlags GetCoreOptions() { return m_CoreOptions; }
-    static void SetCoreOptions(CommonFlags& options) { m_CoreOptions = options; };
+    static void SetCoreOptions(CommonFlags& options) { m_CoreOptions = options; }
 
     
     static std::string GetBaseNameFromFilename(const std::string& filename);
     static std::string ReplaceFileExtension(const std::string& filename, const std::string& newFileExtension);
     static std::string GetFileExtension(const std::string& filename);
     static bool FileExists(const std::string& filename);
+
+    static void PrintHelp(ModuleType moduleType);
     
 private:
     static bool PrintHelp(const std::string& executable, ModuleType moduleType);

@@ -280,11 +280,10 @@ enum class DMFGameBoyChannel
 class DMFConversionOptions : public ConversionOptionsInterface<DMFConversionOptions>
 {
 public:
-    DMFConversionOptions() {}
+    DMFConversionOptions() = default;
     ~DMFConversionOptions() {}
 
     bool ParseArgs(std::vector<std::string>& args) override { return false; } // DMF files don't have any conversion flags right now
-    void PrintHelp() override;
 };
 
 class DMF : public ModuleInterface<DMF, DMFConversionOptions>

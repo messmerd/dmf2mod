@@ -6,7 +6,7 @@
 */
 
 #include "utils.h"
-#include "core/options.h"
+#include "core/conversion_options.h"
 #include "dmf2mod_config.h"
 
 #include <string>
@@ -15,6 +15,7 @@
 #include <map>
 #include <functional>
 #include <fstream>
+#include <variant>
 //#include <filesystem>
 
 CommonFlags ModuleUtils::m_CoreOptions = {};
@@ -271,6 +272,116 @@ bool ModuleUtils::FileExists(const std::string& filename)
 {
     std::ifstream file(filename);
     return file.is_open();
+}
+
+void ModuleUtils::PrintHelp(ModuleType moduleType)
+{
+    if (moduleType == ModuleType::NONE)
+        return;
+
+    std::string name = Registrar::GetExtensionFromType(moduleType);
+    const ModuleOptions options = Registrar::GetAvailableOptions(moduleType);
+
+    if (name.empty())
+        return;
+
+    for (auto& c : name)
+    {
+        c = toupper(c);
+    }
+
+    if (options.Count() == 0)
+    {
+        std::cout << name << " files have no conversion options.\n";
+        return;
+    }
+
+    std::cout << name << " Options:\n";
+
+    std::cout.setf(std::ios_base::left);
+
+    const size_t total = options.Count();
+    for (unsigned i = 0; i < total; i++)
+    {
+        const auto& option = options.Item(i);
+
+        std::string str1 = "  ";
+        str1 += option.HasShortName() ? "-" + option.GetShortName() + ", " : "";
+        str1 += "--" + option.GetName();
+
+        const ModuleOption::Type optionType = option.GetType();
+        if (option.UsesAcceptedValues() && optionType != ModuleOption::BOOL)
+        {
+            str1 += "=[";
+            
+            unsigned i = 0;
+            const unsigned total = option.GetAcceptedValues().size();
+            for (auto& val : option.GetAcceptedValues())
+            {
+                switch (optionType)
+                {
+                    case ModuleOption::INT:
+                        str1 += std::to_string(std::get<ModuleOption::INT>(val)); break;
+                    case ModuleOption::DOUBLE:
+                        str1 += std::to_string(std::get<ModuleOption::DOUBLE>(val)); break;
+                    case ModuleOption::STRING:
+                        str1 += "\"" + std::get<ModuleOption::STRING>(val) + "\""; break;
+                    default:
+                        break;
+                }
+
+                if (i + 1 != total)
+                    str1 += ", ";
+
+                i++;
+            }
+
+            str1 += "]";
+        }
+        else
+        {
+            switch (optionType)
+            {
+                case ModuleOption::INT:
+                case ModuleOption::DOUBLE:
+                    str1 += "<value>"; break;
+                case ModuleOption::STRING:
+                    str1 += "\"<value>\""; break;
+                default:
+                    break;
+            }
+        }
+
+        std::string str2 = option.GetDescription() + " ";
+        switch (optionType)
+        {
+            case ModuleOption::INT:
+                str2 += "(Default: ";
+                str2 += std::to_string(std::get<ModuleOption::INT>(option.GetDefaultValue()));
+                str2 += ")";
+                break;
+            case ModuleOption::DOUBLE:
+                str2 += "(Default: ";
+                str2 += std::to_string(std::get<ModuleOption::DOUBLE>(option.GetDefaultValue()));
+                str2 += ")";
+                break;
+            case ModuleOption::STRING:
+            {
+                const std::string defaultValue = std::get<ModuleOption::STRING>(option.GetDefaultValue());
+                if (!defaultValue.empty())
+                {
+                    str2 += "(Default: \"";
+                    str2 += defaultValue;
+                    str2 += "\")";
+                }
+                break;
+            }
+            default:
+                break;
+        }
+
+        std::cout << std::setw(30) << str1 << str2 << "\n";
+    }
 }
 
 bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType)

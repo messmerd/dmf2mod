@@ -191,11 +191,9 @@ struct MODSample
 class MODException : public ModuleException
 {
 public:
-    template <class T, 
-        class = typename std::enable_if<
+    template <class T, class = std::enable_if_t<
         (std::is_enum<T>{} || std::is_integral<T>{}) &&
-        (!std::is_enum<T>{} || std::is_convertible<std::underlying_type_t<T>, int>{})
-        >::type>
+        (!std::is_enum<T>{} || std::is_convertible<std::underlying_type_t<T>, int>{})>>
     MODException(Category category, T errorCode, const std::string errorMessage = "")
         : ModuleException(category, errorCode, CreateErrorMessage(category, (int)errorCode, errorMessage))
     {}
@@ -208,28 +206,33 @@ private:
 class MODConversionOptions : public ConversionOptionsInterface<MODConversionOptions>
 {
 public:
-    MODConversionOptions()
-    {
-        Downsample = false;
-        Effects = EffectsEnum::Max;
-    }
-
-    ~MODConversionOptions() {}
+    MODConversionOptions();
+    ~MODConversionOptions() = default;
 
     enum class EffectsEnum
     {
-        Min, Max
+        Error, Min, Max
     };
 
-    EffectsEnum GetEffects() const { return Effects; }
-    bool GetDownsample() const { return Downsample; }
+    EffectsEnum GetEffects() const
+    {
+        if (m_Effects == "min")
+            return EffectsEnum::Min;
+        else if (m_Effects == "max")
+            return EffectsEnum::Max;
+        else
+            return EffectsEnum::Error;
+    }
+
+    bool GetDownsample() const { return m_Downsample; }
 
 private:
     bool ParseArgs(std::vector<std::string>& args) override;
-    void PrintHelp() override;
 
-    bool Downsample;
-    EffectsEnum Effects;
+    // These reference their values in m_Values.
+    // While m_Values could be used, these are here for convenience and speed.
+    bool& m_Downsample;
+    std::string& m_Effects;
 };
 
 class MOD : public ModuleInterface<MOD, MODConversionOptions>

@@ -59,13 +59,13 @@ std::string GetAvailableModules()
 std::string GetAvailableOptions(std::string moduleType)
 {
     ModuleType moduleTypeEnum = Registrar::GetTypeFromFileExtension(moduleType);
-    auto options = Module::GetAvailableOptions(moduleTypeEnum);
+    ModuleOptions options = Module::GetAvailableOptions(moduleTypeEnum);
     
     std::string optionsString;
-    for (unsigned i = 0; i < options.size(); i++)
+    for (unsigned i = 0; i < options.Count(); i++)
     {
-        optionsString += options[i];
-        if (i != options.size() - 1)
+        optionsString += options.Item(i).GetName();
+        if (i != options.Count() - 1)
             optionsString += ";";
     }
     return optionsString;

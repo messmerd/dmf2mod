@@ -13,11 +13,14 @@
 
 #pragma once
 
+#include "options.h"
+
 #include <string>
 #include <vector>
 #include <map>
 #include <functional>
 #include <memory>
+#include <variant>
 
 
 // Add all supported modules to this enum
@@ -60,15 +63,14 @@ public:
     static ModuleType GetTypeFromFilename(const std::string& filename);
     static ModuleType GetTypeFromFileExtension(const std::string& extension);
     static std::string GetExtensionFromType(ModuleType moduleType);
-    static std::vector<std::string> GetAvailableOptions(ModuleType moduleType);
+    static ModuleOptions GetAvailableOptions(ModuleType moduleType);
 
 private:
     /*
      * Registers a module in the registration maps
      * TODO: Need to also check whether the ConversionOptionsStatic<T> specialization exists?
      */
-    template <class T, 
-        class = typename std::enable_if<std::is_base_of<ModuleInterface<T, typename T::OptionsType>, T>{}>::type>
+    template <class T, class = std::enable_if_t<std::is_base_of<ModuleInterface<T, typename T::OptionsType>, T>{}>>
     static void Register();
 
 private:
@@ -83,5 +85,5 @@ private:
     static std::map<ModuleType, std::function<ConversionOptionsBase*(void)>> m_ConversionOptionsRegistrationMap;
 
     // Map which maps a module type to the available command-line options for that module type
-    static std::map<ModuleType, std::vector<std::string>> m_AvailableOptionsMap;
+    static std::map<ModuleType, ModuleOptions> m_AvailableOptionsMap;
 };

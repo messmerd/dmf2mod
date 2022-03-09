@@ -35,7 +35,7 @@ class ConversionOptionsBase;
 std::map<ModuleType, std::function<ModuleBase*(void)>> Registrar::m_RegistrationMap = {};
 std::map<std::string, ModuleType> Registrar::m_FileExtensionMap = {};
 std::map<ModuleType, std::function<ConversionOptionsBase*(void)>> Registrar::m_ConversionOptionsRegistrationMap = {};
-std::map<ModuleType, std::vector<std::string>> Registrar::m_AvailableOptionsMap = {};
+std::map<ModuleType, ModuleOptions> Registrar::m_AvailableOptionsMap = {};
 
 // Registers all modules by associating their ModuleType enum values with their corresponding module classes
 void Registrar::RegisterModules()
@@ -91,6 +91,9 @@ ConversionOptionsPtr Registrar::CreateConversionOptions(ModuleType moduleType)
 
 std::vector<std::string> Registrar::GetAvailableModules()
 {
+    // TODO: Create a ModuleInfo class that contains ModuleOptions, module type, friendly name, file extension, etc.
+    //          Then that object could be created in mod.cpp and dmf.cpp and used to register module info.
+
     std::vector<std::string> vec;
     for (const auto& mapPair : m_FileExtensionMap)
     {
@@ -134,9 +137,9 @@ std::string Registrar::GetExtensionFromType(ModuleType moduleType)
     return "";
 }
 
-std::vector<std::string> Registrar::GetAvailableOptions(ModuleType moduleType)
+ModuleOptions Registrar::GetAvailableOptions(ModuleType moduleType)
 {
     if (m_AvailableOptionsMap.count(moduleType) > 0)
-        return m_AvailableOptionsMap[moduleType];
+        return m_AvailableOptionsMap.at(moduleType);
     return {};
 }

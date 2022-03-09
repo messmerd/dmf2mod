@@ -28,8 +28,13 @@
 
 #include <cassert>
 
+const ModuleOptions MODOptions = 
+{
+    {"downsample", "", false, "Allow wavetables to lose information through downsampling if needed."},
+    {"effects", "", "max", {"min", "max"}, "The number of ProTracker effects to use."}
+};
+
 // Register module info
-const std::vector<std::string> MODOptions = {"--downsample", "--effects=[min,max]"};
 MODULE_DEFINE(MOD, MODConversionOptions, ModuleType::MOD, "mod", MODOptions)
 
 #define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
@@ -141,15 +146,22 @@ static uint16_t proTrackerPeriodTable[5][12] = {
     {107,101, 95, 90, 85, 80, 76, 71, 67, 64, 60, 57}               /* C-4 to B-4 */
 };
 
+// Note: The ordering here depends on the option ordering in MODOptions
+MODConversionOptions::MODConversionOptions()
+    : m_Downsample(std::get<bool>(GetOptionRef(0))), m_Effects(std::get<std::string>(GetOptionRef(1)))
+{}
+
 bool MODConversionOptions::ParseArgs(std::vector<std::string>& args)
 {
+    // TODO: Make a generic argument parser in utils
+
     unsigned i = 0;
     while (i < args.size())
     {
         bool processedFlag = false;
         if (args[i] == "--downsample")
         {
-            Downsample = true;
+            m_Downsample = true;
             args.erase(args.begin() + i);
             processedFlag = true;
         }
@@ -158,10 +170,8 @@ bool MODConversionOptions::ParseArgs(std::vector<std::string>& args)
             std::string val = args[i].substr(10);
             std::transform(val.begin(), val.end(), val.begin(), [](unsigned char c){ return std::tolower(c); });
 
-            if (val == "min")
-                Effects = EffectsEnum::Min;
-            else if (val == "max")
-                Effects = EffectsEnum::Max;
+            if (val == "min" || val == "max")
+                m_Effects = val;
             else
             {
                 std::cerr << "ERROR: For the option '--effects=', the acceptable values are: min, max.\n";
@@ -181,15 +191,6 @@ bool MODConversionOptions::ParseArgs(std::vector<std::string>& args)
     }
 
     return false;
-}
-
-void MODConversionOptions::PrintHelp()
-{
-    std::cout << "MOD Options:\n";
-
-    std::cout.setf(std::ios_base::left);
-    std::cout << std::setw(30) << "  --downsample" << "Allow wavetables to lose information through downsampling if needed.\n";
-    std::cout << std::setw(30) << "  --effects=[min,max]" << "The number of ProTracker effects to use. (Default: max)\n";
 }
 
 MOD::MOD() {}

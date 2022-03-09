@@ -1,5 +1,5 @@
 /*
-    options_base.h
+    conversion_options_base.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
     Declares classes that ConversionOptionsInterface inherits.
@@ -9,13 +9,14 @@
 
 #include "registrar.h"
 #include "module_base.h"
+#include "utils.h"
 
 #include <string>
 #include <vector>
+#include <variant>
 
 // Forward declares
 template <typename T> class ConversionOptionsInterface;
-
 
 // CRTP so each class derived from ConversionOptions can have its own static creation
 template <typename T>
@@ -34,7 +35,7 @@ protected:
 
     // Returns a list of strings of the format: "-o, --option=[min,max]" or "-a" or "--flag" or "--flag=[]" etc.
     //  representing the command-line options for this module and their acceptable values
-    static std::vector<std::string> GetAvailableOptionsStatic();
+    static ModuleOptions GetAvailableOptionsStatic();
 
     // The output module type
     static ModuleType GetTypeStatic()
@@ -44,7 +45,7 @@ protected:
 
 private:
     static const ModuleType m_Type;
-    static const std::vector<std::string> m_AvailableOptions;
+    static const ModuleOptions m_AvailableOptions;
 };
 
 
@@ -52,14 +53,14 @@ private:
 class ConversionOptionsBase
 {
 public:
-    ConversionOptionsBase() { m_OutputFile.clear(); }
+    ConversionOptionsBase() = default; // See ConversionOptionsInterface constructor
     virtual ~ConversionOptionsBase() = default;
 
     /*
      * Create a new ConversionOptions object for the desired module type
      */
     template <class moduleClass, 
-        class = typename std::enable_if<std::is_base_of<ModuleInterface<moduleClass, typename moduleClass::OptionsType>, moduleClass>{}>::type>
+        class = std::enable_if_t<std::is_base_of<ModuleInterface<moduleClass, typename moduleClass::OptionsType>, moduleClass>{}>>
     static ConversionOptionsPtr Create()
     {
         return ConversionOptionsPtr(ModuleStatic<moduleClass>::m_CreateConversionOptionsStatic());
@@ -79,7 +80,7 @@ public:
      * Cast an options pointer to a pointer of a derived type
      */
     template <class optionsClass, 
-        class = typename std::enable_if<std::is_base_of<ConversionOptionsInterface<optionsClass>, optionsClass>{}>::type>
+        class = std::enable_if_t<std::is_base_of<ConversionOptionsInterface<optionsClass>, optionsClass>{}>>
     const optionsClass* Cast() const
     {
         return reinterpret_cast<const optionsClass*>(this);
@@ -94,13 +95,13 @@ public:
      * Returns a list of strings of the format: "-o, --option=[min,max]" or "-a" or "--flag" or "--flag=[]" etc.
      *  representing the command-line options for this module and their acceptable values
      */
-    virtual std::vector<std::string> GetAvailableOptions() const = 0;
+    virtual ModuleOptions GetAvailableOptions() const = 0;
 
     /*
      * Returns a list of strings of the format: "-o, --option=[min,max]" or "-a" or "--flag" or "--flag=[]" etc.
      *  representing the command-line options and their acceptable values for the given module type
      */
-    static std::vector<std::string> GetAvailableOptions(ModuleType moduleType)
+    static ModuleOptions GetAvailableOptions(ModuleType moduleType)
     {
         return Registrar::GetAvailableOptions(moduleType);
     }
@@ -111,15 +112,28 @@ public:
     std::string GetOutputFilename() const { return m_OutputFile; }
 
     /*
+     * Get an option value reference at m_Values[index]
+     */
+    virtual ModuleOption::value_t& GetOptionRef(int index) = 0;
+    
+    /*
+     * Get a reference to the value of the option with the given name
+     */
+    virtual ModuleOption::value_t& GetOptionRef(const std::string& name) = 0;
+
+    /*
      * Fills in this object's command-line arguments from a list of arguments.
      * Arguments are removed from the list if they are successfully parsed.
      */
     virtual bool ParseArgs(std::vector<std::string>& args) = 0;
 
-    virtual void PrintHelp() = 0;
+    virtual void PrintHelp() const = 0;
 
 protected:
     friend class Registrar;
 
     std::string m_OutputFile;
+
+    // Stores the values of each option. Each index corresponds to a ModuleOptions index.
+    std::vector<ModuleOption::value_t> m_Values;
 };

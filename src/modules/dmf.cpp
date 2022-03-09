@@ -23,8 +23,7 @@
 #include <map>
 
 // Define module info
-const std::vector<std::string> DMFOptions = {};
-MODULE_DEFINE(DMF, DMFConversionOptions, ModuleType::DMF, "dmf", DMFOptions)
+MODULE_DEFINE(DMF, DMFConversionOptions, ModuleType::DMF, "dmf", {})
 
 #define DMF_FILE_VERSION_MIN 17 // DMF files as old as version 17 (0x11) are supported
 #define DMF_FILE_VERSION_MAX 25 // DMF files as new as version 25 (0x19) are supported
@@ -149,11 +148,6 @@ void DMF::CleanUp()
     }
 
     m_PatternNames.clear();
-}
-
-void DMFConversionOptions::PrintHelp()
-{ 
-    std::cout << "DMF files have no conversion options.\n";
 }
 
 void DMF::ImportRaw(const std::string& filename)

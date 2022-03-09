@@ -9,7 +9,7 @@
 #pragma once
 
 #include "module_base.h"
-#include "options.h"
+#include "conversion_options.h"
 
 // All module classes must inherit this
 template <typename T, typename O>
@@ -29,7 +29,7 @@ protected:
         return ModuleStatic<T>::GetFileExtensionStatic();
     }
 
-    std::vector<std::string> GetAvailableOptions() const override
+    ModuleOptions GetAvailableOptions() const override
     {
         return ConversionOptionsStatic<O>::GetAvailableOptionsStatic();
     }
@@ -46,7 +46,7 @@ class optionsClass; \
 template<> ModuleBase* ModuleStatic<moduleClass>::CreateStatic(); \
 template<> ConversionOptionsBase* ConversionOptionsStatic<optionsClass>::CreateStatic(); \
 template<> std::string ModuleStatic<moduleClass>::GetFileExtensionStatic(); \
-template<> std::vector<std::string> ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic();
+template<> ModuleOptions ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic();
 
 /*
     Helper macro for defining static data members for a template specialization 
@@ -57,8 +57,8 @@ template<> std::vector<std::string> ConversionOptionsStatic<optionsClass>::GetAv
 template<> const ModuleType ModuleStatic<moduleClass>::m_Type = enumType; \
 template<> const std::string ModuleStatic<moduleClass>::m_FileExtension = fileExt; \
 template<> const ModuleType ConversionOptionsStatic<optionsClass>::m_Type = enumType; \
-template<> const std::vector<std::string> ConversionOptionsStatic<optionsClass>::m_AvailableOptions = availOptions; \
+template<> const ModuleOptions ConversionOptionsStatic<optionsClass>::m_AvailableOptions = availOptions; \
 template<> ModuleBase* ModuleStatic<moduleClass>::CreateStatic() { return new moduleClass; } \
 template<> ConversionOptionsBase* ConversionOptionsStatic<optionsClass>::CreateStatic() { return new optionsClass; } \
 template<> std::string ModuleStatic<moduleClass>::GetFileExtensionStatic() { return m_FileExtension; } \
-template<> std::vector<std::string> ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic() { return m_AvailableOptions; };
+template<> ModuleOptions ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic() { return m_AvailableOptions; };

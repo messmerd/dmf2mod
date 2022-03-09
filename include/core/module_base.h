@@ -203,12 +203,12 @@ public:
     /*
      * Get the available command-line options for this module
      */
-    virtual std::vector<std::string> GetAvailableOptions() const = 0;
+    virtual ModuleOptions GetAvailableOptions() const = 0;
 
     /*
      * Get the available command-line options for the given module type
      */
-    static std::vector<std::string> GetAvailableOptions(ModuleType moduleType)
+    static ModuleOptions GetAvailableOptions(ModuleType moduleType)
     {
         return Registrar::GetAvailableOptions(moduleType);
     }

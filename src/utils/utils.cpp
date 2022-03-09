@@ -315,7 +315,7 @@ void ModuleUtils::PrintHelp(ModuleType moduleType)
             str1 += "=[";
             
             unsigned i = 0;
-            const unsigned total = option.GetAcceptedValues().size();
+            const size_t total = option.GetAcceptedValues().size();
             for (auto& val : option.GetAcceptedValues())
             {
                 switch (optionType)

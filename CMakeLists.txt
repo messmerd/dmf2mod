@@ -57,7 +57,7 @@ elseif(EMSCRIPTEN)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(WARNING_FLAGS "-Wall -Wno-unknown-pragmas -Wno-\#warnings -Werror")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    set(WARNING_FLAGS "/W3 /WX")
+    set(WARNING_FLAGS "/W3") #/WX
 else()
     set(WARNING_FLAGS "")
 endif()

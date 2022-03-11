@@ -8,6 +8,8 @@
 
 #include "options.h"
 
+using namespace d2m;
+
 size_t ModuleOptions::Count() const
 {
     return m_Options.size();

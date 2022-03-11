@@ -7,6 +7,8 @@
 
 #include "module_base.h"
 
+using namespace d2m;
+
 // Non-specialized class template data member values:
 template<typename T> const ModuleType ModuleStatic<T>::m_Type = ModuleType::NONE;
 template<typename T> const std::string ModuleStatic<T>::m_FileExtension = "";

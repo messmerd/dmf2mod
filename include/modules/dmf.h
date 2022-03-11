@@ -14,13 +14,17 @@
 #include <string>
 #include <map>
 
+namespace d2m {
+
 // Declare module
 MODULE_DECLARE(DMF, DMFConversionOptions)
+
+namespace dmf {
 
 // Deflemask allows four effects columns per channel regardless of the system 
 #define DMF_MAX_EFFECTS_COLUMN_COUNT 4
 
-enum class DMFNotePitch
+enum class NotePitch
 {
     Empty=0,
     C=0,
@@ -44,7 +48,7 @@ static const int DMFNoVolume = -1;
 static const int DMFVolumeMax = 15; /* ??? */
 
 // Deflemask effects shared by all systems:
-enum class DMFEffectCode
+enum class EffectCode
 {
     NoEffect=-1, NoEffectVal=-1,
     Arp=0x0, PortUp=0x1, PortDown=0x2, Port2Note=0x3, Vibrato=0x4, Port2NoteVolSlide=0x5, VibratoVolSlide=0x6,
@@ -55,7 +59,7 @@ enum class DMFEffectCode
 };
 
 // Deflemask effects exclusive to the Game Boy system:
-enum class DMFGameBoyEffectCode
+enum class GameBoyEffectCode
 {
     SetWave=0x10,
     SetNoisePolyCounterMode=0x11,
@@ -66,17 +70,17 @@ enum class DMFGameBoyEffectCode
 
 // To do: Add enums for effects exclusive to the rest of Deflemask's systems.
 
-struct DMFNote
+struct Note
 {
     uint16_t pitch;
     uint16_t octave;
 
-    DMFNote() = default;
-    DMFNote(uint16_t p, uint16_t o)
+    Note() = default;
+    Note(uint16_t p, uint16_t o)
         : pitch(p), octave(o)
     {}
 
-    DMFNote(DMFNotePitch p, uint16_t o)
+    Note(NotePitch p, uint16_t o)
         : pitch((uint16_t)p), octave(o)
     {}
 
@@ -90,7 +94,7 @@ struct DMFNote
 
     inline bool IsOff() const
     {
-        return pitch == (int)DMFNotePitch::Off;
+        return pitch == (int)NotePitch::Off;
     }
 
     inline bool IsEmpty() const
@@ -98,16 +102,15 @@ struct DMFNote
         return pitch == 0 && octave == 0;
     }
 
+    bool operator==(const Note& rhs) const;
+    bool operator!=(const Note& rhs) const;
+    bool operator>(const Note& rhs) const;
+    bool operator<(const Note& rhs) const;
+    bool operator>=(const Note& rhs) const;
+    bool operator<=(const Note& rhs) const;
 };
 
-int DMFGetNoteRange(const DMFNote& low, const DMFNote& high);
-
-bool operator==(const DMFNote& lhs, const DMFNote& rhs);
-bool operator!=(const DMFNote& lhs, const DMFNote& rhs);
-bool operator>(const DMFNote& lhs, const DMFNote& rhs);
-bool operator<(const DMFNote& lhs, const DMFNote& rhs);
-bool operator>=(const DMFNote& lhs, const DMFNote& rhs);
-bool operator<=(const DMFNote& lhs, const DMFNote& rhs);
+int GetNoteRange(const Note& low, const Note& high);
 
 // Comparison operators for enums
 template <typename T, typename U,
@@ -128,7 +131,7 @@ bool operator!=(T lhs, const U& rhs)
     return lhs != static_cast<T>(rhs);
 }
 
-struct DMFSystem
+struct System
 {
     enum class Type
     {
@@ -142,12 +145,12 @@ struct DMFSystem
     std::string name;
     uint8_t channels;
 
-    DMFSystem() = default;
-    DMFSystem(Type type, uint8_t id, std::string name, uint8_t channels)
+    System() = default;
+    System(Type type, uint8_t id, std::string name, uint8_t channels)
         : type(type), id(id), name(name), channels(channels)
     {}
 };
-struct DMFVisualInfo
+struct VisualInfo
 {
     uint8_t songNameLength;
     std::string songName;
@@ -157,14 +160,14 @@ struct DMFVisualInfo
     uint8_t highlightBPatterns;
 };
 
-struct DMFModuleInfo
+struct ModuleInfo
 {
     uint8_t timeBase, tickTime1, tickTime2, framesMode, usingCustomHZ, customHZValue1, customHZValue2, customHZValue3;
     uint32_t totalRowsPerPattern;
     uint8_t totalRowsInPatternMatrix;
 };
 
-struct DMFFMOps
+struct FMOps
 {
     // TODO: Use unions depending on DMF version?
     uint8_t am;
@@ -189,7 +192,7 @@ struct DMFFMOps
     uint8_t dam, dvb, egt, ksl, sus, vib, ws, ksr; // Exclusive to DMF version 18 (0x12) and older
 };
 
-struct DMFInstrument
+struct Instrument
 {
     enum InstrumentMode
     {
@@ -244,12 +247,12 @@ struct DMFInstrument
                 };
             };
             
-            DMFFMOps ops[4];
+            FMOps ops[4];
         } fm;
     };
 };
 
-struct DMFPCMSample
+struct PCMSample
 {
     uint32_t size;
     std::string name;
@@ -257,25 +260,28 @@ struct DMFPCMSample
     uint16_t *data;
 };
 
-struct DMFEffect
+struct Effect
 {
     int16_t code;
     int16_t value;
 };
 
-struct DMFChannelRow
+struct ChannelRow
 {
-    DMFNote note;
+    Note note;
     int16_t volume;
-    DMFEffect effect[DMF_MAX_EFFECTS_COLUMN_COUNT];
+    Effect effect[DMF_MAX_EFFECTS_COLUMN_COUNT];
     int16_t instrument;
 };
 
 // Deflemask Game Boy channels
-enum class DMFGameBoyChannel
+enum class GameBoyChannel
 {
     SQW1=0, SQW2=1, WAVE=2, NOISE=3
 };
+
+
+} // namespace dmf
 
 class DMFConversionOptions : public ConversionOptionsInterface<DMFConversionOptions>
 {
@@ -301,9 +307,9 @@ public:
     enum class ConvertError {};
     enum class ConvertWarning {};
 
-    using SystemType = DMFSystem::Type;
+    using SystemType = dmf::System::Type;
 
-    static const DMFSystem& Systems(SystemType systemType);
+    static const dmf::System& Systems(SystemType systemType);
 
 public:
     DMF();
@@ -318,9 +324,9 @@ public:
     void GetBPM(unsigned& numerator, unsigned& denominator) const;
     double GetBPM() const;
 
-    const DMFSystem& GetSystem() const { return m_System; }
-    const DMFVisualInfo& GetVisualInfo() const { return m_VisualInfo; }
-    const DMFModuleInfo& GetModuleInfo() const { return m_ModuleInfo; }
+    const dmf::System& GetSystem() const { return m_System; }
+    const dmf::VisualInfo& GetVisualInfo() const { return m_VisualInfo; }
+    const dmf::ModuleInfo& GetModuleInfo() const { return m_ModuleInfo; }
 
     uint8_t** GetPatternMatrixValues() const { return m_PatternMatrixValues; }
 
@@ -329,8 +335,8 @@ public:
     uint32_t** GetWavetableValues() const { return m_WavetableValues; }
     uint32_t GetWavetableValue(unsigned wavetable, unsigned index) const { return m_WavetableValues[wavetable][index]; }
 
-    DMFChannelRow*** GetPatternValues() const { return m_PatternValues; }
-    DMFChannelRow GetChannelRow(unsigned channel, unsigned patternMatrixRow, unsigned patternRow) const
+    dmf::ChannelRow*** GetPatternValues() const { return m_PatternValues; }
+    dmf::ChannelRow GetChannelRow(unsigned channel, unsigned patternMatrixRow, unsigned patternRow) const
     {
         return m_PatternValues[channel][m_PatternMatrixValues[channel][patternMatrixRow]][patternRow];
     }
@@ -345,35 +351,35 @@ private:
     void ExportRaw(const std::string& filename) override;
     void ConvertRaw(const Module* input, const ConversionOptionsPtr& options) override;
 
-    DMFSystem GetSystem(uint8_t systemByte) const;
+    dmf::System GetSystem(uint8_t systemByte) const;
     void LoadVisualInfo(zstr::ifstream& fin);
     void LoadModuleInfo(zstr::ifstream& fin);
     void LoadPatternMatrixValues(zstr::ifstream& fin);
     void LoadInstrumentsData(zstr::ifstream& fin);
-    DMFInstrument LoadInstrument(zstr::ifstream& fin, SystemType systemType);
+    dmf::Instrument LoadInstrument(zstr::ifstream& fin, SystemType systemType);
     void LoadWavetablesData(zstr::ifstream& fin);
     void LoadPatternsData(zstr::ifstream& fin);
-    DMFChannelRow LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount);
+    dmf::ChannelRow LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount);
     void LoadPCMSamplesData(zstr::ifstream& fin);
-    DMFPCMSample LoadPCMSample(zstr::ifstream& fin);
+    dmf::PCMSample LoadPCMSample(zstr::ifstream& fin);
 
 private:
     uint8_t         m_DMFFileVersion;
-    DMFSystem          m_System;
-    DMFVisualInfo      m_VisualInfo;
-    DMFModuleInfo      m_ModuleInfo;
+    dmf::System          m_System;
+    dmf::VisualInfo      m_VisualInfo;
+    dmf::ModuleInfo      m_ModuleInfo;
     uint8_t**       m_PatternMatrixValues;
     uint8_t*        m_PatternMatrixMaxValues;
     uint8_t         m_TotalInstruments;
-    DMFInstrument*     m_Instruments;
+    dmf::Instrument*     m_Instruments;
     uint8_t         m_TotalWavetables;
     uint32_t*       m_WavetableSizes;
     uint32_t**      m_WavetableValues;
-    DMFChannelRow***   m_PatternValues;
+    dmf::ChannelRow***   m_PatternValues;
     uint8_t*        m_ChannelEffectsColumnsCount;
     uint8_t         m_TotalPCMSamples;
-    DMFPCMSample*      m_PCMSamples;
+    dmf::PCMSample*      m_PCMSamples;
     std::map<unsigned, std::string> m_PatternNames;
 };
 
-
+} // namespace d2m

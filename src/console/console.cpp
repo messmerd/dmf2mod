@@ -12,6 +12,8 @@
 #include "dmf2mod.h"
 #include "utils.h"
 
+using namespace d2m;
+
 int main(int argc, char *argv[])
 {
     Registrar::RegisterModules();

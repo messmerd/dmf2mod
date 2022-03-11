@@ -10,6 +10,8 @@
 
 #include <iostream>
 
+using namespace d2m;
+
 void Status::PrintError(bool useStdErr) const
 {
     if (!ErrorOccurred())

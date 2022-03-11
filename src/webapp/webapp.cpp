@@ -14,6 +14,8 @@
 #include <string>
 #include <sstream>
 
+using namespace d2m;
+
 // NOTE: When using std::cout, make sure you end it with a newline to flush output. Otherwise nothing will appear.
 
 static ModulePtr G_Module;

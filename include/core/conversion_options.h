@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 
+namespace d2m {
+
 // All conversion options classes must inherit this
 template <typename T>
 class ConversionOptionsInterface : public ConversionOptionsBase, public ConversionOptionsStatic<T>
@@ -56,3 +58,5 @@ protected:
         ModuleUtils::PrintHelp(GetType());
     }
 };
+
+} // namespace d2m

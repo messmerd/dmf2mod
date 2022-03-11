@@ -19,6 +19,8 @@
 #include <stdexcept>
 #include <type_traits>
 
+namespace d2m {
+
 // Forward declares
 class ModuleException;
 class Status;
@@ -180,3 +182,5 @@ class NotImplementedException : public std::logic_error
 public:
     NotImplementedException() : std::logic_error("Function not yet implemented.") {}
 };
+
+} // namespace d2m

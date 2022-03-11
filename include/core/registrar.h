@@ -22,6 +22,7 @@
 #include <memory>
 #include <variant>
 
+namespace d2m {
 
 // Add all supported modules to this enum
 enum class ModuleType
@@ -87,3 +88,5 @@ private:
     // Map which maps a module type to the available command-line options for that module type
     static std::map<ModuleType, ModuleOptions> m_AvailableOptionsMap;
 };
+
+} // namespace d2m

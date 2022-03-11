@@ -15,6 +15,8 @@
 #include <vector>
 #include <variant>
 
+namespace d2m {
+
 // Forward declares
 template <typename T> class ConversionOptionsInterface;
 
@@ -137,3 +139,5 @@ protected:
     // Stores the values of each option. Each index corresponds to a ModuleOptions index.
     std::vector<ModuleOption::value_t> m_Values;
 };
+
+} // namespace d2m

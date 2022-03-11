@@ -12,9 +12,9 @@
 #include <set>
 #include <vector>
 #include <variant>
-#include <exception>
+#include <cassert>
 
-#include <iostream>
+namespace d2m {
 
 // Forward declares
 class ModuleOptions;
@@ -63,8 +63,8 @@ public:
                 found = true;
         }
         
-        if (!found)
-            throw std::invalid_argument("In ModuleOption constructor: acceptedValues must contain the default value.");
+        if (!found) // Avoid "unused variable" warning
+            assert(false && "In ModuleOption constructor: acceptedValues must contain the default value.");
         
         m_Type = static_cast<Type>(m_DefaultValue.index());
     }
@@ -122,3 +122,5 @@ public:
 private:
     std::vector<ModuleOption> m_Options;
 };
+
+} // namespace d2m

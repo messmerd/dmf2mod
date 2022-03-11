@@ -11,6 +11,8 @@
 #include "module_base.h"
 #include "conversion_options.h"
 
+namespace d2m {
+
 // All module classes must inherit this
 template <typename T, typename O>
 class ModuleInterface : public ModuleBase, public ModuleStatic<T>
@@ -62,3 +64,5 @@ template<> ModuleBase* ModuleStatic<moduleClass>::CreateStatic() { return new mo
 template<> ConversionOptionsBase* ConversionOptionsStatic<optionsClass>::CreateStatic() { return new optionsClass; } \
 template<> std::string ModuleStatic<moduleClass>::GetFileExtensionStatic() { return m_FileExtension; } \
 template<> ModuleOptions ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic() { return m_AvailableOptions; };
+
+} // namespace d2m

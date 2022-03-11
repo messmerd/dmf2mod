@@ -15,6 +15,8 @@
 #include <vector>
 #include <map>
 
+namespace d2m {
+
 // Command-line options that are supported regardless of which modules are supported
 struct CommonFlags
 {
@@ -54,3 +56,5 @@ private:
     // Core conversion options
     static CommonFlags m_CoreOptions;
 };
+
+} // namespace d2m

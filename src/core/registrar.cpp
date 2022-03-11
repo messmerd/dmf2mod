@@ -24,12 +24,12 @@
 
 #include "registrar.h"
 #include "utils/utils.h"
+#include "module_base.h"
+#include "conversion_options_base.h"
 
 #include "all_modules.h"
 
-// Forward defines
-class ModuleBase;
-class ConversionOptionsBase;
+using namespace d2m;
 
 // Initialize module registration maps
 std::map<ModuleType, std::function<ModuleBase*(void)>> Registrar::m_RegistrationMap = {};

@@ -15,24 +15,21 @@
 #include <sstream>
 #include <map>
 
+namespace d2m {
+
 // Declare module
 MODULE_DECLARE(MOD, MODConversionOptions)
 
-// Forward declares
-struct DMFNote;
-struct DMFChannelRow;
-enum class DMFNotePitch;
-struct MODChannelState;
-struct MODState;
+namespace mod {
 
 // MOD effects:
 // An effect is represented with 12 bits, which is 3 groups of 4 bits: [a][x][y] or [a][b][x]
 // The effect code is [a] or [a][b], and the effect value is [x][y] or [x]. [x][y] codes are the
 // extended effects. All effect codes are stored below. Non-extended effects have 0x0 in the right-most
 // nibble in order to line up with the extended effects:
-namespace MODEffectCode
+namespace EffectCode
 {
-    enum MODEffectCode
+    enum EffectCode
     {
         NoEffect=0x00, NoEffectVal=0x00, NoEffectCode=0x00, /* NoEffect is the same as ((uint16_t)NoEffectCode << 4) | NoEffectVal */
         Arp=0x00, PortUp=0x10, PortDown=0x20, Port2Note=0x30, Vibrato=0x40, Port2NoteVolSlide=0x50, VibratoVolSlide=0x60,
@@ -46,14 +43,14 @@ namespace MODEffectCode
     };
 }
 
-struct MODEffect
+struct Effect
 {
     uint16_t effect;
     uint16_t value;
 };
 
 // Lower enum value = higher priority
-enum MODEffectPriority
+enum EffectPriority
 {
     EffectPriorityStructureRelated, /* Can always be performed */
     EffectPrioritySampleChange, /* Can always be performed */
@@ -63,53 +60,53 @@ enum MODEffectPriority
     EffectPriorityUnsupportedEffect /* Must be the last enum value */
 };
 
-struct MODNote
+struct Note
 {
     uint16_t pitch;
     uint16_t octave;
 
-    MODNote() = default;
-    MODNote(uint16_t p, uint16_t o)
+    Note() = default;
+    Note(uint16_t p, uint16_t o)
         : pitch(p), octave(o)
     {}
 
-    bool operator>(const MODNote& rhs) const
+    bool operator>(const Note& rhs) const
     {
         return (this->octave << 4) + this->pitch > (rhs.octave << 4) + rhs.pitch;
     }
 
-    bool operator>=(const MODNote& rhs) const
+    bool operator>=(const Note& rhs) const
     {
         return (this->octave << 4) + this->pitch >= (rhs.octave << 4) + rhs.pitch;
     }
 
-    bool operator<(const MODNote& rhs) const
+    bool operator<(const Note& rhs) const
     {
         return (this->octave << 4) + this->pitch < (rhs.octave << 4) + rhs.pitch;
     }
 
-    bool operator<=(const MODNote& rhs) const
+    bool operator<=(const Note& rhs) const
     {
         return (this->octave << 4) + this->pitch <= (rhs.octave << 4) + rhs.pitch;
     }
 
-    bool operator==(const MODNote& rhs) const
+    bool operator==(const Note& rhs) const
     {
         return this->octave == rhs.octave && this->pitch == rhs.pitch;
     }
 
-    bool operator!=(const MODNote& rhs) const
+    bool operator!=(const Note& rhs) const
     {
         return !(*this == rhs);
     }
 
-    MODNote(const DMFNote& dmfNote);
-    MODNote(DMFNotePitch p, uint16_t o);
-    MODNote& operator=(const DMFNote& dmfNote);
-    DMFNote ToDMFNote() const;
+    Note(const dmf::Note& dmfNote);
+    Note(dmf::NotePitch p, uint16_t o);
+    Note& operator=(const dmf::Note& dmfNote);
+    dmf::Note ToDMFNote() const;
 };
 
-struct MODChannelRow
+struct ChannelRow
 {
     uint8_t SampleNumber;
     uint16_t SamplePeriod;
@@ -147,12 +144,12 @@ public:
 
     DMFSampleMapper();
 
-    mod_sample_id_t Init(dmf_sample_id_t dmfSampleId, mod_sample_id_t startingId, const std::pair<DMFNote, DMFNote>& dmfNoteRange);
+    mod_sample_id_t Init(dmf_sample_id_t dmfSampleId, mod_sample_id_t startingId, const std::pair<dmf::Note, dmf::Note>& dmfNoteRange);
     mod_sample_id_t InitSilence();
 
-    MODNote GetMODNote(const DMFNote& dmfNote, NoteRange& modNoteRange) const;
-    NoteRange GetMODNoteRange(DMFNote dmfNote) const;
-    mod_sample_id_t GetMODSampleId(DMFNote dmfNote) const;
+    Note GetMODNote(const dmf::Note& dmfNote, NoteRange& modNoteRange) const;
+    NoteRange GetMODNoteRange(dmf::Note dmfNote) const;
+    mod_sample_id_t GetMODSampleId(dmf::Note dmfNote) const;
     mod_sample_id_t GetMODSampleId(NoteRange modNoteRange) const;
     unsigned GetMODSampleLength(NoteRange modNoteRange) const;
     NoteRange GetMODNoteRange(mod_sample_id_t modSampleId) const;
@@ -167,7 +164,7 @@ private:
     dmf_sample_id_t m_DmfId;
     mod_sample_id_t m_ModIds[3]; // Up to 3 MOD samples from one DMF sample
     unsigned m_ModSampleLengths[3];
-    std::vector<DMFNote> m_RangeStart;
+    std::vector<dmf::Note> m_RangeStart;
     int m_NumMODSamples;
     SampleType m_SampleType;
     bool m_DownsamplingNeeded;
@@ -175,7 +172,7 @@ private:
 };
 
 // Stores a MOD sample
-struct MODSample
+struct Sample
 {
     std::string name; // 22 characters
     mod_sample_id_t id;
@@ -187,6 +184,93 @@ struct MODSample
 
     std::vector<int8_t> data;
 };
+
+
+// The current square wave duty cycle, note volume, and other information that the 
+//      tracker stores for each channel while playing a tracker file.
+struct ChannelState
+{
+    int channel;
+    uint16_t dutyCycle;
+    uint16_t wavetable;
+    bool sampleChanged; // MOD sample
+    int16_t volume;
+    bool notePlaying;
+    DMFSampleMapper::NoteRange noteRange;
+};
+
+struct State
+{
+    struct global
+    {
+        bool suspended;      // true == currently in part that a Position Jump skips over
+        int jumpDestination; // DMF pattern matrix row where you are jumping to. Not a loop.
+        Effect channelIndependentEffect;
+        unsigned channel;    // The current channel in DMF or MOD
+        unsigned order;      // The current pattern matrix row in DMF
+        unsigned patternRow; // The current pattern row in DMF?
+    } global;
+    
+    ChannelState channel[4];
+    ChannelState channelCopy[4];
+
+    ChannelRow channelRows[4];
+
+    State()
+    {
+        Init();
+    }
+
+    void Init()
+    {
+        global.suspended = false;
+        global.jumpDestination = -1; 
+        global.channelIndependentEffect = {EffectCode::NoEffectCode, EffectCode::NoEffectVal};
+        
+        global.channel = 0;         
+        global.order = 0;
+        global.patternRow = 0;
+
+        for (int i = 0; i < 4; i++)
+        {
+            channel[i].channel = i;
+            channel[i].dutyCycle = 0; // Default is 0 or a 12.5% duty cycle square wave.
+            channel[i].wavetable = 0; // Default is wavetable #0.
+            channel[i].sampleChanged = true; // Whether dutyCycle or wavetable recently changed
+            channel[i].volume = dmf::DMFVolumeMax; // The max volume for a channel (in DMF units)
+            channel[i].notePlaying = false; // Whether a note is currently playing on a channel
+            channel[i].noteRange = DMFSampleMapper::NoteRange::First; // Which MOD sample note range is currently being used
+
+            channelCopy[i] = channel[i];
+            channelRows[i] = {};
+        }
+    }
+
+    void Save(unsigned jumpDestination)
+    {
+        // Save copy of channel states
+        for (int i = 0; i < 4; i++)
+        {
+            channelCopy[i] = channel[i];
+        }
+        global.suspended = true;
+        global.jumpDestination = (int)jumpDestination;
+    }
+
+    void Restore()
+    {
+        // Restore channel states from copy
+        for (int i = 0; i < 4; i++)
+        {
+            channel[i] = channelCopy[i];
+        }
+        global.suspended = false;
+        global.jumpDestination = -1;
+    }
+
+};
+
+} // namespace mod
 
 class MODException : public ModuleException
 {
@@ -274,9 +358,9 @@ public:
     static constexpr unsigned VolumeMax = 64u; // Yes, there are 65 different values for the volume
 
 private:
-    using SampleMap = std::map<dmf_sample_id_t, DMFSampleMapper>;
-    using PriorityEffectsMap = std::multimap<MODEffectPriority, MODEffect>;
-    using DMFSampleNoteRangeMap = std::map<dmf_sample_id_t, std::pair<DMFNote, DMFNote>>;
+    using SampleMap = std::map<mod::dmf_sample_id_t, mod::DMFSampleMapper>;
+    using PriorityEffectsMap = std::multimap<mod::EffectPriority, mod::Effect>;
+    using DMFSampleNoteRangeMap = std::map<mod::dmf_sample_id_t, std::pair<dmf::Note, dmf::Note>>;
 
     void ImportRaw(const std::string& filename) override;
     void ExportRaw(const std::string& filename) override;
@@ -290,13 +374,13 @@ private:
     void DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap);
     
     void DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap);
-    PriorityEffectsMap DMFConvertEffects(const DMFChannelRow& pat);
-    PriorityEffectsMap DMFConvertEffects_NoiseChannel(const DMFChannelRow& pat);
-    void DMFUpdateStatePre(const DMF& dmf, MODState& state, const PriorityEffectsMap& modEffects);
-    void DMFGetAdditionalEffects(const DMF& dmf, MODState& state, const DMFChannelRow& pat, PriorityEffectsMap& modEffects);
-    //void UpdateStatePost(const DMF& dmf, MODState& state, const PriorityEffectsMap& modEffects);
-    MODNote DMFConvertNote(MODState& state, const DMFChannelRow& pat, const SampleMap& sampleMap, PriorityEffectsMap& modEffects, mod_sample_id_t& sampleId, uint16_t& period);
-    MODChannelRow DMFApplyNoteAndEffect(MODState& state, const PriorityEffectsMap& modEffects, mod_sample_id_t modSampleId, uint16_t period);
+    PriorityEffectsMap DMFConvertEffects(const dmf::ChannelRow& pat);
+    PriorityEffectsMap DMFConvertEffects_NoiseChannel(const dmf::ChannelRow& pat);
+    void DMFUpdateStatePre(const DMF& dmf, mod::State& state, const PriorityEffectsMap& modEffects);
+    void DMFGetAdditionalEffects(const DMF& dmf, mod::State& state, const dmf::ChannelRow& pat, PriorityEffectsMap& modEffects);
+    //void UpdateStatePost(const DMF& dmf, mod::State& state, const PriorityEffectsMap& modEffects);
+    mod::Note DMFConvertNote(mod::State& state, const dmf::ChannelRow& pat, const SampleMap& sampleMap, PriorityEffectsMap& modEffects, mod::mod_sample_id_t& sampleId, uint16_t& period);
+    mod::ChannelRow DMFApplyNoteAndEffect(mod::State& state, const PriorityEffectsMap& modEffects, mod::mod_sample_id_t modSampleId, uint16_t period);
     
     void DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed);
     
@@ -310,12 +394,12 @@ private:
     // Other:
     uint8_t GetMODTempo(double bpm);
 
-    inline const MODChannelRow& GetChannelRow(unsigned pattern, unsigned row, unsigned channel)
+    inline const mod::ChannelRow& GetChannelRow(unsigned pattern, unsigned row, unsigned channel)
     {
         return m_Patterns.at(pattern).at((row << m_NumberOfChannelsPowOfTwo) + channel);
     }
 
-    inline void SetChannelRow(unsigned pattern, unsigned row, unsigned channel, MODChannelRow& channelRow)
+    inline void SetChannelRow(unsigned pattern, unsigned row, unsigned channel, mod::ChannelRow& channelRow)
     {
         m_Patterns.at(pattern).at((row << m_NumberOfChannelsPowOfTwo) + channel) = channelRow;
     }
@@ -332,6 +416,8 @@ private:
     unsigned m_NumberOfChannels;
     unsigned char m_NumberOfChannelsPowOfTwo; // For efficiency. 2^m_NumberOfChannelsPowOfTwo = m_NumberOfChannels.
     unsigned m_NumberOfRowsInPatternMatrix;
-    std::vector<std::vector<MODChannelRow>> m_Patterns; // Per pattern: Vector of channel rows that together contain data for entire pattern
-    std::map<mod_sample_id_t, MODSample> m_Samples;
+    std::vector<std::vector<mod::ChannelRow>> m_Patterns; // Per pattern: Vector of channel rows that together contain data for entire pattern
+    std::map<mod::mod_sample_id_t, mod::Sample> m_Samples;
 };
+
+} // namespace d2m

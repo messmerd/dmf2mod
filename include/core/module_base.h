@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 
+namespace d2m {
+
 // CRTP so each class derived from Module can have its own static type variable and static creation
 template<typename T>
 class ModuleStatic
@@ -227,3 +229,5 @@ protected:
 
     Status m_Status;
 };
+
+} // namespace d2m

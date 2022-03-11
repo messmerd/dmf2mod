@@ -22,6 +22,10 @@
 #include <fstream>
 #include <map>
 
+using namespace d2m;
+using namespace d2m::dmf;
+// DO NOT use any module namespace other than d2m::dmf
+
 // Define module info
 MODULE_DEFINE(DMF, DMFConversionOptions, ModuleType::DMF, "dmf", {})
 
@@ -29,26 +33,26 @@ MODULE_DEFINE(DMF, DMFConversionOptions, ModuleType::DMF, "dmf", {})
 #define DMF_FILE_VERSION_MAX 25 // DMF files as new as version 25 (0x19) are supported
 
 // Information about all the systems Deflemask supports
-static const std::map<DMF::SystemType, DMFSystem> DMFSystems =
+static const std::map<DMF::SystemType, System> DMFSystems =
 {
-    {DMF::SystemType::Error, DMFSystem(DMF::SystemType::Error, 0x00, "ERROR", 0)},
-    {DMF::SystemType::YMU759, DMFSystem(DMF::SystemType::YMU759, 0x01, "YMU759", 17)}, // Removed since DMF version 19 (0x13)
-    {DMF::SystemType::Genesis, DMFSystem(DMF::SystemType::Genesis, 0x02, "Genesis", 10)},
-    {DMF::SystemType::Genesis_CH3, DMFSystem(DMF::SystemType::Genesis_CH3, 0x42, "Genesis (Ext. CH3)", 13)},
-    {DMF::SystemType::SMS, DMFSystem(DMF::SystemType::SMS, 0x03, "SMS", 4)},
-    {DMF::SystemType::SMS_OPLL, DMFSystem(DMF::SystemType::SMS_OPLL, 0x43, "SMS + OPLL", 13)},
-    {DMF::SystemType::GameBoy, DMFSystem(DMF::SystemType::GameBoy, 0x04, "Game Boy", 4)},
-    {DMF::SystemType::PCEngine, DMFSystem(DMF::SystemType::PCEngine, 0x05, "PC Engine", 6)},
-    {DMF::SystemType::NES, DMFSystem(DMF::SystemType::NES, 0x06, "NES", 5)},
-    {DMF::SystemType::NES_VRC7, DMFSystem(DMF::SystemType::NES_VRC7, 0x46, "NES + VRC7", 11)},
-    {DMF::SystemType::C64_SID_8580, DMFSystem(DMF::SystemType::C64_SID_8580, 0x07, "C64 (SID 8580)", 3)},
-    {DMF::SystemType::C64_SID_6581, DMFSystem(DMF::SystemType::C64_SID_6581, 0x47, "C64 (SID 6581)", 3)},
-    {DMF::SystemType::Arcade, DMFSystem(DMF::SystemType::Arcade, 0x08, "Arcade", 13)},
-    {DMF::SystemType::NeoGeo, DMFSystem(DMF::SystemType::NeoGeo, 0x09, "Neo Geo", 13)},
-    {DMF::SystemType::NeoGeo_CH2, DMFSystem(DMF::SystemType::NeoGeo_CH2, 0x49, "Neo Geo (Ext. CH2)", 16)}
+    {DMF::SystemType::Error, System(DMF::SystemType::Error, 0x00, "ERROR", 0)},
+    {DMF::SystemType::YMU759, System(DMF::SystemType::YMU759, 0x01, "YMU759", 17)}, // Removed since DMF version 19 (0x13)
+    {DMF::SystemType::Genesis, System(DMF::SystemType::Genesis, 0x02, "Genesis", 10)},
+    {DMF::SystemType::Genesis_CH3, System(DMF::SystemType::Genesis_CH3, 0x42, "Genesis (Ext. CH3)", 13)},
+    {DMF::SystemType::SMS, System(DMF::SystemType::SMS, 0x03, "SMS", 4)},
+    {DMF::SystemType::SMS_OPLL, System(DMF::SystemType::SMS_OPLL, 0x43, "SMS + OPLL", 13)},
+    {DMF::SystemType::GameBoy, System(DMF::SystemType::GameBoy, 0x04, "Game Boy", 4)},
+    {DMF::SystemType::PCEngine, System(DMF::SystemType::PCEngine, 0x05, "PC Engine", 6)},
+    {DMF::SystemType::NES, System(DMF::SystemType::NES, 0x06, "NES", 5)},
+    {DMF::SystemType::NES_VRC7, System(DMF::SystemType::NES_VRC7, 0x46, "NES + VRC7", 11)},
+    {DMF::SystemType::C64_SID_8580, System(DMF::SystemType::C64_SID_8580, 0x07, "C64 (SID 8580)", 3)},
+    {DMF::SystemType::C64_SID_6581, System(DMF::SystemType::C64_SID_6581, 0x47, "C64 (SID 6581)", 3)},
+    {DMF::SystemType::Arcade, System(DMF::SystemType::Arcade, 0x08, "Arcade", 13)},
+    {DMF::SystemType::NeoGeo, System(DMF::SystemType::NeoGeo, 0x09, "Neo Geo", 13)},
+    {DMF::SystemType::NeoGeo_CH2, System(DMF::SystemType::NeoGeo_CH2, 0x49, "Neo Geo (Ext. CH2)", 16)}
 };
 
-const DMFSystem& DMF::Systems(DMF::SystemType systemType) { return DMFSystems.at(systemType); }
+const System& DMF::Systems(DMF::SystemType systemType) { return DMFSystems.at(systemType); }
 
 DMF::DMF()
 {
@@ -108,7 +112,7 @@ void DMF::CleanUp()
     {
         for (int i = 0; i < m_TotalInstruments; i++) 
         {
-            if (m_Instruments[i].mode == DMFInstrument::StandardMode)
+            if (m_Instruments[i].mode == Instrument::StandardMode)
             {
                 delete[] m_Instruments[i].std.arpEnvValue;
                 delete[] m_Instruments[i].std.dutyNoiseEnvValue;
@@ -281,7 +285,7 @@ void DMF::ConvertRaw(const Module* input, const ConversionOptionsPtr& options)
     throw NotImplementedException();
 }
 
-DMFSystem DMF::GetSystem(uint8_t systemByte) const
+System DMF::GetSystem(uint8_t systemByte) const
 {
     for (const auto& mapPair : DMFSystems)
     {
@@ -386,7 +390,7 @@ void DMF::LoadPatternMatrixValues(zstr::ifstream& fin)
 void DMF::LoadInstrumentsData(zstr::ifstream& fin)
 {
     m_TotalInstruments = fin.get();
-    m_Instruments = new DMFInstrument[m_TotalInstruments];
+    m_Instruments = new Instrument[m_TotalInstruments];
 
     for (int i = 0; i < m_TotalInstruments; i++)
     {
@@ -394,9 +398,9 @@ void DMF::LoadInstrumentsData(zstr::ifstream& fin)
     }
 }
 
-DMFInstrument DMF::LoadInstrument(zstr::ifstream& fin, DMF::SystemType systemType)
+Instrument DMF::LoadInstrument(zstr::ifstream& fin, DMF::SystemType systemType)
 {
-    DMFInstrument inst = {};
+    Instrument inst = {};
 
     uint8_t name_size = fin.get();
 
@@ -407,20 +411,20 @@ DMFInstrument DMF::LoadInstrument(zstr::ifstream& fin, DMF::SystemType systemTyp
     delete[] tempStr;
 
     // Get instrument mode (Standard or FM)
-    inst.mode = DMFInstrument::InvalidMode;
+    inst.mode = Instrument::InvalidMode;
     switch (fin.get())
     {
         case 0:
-            inst.mode = DMFInstrument::StandardMode; break;
+            inst.mode = Instrument::StandardMode; break;
         case 1:
-            inst.mode = DMFInstrument::FMMode; break;
+            inst.mode = Instrument::FMMode; break;
         default:
             throw ModuleException(Status::Category::Import, DMF::ImportError::UnspecifiedError, "Invalid instrument mode");
     }
 
     // Now we can import the instrument depending on the mode (Standard/FM)
     
-    if (inst.mode == DMFInstrument::StandardMode)
+    if (inst.mode == Instrument::StandardMode)
     {
         if (m_DMFFileVersion <= 17) // DMF version 17 (0x11) or older
         {
@@ -542,7 +546,7 @@ DMFInstrument DMF::LoadInstrument(zstr::ifstream& fin, DMF::SystemType systemTyp
             inst.std.gbSoundLen = fin.get();
         }
     }
-    else if (inst.mode == DMFInstrument::FMMode)
+    else if (inst.mode == Instrument::FMMode)
     {
         // Initialize to nullptr just in case
         inst.std.volEnvValue = nullptr;
@@ -672,7 +676,7 @@ void DMF::LoadWavetablesData(zstr::ifstream& fin)
 void DMF::LoadPatternsData(zstr::ifstream& fin)
 {
     // patternValues[channel][pattern number][pattern row number]
-    m_PatternValues = new DMFChannelRow**[m_System.channels];
+    m_PatternValues = new ChannelRow**[m_System.channels];
     m_ChannelEffectsColumnsCount = new uint8_t[m_System.channels];
     
     uint8_t patternMatrixNumber;
@@ -681,7 +685,7 @@ void DMF::LoadPatternsData(zstr::ifstream& fin)
     {
         m_ChannelEffectsColumnsCount[channel] = fin.get();
 
-        m_PatternValues[channel] = new DMFChannelRow*[m_PatternMatrixMaxValues[channel] + 1]();
+        m_PatternValues[channel] = new ChannelRow*[m_PatternMatrixMaxValues[channel] + 1]();
 
         for (unsigned rowInPatternMatrix = 0; rowInPatternMatrix < m_ModuleInfo.totalRowsInPatternMatrix; rowInPatternMatrix++)
         {
@@ -699,7 +703,7 @@ void DMF::LoadPatternsData(zstr::ifstream& fin)
                 continue;
             }
 
-            m_PatternValues[channel][patternMatrixNumber] = new DMFChannelRow[m_ModuleInfo.totalRowsPerPattern];
+            m_PatternValues[channel][patternMatrixNumber] = new ChannelRow[m_ModuleInfo.totalRowsPerPattern];
 
             for (uint32_t row = 0; row < m_ModuleInfo.totalRowsPerPattern; row++)
             {
@@ -709,9 +713,9 @@ void DMF::LoadPatternsData(zstr::ifstream& fin)
     }
 }
 
-DMFChannelRow DMF::LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount)
+ChannelRow DMF::LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount)
 {
-    DMFChannelRow pat;
+    ChannelRow pat;
     pat.note.pitch = fin.get();
     pat.note.pitch |= fin.get() << 8; // Unused byte. Storing it anyway.
     pat.note.octave = fin.get();
@@ -720,9 +724,9 @@ DMFChannelRow DMF::LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount)
     pat.volume |= fin.get() << 8;
 
     // Apparently, the note pitch for C- can be either 0 or 12. I'm setting it to 0 always.
-    if (pat.note.pitch == DMFNotePitch::C_Alt)
+    if (pat.note.pitch == NotePitch::C_Alt)
     {
-        pat.note.pitch = (uint16_t)DMFNotePitch::C;
+        pat.note.pitch = (uint16_t)NotePitch::C;
         pat.note.octave++;
     }
 
@@ -739,7 +743,7 @@ DMFChannelRow DMF::LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount)
     // Initialize the rest to zero
     for (int col = effectsColumnsCount; col < DMF_MAX_EFFECTS_COLUMN_COUNT; col++)
     {
-        pat.effect[col] = {(int16_t)DMFEffectCode::NoEffect, (int16_t)DMFEffectCode::NoEffectVal};
+        pat.effect[col] = {(int16_t)EffectCode::NoEffect, (int16_t)EffectCode::NoEffectVal};
     }
 
     pat.instrument = fin.get();
@@ -751,7 +755,7 @@ DMFChannelRow DMF::LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount)
 void DMF::LoadPCMSamplesData(zstr::ifstream& fin)
 {
     m_TotalPCMSamples = fin.get();
-    m_PCMSamples = new DMFPCMSample[m_TotalPCMSamples];
+    m_PCMSamples = new PCMSample[m_TotalPCMSamples];
 
     for (unsigned sample = 0; sample < m_TotalPCMSamples; sample++)
     {
@@ -759,9 +763,9 @@ void DMF::LoadPCMSamplesData(zstr::ifstream& fin)
     }
 }
 
-DMFPCMSample DMF::LoadPCMSample(zstr::ifstream& fin)
+PCMSample DMF::LoadPCMSample(zstr::ifstream& fin)
 {
-    DMFPCMSample sample;
+    PCMSample sample;
 
     sample.size = fin.get();
     sample.size |= fin.get() << 8;
@@ -849,7 +853,7 @@ double DMF::GetBPM() const
     return numerator * 1.0 / denominator;
 }
 
-int DMFGetNoteRange(const DMFNote& low, const DMFNote& high)
+int dmf::GetNoteRange(const Note& low, const Note& high)
 {
     // Returns range in semitones. -1 if an error occurred
     
@@ -859,34 +863,34 @@ int DMFGetNoteRange(const DMFNote& low, const DMFNote& high)
     return high.octave * 12 + high.pitch - low.octave * 12 - low.pitch;
 }
 
-bool operator==(const DMFNote& lhs, const DMFNote& rhs)
+bool Note::operator==(const Note& rhs) const
 {
-    return lhs.octave == rhs.octave && lhs.pitch == rhs.pitch;
+    return this->octave == rhs.octave && this->pitch == rhs.pitch;
 }
 
-bool operator!=(const DMFNote& lhs, const DMFNote& rhs)
+bool Note::operator!=(const Note& rhs) const
 {
-    return lhs.octave != rhs.octave || lhs.pitch != rhs.pitch;
+    return this->octave != rhs.octave || this->pitch != rhs.pitch;
 }
 
 // The following operators assume notes aren't Note OFF or Empty note
 
-bool operator>(const DMFNote& lhs, const DMFNote& rhs)
+bool Note::operator>(const Note& rhs) const
 {
-    return (lhs.octave << 4) + lhs.pitch > (rhs.octave << 4) + rhs.pitch;
+    return (this->octave << 4) + this->pitch > (rhs.octave << 4) + rhs.pitch;
 }
 
-bool operator<(const DMFNote& lhs, const DMFNote& rhs)
+bool Note::operator<(const Note& rhs) const
 {
-    return (lhs.octave << 4) + lhs.pitch < (rhs.octave << 4) + rhs.pitch;
+    return (this->octave << 4) + this->pitch < (rhs.octave << 4) + rhs.pitch;
 }
 
-bool operator>=(const DMFNote& lhs, const DMFNote& rhs)
+bool Note::operator>=(const Note& rhs) const
 {
-    return (lhs.octave << 4) + lhs.pitch >= (rhs.octave << 4) + rhs.pitch;
+    return (this->octave << 4) + this->pitch >= (rhs.octave << 4) + rhs.pitch;
 }
 
-bool operator<=(const DMFNote& lhs, const DMFNote& rhs)
+bool Note::operator<=(const Note& rhs) const
 {
-    return (lhs.octave << 4) + lhs.pitch <= (rhs.octave << 4) + rhs.pitch;
+    return (this->octave << 4) + this->pitch <= (rhs.octave << 4) + rhs.pitch;
 }

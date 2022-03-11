@@ -18,6 +18,8 @@
 #include <variant>
 //#include <filesystem>
 
+using namespace d2m;
+
 CommonFlags ModuleUtils::m_CoreOptions = {};
 
 static bool ParseFlags(std::vector<std::string>& args, CommonFlags& flags);

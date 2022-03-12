@@ -12,18 +12,21 @@ using namespace d2m;
 
 size_t ModuleOptions::Count() const
 {
-    return m_Options.size();
+    return m_OptionsMap.size();
 }
 
-const ModuleOption& ModuleOptions::Item(unsigned index) const
+ModuleOption* ModuleOptions::FindById(int id)
 {
-    return m_Options.at(index);
+    if (m_OptionsMap.count(id) == 0)
+        return nullptr;
+    return &m_OptionsMap[id];
 }
 
 ModuleOption* ModuleOptions::FindByName(std::string name)
 {
-    for (auto& option : m_Options)
+    for (auto& mapPair : m_OptionsMap)
     {
+        auto& option = mapPair.second;
         if (option.GetName() == name)
         {
             return &option;
@@ -34,8 +37,9 @@ ModuleOption* ModuleOptions::FindByName(std::string name)
 
 ModuleOption* ModuleOptions::FindByShortName(std::string shortName)
 {
-    for (auto& option : m_Options)
+    for (auto& mapPair : m_OptionsMap)
     {
+        auto& option = mapPair.second;
         if (option.GetShortName() == shortName)
         {
             return &option;
@@ -44,25 +48,27 @@ ModuleOption* ModuleOptions::FindByShortName(std::string shortName)
     return nullptr;
 }
 
-int ModuleOptions::FindIndexByName(std::string name) const
+int ModuleOptions::FindIdByName(std::string name) const
 {
-    for (unsigned i = 0; i < m_Options.size(); i++)
+    for (auto& mapPair : m_OptionsMap)
     {
-        if (m_Options[i].GetName() == name)
+        auto& option = mapPair.second;
+        if (option.GetName() == name)
         {
-            return i;
+            return option.GetId();
         }
     }
     return npos;
 }
 
-int ModuleOptions::FindIndexByShortName(std::string shortName) const
+int ModuleOptions::FindIdByShortName(std::string shortName) const
 {
-    for (unsigned i = 0; i < m_Options.size(); i++)
+    for (auto& mapPair : m_OptionsMap)
     {
-        if (m_Options[i].GetShortName() == shortName)
+        auto& option = mapPair.second;
+        if (option.GetShortName() == shortName)
         {
-            return i;
+            return option.GetId();
         }
     }
     return npos;

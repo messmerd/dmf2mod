@@ -32,10 +32,13 @@ using namespace d2m;
 using namespace d2m::mod;
 // DO NOT use any module namespace other than d2m::mod
 
+// Define the command-line options that MOD accepts:
+using MODOptionEnum = MODConversionOptions::OptionEnum;
 const ModuleOptions MODOptions = 
 {
-    {"downsample", "", false, "Allow wavetables to lose information through downsampling if needed."},
-    {"effects", "", "max", {"min", "max"}, "The number of ProTracker effects to use."}
+    /* Option id               / Full name     / Short / Default / Possib. vals / Description */
+    {MODOptionEnum::Downsample, "downsample",   "",     false,                  "Allow wavetables to lose information through downsampling if needed."},
+    {MODOptionEnum::Effects,    "effects",      "",     "max",  {"min", "max"}, "The number of ProTracker effects to use."}
 };
 
 // Register module info
@@ -66,14 +69,14 @@ static uint16_t proTrackerPeriodTable[5][12] = {
     {107,101, 95, 90, 85, 80, 76, 71, 67, 64, 60, 57}               /* C-4 to B-4 */
 };
 
-// Note: The ordering here depends on the option ordering in MODOptions
-MODConversionOptions::MODConversionOptions()
-    : m_Downsample(std::get<bool>(GetOptionRef(0))), m_Effects(std::get<std::string>(GetOptionRef(1)))
-{}
+MODConversionOptions::MODConversionOptions() {}
 
 bool MODConversionOptions::ParseArgs(std::vector<std::string>& args)
 {
     // TODO: Make a generic argument parser in utils
+
+    bool& downsampleRef = GetDownsampleRef();
+    std::string& effectsRef = GetEffectsRef();
 
     unsigned i = 0;
     while (i < args.size())
@@ -81,7 +84,7 @@ bool MODConversionOptions::ParseArgs(std::vector<std::string>& args)
         bool processedFlag = false;
         if (args[i] == "--downsample")
         {
-            m_Downsample = true;
+            downsampleRef = true;
             args.erase(args.begin() + i);
             processedFlag = true;
         }
@@ -91,7 +94,7 @@ bool MODConversionOptions::ParseArgs(std::vector<std::string>& args)
             std::transform(val.begin(), val.end(), val.begin(), [](unsigned char c){ return std::tolower(c); });
 
             if (val == "min" || val == "max")
-                m_Effects = val;
+                effectsRef = val;
             else
             {
                 std::cerr << "ERROR: For the option '--effects=', the acceptable values are: min, max.\n";

@@ -64,11 +64,14 @@ std::string GetAvailableOptions(std::string moduleType)
     ModuleOptions options = Module::GetAvailableOptions(moduleTypeEnum);
     
     std::string optionsString;
-    for (unsigned i = 0; i < options.Count(); i++)
+    unsigned i = 0;
+    for (const auto& mapPair : options)
     {
-        optionsString += options.Item(i).GetName();
+        const auto& option = mapPair.second;
+        optionsString += option.GetName();
         if (i != options.Count() - 1)
             optionsString += ";";
+        i++;
     }
     return optionsString;
 }

@@ -275,9 +275,8 @@ struct State
 class MODException : public ModuleException
 {
 public:
-    template <class T, class = std::enable_if_t<
-        (std::is_enum<T>{} || std::is_integral<T>{}) &&
-        (!std::is_enum<T>{} || std::is_convertible<std::underlying_type_t<T>, int>{})>>
+    template <class T, 
+        class = std::enable_if_t<std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{})>>
     MODException(Category category, T errorCode, const std::string errorMessage = "")
         : ModuleException(category, errorCode, CreateErrorMessage(category, (int)errorCode, errorMessage))
     {}
@@ -293,30 +292,45 @@ public:
     MODConversionOptions();
     ~MODConversionOptions() = default;
 
+    enum class OptionEnum
+    {
+        Downsample, Effects
+    };
+
     enum class EffectsEnum
     {
         Error, Min, Max
     };
 
+    bool GetDownsample() const
+    {
+        return std::get<bool>(GetValueRef((int)OptionEnum::Downsample));
+    }
+
     EffectsEnum GetEffects() const
     {
-        if (m_Effects == "min")
+        const auto& effects = std::get<std::string>(GetValueRef((int)OptionEnum::Effects));
+        if (effects == "min")
             return EffectsEnum::Min;
-        else if (m_Effects == "max")
+        else if (effects == "max")
             return EffectsEnum::Max;
         else
             return EffectsEnum::Error;
     }
 
-    bool GetDownsample() const { return m_Downsample; }
-
 private:
     bool ParseArgs(std::vector<std::string>& args) override;
 
-    // These reference their values in m_Values.
-    // While m_Values could be used, these are here for convenience and speed.
-    bool& m_Downsample;
-    std::string& m_Effects;
+    bool& GetDownsampleRef()
+    {
+        return std::get<bool>(GetValueRef((int)OptionEnum::Downsample));
+    }
+
+    std::string& GetEffectsRef()
+    {
+        return std::get<std::string>(GetValueRef((int)OptionEnum::Effects));
+    }
+
 };
 
 class MOD : public ModuleInterface<MOD, MODConversionOptions>

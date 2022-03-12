@@ -13,6 +13,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 #include <variant>
 
 namespace d2m {
@@ -114,14 +115,24 @@ public:
     std::string GetOutputFilename() const { return m_OutputFile; }
 
     /*
-     * Get an option value reference at m_Values[index]
+     * Get a reference to the value of the option with the given id
      */
-    virtual ModuleOption::value_t& GetOptionRef(int index) = 0;
+    virtual ModuleOption::value_t& GetValueRef(int id) = 0;
+
+    /*
+     * Get a const reference to the value of the option with the given id
+     */
+    virtual const ModuleOption::value_t& GetValueRef(int id) const = 0;
     
     /*
      * Get a reference to the value of the option with the given name
      */
-    virtual ModuleOption::value_t& GetOptionRef(const std::string& name) = 0;
+    virtual ModuleOption::value_t& GetValueRef(const std::string& name) = 0;
+
+    /*
+     * Get a const reference to the value of the option with the given name
+     */
+    virtual const ModuleOption::value_t& GetValueRef(const std::string& name) const = 0;
 
     /*
      * Fills in this object's command-line arguments from a list of arguments.
@@ -136,8 +147,8 @@ protected:
 
     std::string m_OutputFile;
 
-    // Stores the values of each option. Each index corresponds to a ModuleOptions index.
-    std::vector<ModuleOption::value_t> m_Values;
+    // Stores the values of each option. Maps unique option id to its value.
+    std::map<int, ModuleOption::value_t> m_ValuesMap;
 };
 
 } // namespace d2m

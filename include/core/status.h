@@ -81,12 +81,16 @@ public: // Should this be private once DMF gets its own DMFException class?
     ModuleException(const ModuleException& other) = default;
     ModuleException& operator=(ModuleException& other) = default;
 
-    template <class T, class = std::enable_if_t<
-        (std::is_enum<T>{} || std::is_integral<T>{}) &&
-        (!std::is_enum<T>{} || std::is_convertible<std::underlying_type_t<T>, int>{})>>
-    ModuleException(Category category, T errorCode, const std::string errorMessage = "") throw()
+    // Construct using an enum for an error code
+    template <class T, class = std::enable_if_t<std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}>>
+    ModuleException(Category category, T errorCode, const std::string errorMessage = "")
+        : ModuleException(category, static_cast<int>(errorCode), errorMessage)
+    {}
+
+    // Construct using an integer for an error code
+    ModuleException(Category category, int errorCode, const std::string errorMessage = "")
     {
-        m_ErrorCode = static_cast<int>(errorCode);
+        m_ErrorCode = errorCode;
 
         std::string categoryString;
         switch (category)

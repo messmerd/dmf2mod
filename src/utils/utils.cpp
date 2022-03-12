@@ -302,10 +302,9 @@ void ModuleUtils::PrintHelp(ModuleType moduleType)
 
     std::cout.setf(std::ios_base::left);
 
-    const size_t total = options.Count();
-    for (unsigned i = 0; i < total; i++)
+    for (const auto& mapPair : options)
     {
-        const auto& option = options.Item(i);
+        const auto& option = mapPair.second;
 
         std::string str1 = "  ";
         str1 += option.HasShortName() ? "-" + option.GetShortName() + ", " : "";

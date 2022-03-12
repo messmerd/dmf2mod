@@ -23,22 +23,37 @@ public:
     ConversionOptionsInterface()
     {
         // Set the option values to their defaults
-        m_Values.clear();
+        m_ValuesMap.clear();
         const auto options = GetAvailableOptions();
-        for (unsigned i = 0; i < options.Count(); i++)
+        for (const auto& mapPair : options)
         {
-            m_Values.push_back(options.Item(i).GetDefaultValue());
+            const int id = mapPair.first;
+            const auto& option = mapPair.second;
+
+            assert(m_ValuesMap.count(id) == 0 && "ConversionOptionsInterface(): Duplicate option id found.");
+
+            m_ValuesMap[id] = option.GetDefaultValue();
         }
     }
 
-    ModuleOption::value_t& GetOptionRef(int index) override
+    ModuleOption::value_t& GetValueRef(int id) override
     {
-        return m_Values[index];
+        return m_ValuesMap[id];
     }
 
-    ModuleOption::value_t& GetOptionRef(const std::string& name) override
+    const ModuleOption::value_t& GetValueRef(int id) const override
     {
-        return m_Values[GetAvailableOptions().FindIndexByName(name)];
+        return m_ValuesMap.at(id);
+    }
+
+    ModuleOption::value_t& GetValueRef(const std::string& name) override
+    {
+        return m_ValuesMap[GetAvailableOptions().FindIdByName(name)];
+    }
+
+    const ModuleOption::value_t& GetValueRef(const std::string& name) const override
+    {
+        return m_ValuesMap.at(GetAvailableOptions().FindIdByName(name));
     }
 
 protected:

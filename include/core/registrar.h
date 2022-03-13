@@ -64,7 +64,7 @@ public:
     static ModuleType GetTypeFromFilename(const std::string& filename);
     static ModuleType GetTypeFromFileExtension(const std::string& extension);
     static std::string GetExtensionFromType(ModuleType moduleType);
-    static ModuleOptions GetAvailableOptions(ModuleType moduleType);
+    static const ModuleOptions& GetAvailableOptions(ModuleType moduleType);
 
 private:
     /*

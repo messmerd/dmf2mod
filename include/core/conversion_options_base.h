@@ -38,7 +38,7 @@ protected:
 
     // Returns a list of strings of the format: "-o, --option=[min,max]" or "-a" or "--flag" or "--flag=[]" etc.
     //  representing the command-line options for this module and their acceptable values
-    static ModuleOptions GetAvailableOptionsStatic();
+    static const ModuleOptions& GetAvailableOptionsStatic();
 
     // The output module type
     static ModuleType GetTypeStatic()
@@ -57,6 +57,7 @@ class ConversionOptionsBase
 {
 public:
     ConversionOptionsBase() = default; // See ConversionOptionsInterface constructor
+    ConversionOptionsBase(std::vector<std::string>& args) {};
     virtual ~ConversionOptionsBase() = default;
 
     /*
@@ -98,13 +99,13 @@ public:
      * Returns a list of strings of the format: "-o, --option=[min,max]" or "-a" or "--flag" or "--flag=[]" etc.
      *  representing the command-line options for this module and their acceptable values
      */
-    virtual ModuleOptions GetAvailableOptions() const = 0;
+    virtual const ModuleOptions& GetAvailableOptions() const = 0;
 
     /*
      * Returns a list of strings of the format: "-o, --option=[min,max]" or "-a" or "--flag" or "--flag=[]" etc.
      *  representing the command-line options and their acceptable values for the given module type
      */
-    static ModuleOptions GetAvailableOptions(ModuleType moduleType)
+    static const ModuleOptions& GetAvailableOptions(ModuleType moduleType)
     {
         return Registrar::GetAvailableOptions(moduleType);
     }
@@ -113,6 +114,11 @@ public:
      * Get the filename of the output file. Returns empty string if error occurred.
      */
     std::string GetOutputFilename() const { return m_OutputFile; }
+
+    /*
+     * Sets the option values to their defaults for this module type.
+     */
+    virtual void SetToDefault() = 0;
 
     /*
      * Get a reference to the value of the option with the given id
@@ -148,7 +154,7 @@ protected:
     std::string m_OutputFile;
 
     // Stores the values of each option. Maps unique option id to its value.
-    std::map<int, ModuleOption::value_t> m_ValuesMap;
+    OptionValues m_ValuesMap;
 };
 
 } // namespace d2m

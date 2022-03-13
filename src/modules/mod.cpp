@@ -37,8 +37,8 @@ using MODOptionEnum = MODConversionOptions::OptionEnum;
 const ModuleOptions MODOptions = 
 {
     /* Option id               / Full name     / Short / Default / Possib. vals / Description */
-    {MODOptionEnum::Downsample, "downsample",   "",     false,                  "Allow wavetables to lose information through downsampling if needed."},
-    {MODOptionEnum::Effects,    "effects",      "",     "max",  {"min", "max"}, "The number of ProTracker effects to use."}
+    {MODOptionEnum::Downsample, "downsample",   '\0',     false,                  "Allow wavetables to lose information through downsampling if needed.", true},
+    {MODOptionEnum::Effects,    "effects",      '\0',     "max",  {"min", "max"}, "The number of ProTracker effects to use.", true}
 };
 
 // Register module info
@@ -70,51 +70,6 @@ static uint16_t proTrackerPeriodTable[5][12] = {
 };
 
 MODConversionOptions::MODConversionOptions() {}
-
-bool MODConversionOptions::ParseArgs(std::vector<std::string>& args)
-{
-    // TODO: Make a generic argument parser in utils
-
-    bool& downsampleRef = GetDownsampleRef();
-    std::string& effectsRef = GetEffectsRef();
-
-    unsigned i = 0;
-    while (i < args.size())
-    {
-        bool processedFlag = false;
-        if (args[i] == "--downsample")
-        {
-            downsampleRef = true;
-            args.erase(args.begin() + i);
-            processedFlag = true;
-        }
-        else if (args[i].substr(0, 10) == "--effects=")
-        {
-            std::string val = args[i].substr(10);
-            std::transform(val.begin(), val.end(), val.begin(), [](unsigned char c){ return std::tolower(c); });
-
-            if (val == "min" || val == "max")
-                effectsRef = val;
-            else
-            {
-                std::cerr << "ERROR: For the option '--effects=', the acceptable values are: min, max.\n";
-                return true;
-            }
-            args.erase(args.begin() + i);
-            processedFlag = true;
-        }
-        else
-        {
-            std::cerr << "ERROR: Unrecognized option '" << args[i] << "'\n";
-            return true;
-        }
-        
-        if (!processedFlag)
-            i++;
-    }
-
-    return false;
-}
 
 MOD::MOD() {}
 
@@ -149,11 +104,11 @@ void MOD::ConvertFromDMF(const DMF& dmf, const ConversionOptionsPtr& options)
 {
     m_Options = reinterpret_cast<MODConversionOptions*>(options.get());
 
-    const bool silent = ModuleUtils::GetCoreOptions().silent;
-    
+    const bool silent = ModuleOptionUtils::GetGlobalOptionValue<bool>("silent");
+
     if (!silent)
         std::cout << "Starting to convert to MOD...\n";
-    
+
     if (dmf.GetSystem().id != DMF::Systems(DMF::SystemType::GameBoy).id) // If it's not a Game Boy
     {
         throw MODException(ModuleException::Category::Convert, MOD::ConvertError::NotGameBoy);
@@ -1664,7 +1619,9 @@ void MOD::ExportRaw(const std::string& filename)
 
     outFile.close();
 
-    if (!ModuleUtils::GetCoreOptions().silent)
+    const bool silent = ModuleOptionUtils::GetGlobalOptionValue<bool>("silent");
+
+    if (!silent)
         std::cout << "Saved MOD file to disk.\n\n";
 }
 

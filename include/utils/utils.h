@@ -17,44 +17,26 @@
 
 namespace d2m {
 
-// Command-line options that are supported regardless of which modules are supported
-struct CommonFlags
-{
-    bool force = false;
-    bool silent = false;
-    // More to be added later
-};
-
-// Used for returning input/output info when parsing command-line arguments
-struct InputOutput
-{
-    std::string InputFile;
-    ModuleType InputType;
-    std::string OutputFile;
-    ModuleType OutputType;
-};
-
 // Class containing miscellaneous Module-related static methods
 class ModuleUtils
 {
 public:
-    static bool ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo, ConversionOptionsPtr& options);
-    static CommonFlags GetCoreOptions() { return m_CoreOptions; }
-    static void SetCoreOptions(CommonFlags& options) { m_CoreOptions = options; }
-
-    
+    // File utils
     static std::string GetBaseNameFromFilename(const std::string& filename);
     static std::string ReplaceFileExtension(const std::string& filename, const std::string& newFileExtension);
     static std::string GetFileExtension(const std::string& filename);
     static bool FileExists(const std::string& filename);
 
+    // Command-line arguments and options utils
+    static std::vector<std::string> GetArgsAsVector(int argc, char *argv[]);
+    static bool ParseArgs(std::vector<std::string>& args, const ModuleOptions& optionDefinitions, OptionValues& values);
     static void PrintHelp(ModuleType moduleType);
+    static void PrintHelp(const ModuleOptions& options);
     
-private:
-    static bool PrintHelp(const std::string& executable, ModuleType moduleType);
-
-    // Core conversion options
-    static CommonFlags m_CoreOptions;
+    // String utils (borrowed from Stack Overflow)
+    static inline void StringTrimLeft(std::string &str);
+    static inline void StringTrimRight(std::string &str);
+    static inline void StringTrimBothEnds(std::string &str);
 };
 
 } // namespace d2m

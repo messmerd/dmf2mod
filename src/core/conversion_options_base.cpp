@@ -18,7 +18,7 @@ template<typename T> ConversionOptionsBase* ConversionOptionsStatic<T>::CreateSt
     return nullptr;
 }
 
-template<typename T> ModuleOptions ConversionOptionsStatic<T>::GetAvailableOptionsStatic()
+template<typename T> const ModuleOptions& ConversionOptionsStatic<T>::GetAvailableOptionsStatic()
 {
     return m_AvailableOptions;
 }

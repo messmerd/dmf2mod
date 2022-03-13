@@ -31,7 +31,7 @@ protected:
         return ModuleStatic<T>::GetFileExtensionStatic();
     }
 
-    ModuleOptions GetAvailableOptions() const override
+    const ModuleOptions& GetAvailableOptions() const override
     {
         return ConversionOptionsStatic<O>::GetAvailableOptionsStatic();
     }
@@ -48,7 +48,7 @@ class optionsClass; \
 template<> ModuleBase* ModuleStatic<moduleClass>::CreateStatic(); \
 template<> ConversionOptionsBase* ConversionOptionsStatic<optionsClass>::CreateStatic(); \
 template<> std::string ModuleStatic<moduleClass>::GetFileExtensionStatic(); \
-template<> ModuleOptions ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic();
+template<> const ModuleOptions& ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic();
 
 /*
     Helper macro for defining static data members for a template specialization 
@@ -63,6 +63,6 @@ template<> const ModuleOptions ConversionOptionsStatic<optionsClass>::m_Availabl
 template<> ModuleBase* ModuleStatic<moduleClass>::CreateStatic() { return new moduleClass; } \
 template<> ConversionOptionsBase* ConversionOptionsStatic<optionsClass>::CreateStatic() { return new optionsClass; } \
 template<> std::string ModuleStatic<moduleClass>::GetFileExtensionStatic() { return m_FileExtension; } \
-template<> ModuleOptions ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic() { return m_AvailableOptions; };
+template<> const ModuleOptions& ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic() { return m_AvailableOptions; };
 
 } // namespace d2m

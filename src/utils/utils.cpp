@@ -13,6 +13,7 @@
 #include <iostream>
 #include <iomanip>
 #include <map>
+#include <unordered_set>
 #include <functional>
 #include <fstream>
 #include <variant>
@@ -20,207 +21,7 @@
 
 using namespace d2m;
 
-CommonFlags ModuleUtils::m_CoreOptions = {};
-
-static bool ParseFlags(std::vector<std::string>& args, CommonFlags& flags);
-
-// ModuleUtils class
-
-bool ModuleUtils::ParseArgs(int argc, char *argv[], InputOutput& inputOutputInfo, ConversionOptionsPtr& options)
-{
-    inputOutputInfo.InputFile = "";
-    inputOutputInfo.InputType = ModuleType::NONE;
-    inputOutputInfo.OutputFile = "";
-    inputOutputInfo.OutputType = ModuleType::NONE;
-
-    std::vector<std::string> args(argc, "");
-    for (int i = 0; i < argc; i++)
-    {
-        args[i] = argv[i];
-    }
-
-    if (argc == 1)
-    {
-        return PrintHelp(args[0], ModuleType::NONE);
-    }
-    else if (argc == 2)
-    {
-        if (args[1] == "--help")
-        {
-            return PrintHelp(args[0], ModuleType::NONE);
-        }
-        else
-        {
-            std::cerr << "ERROR: Could not parse command-line arguments.\n";
-            return true;
-        }
-    }
-    else if (argc >= 3) // 3 is the minimum needed to perform a conversion
-    {
-        if (args[1] == "--help")
-        {
-            return PrintHelp(args[0], Registrar::GetTypeFromFileExtension(args[2]));
-        }
-
-        CommonFlags flags;
-        if (ParseFlags(args, flags))
-            return true;
-
-        SetCoreOptions(flags);
-
-        std::string outputFile, inputFile;
-        
-        // Get input file
-        if (FileExists(args[2]))
-        {
-            if (Registrar::GetTypeFromFilename(args[2]) != ModuleType::NONE)
-            {
-                inputFile = args[2];
-            }
-            else
-            {
-                std::cerr << "ERROR: Input file type '" << GetFileExtension(args[2]) << "' is unsupported.\n";
-                return true;
-            }
-        }
-        else
-        {
-            std::cerr << "ERROR: The input file '" << args[2] << "' could not be found.\n";
-            return true;
-        }
-        
-        // Get output file
-        if (GetFileExtension(args[1]).empty())
-        {
-            if (Registrar::GetTypeFromFileExtension(args[1]) != ModuleType::NONE)
-            {
-                const size_t dotPos = inputFile.rfind('.');
-                if (dotPos == 0 || dotPos + 1 >= inputFile.size())
-                {
-                    std::cerr << "ERROR: The input file is invalid.\n";
-                    return true;
-                }
-
-                // Construct output filename from the input filename
-                outputFile = inputFile.substr(0, dotPos + 1) + args[1];
-            }
-            else
-            {
-                std::cerr << "ERROR: Output file type '" << args[1] << "' is unsupported.\n";
-                return true;
-            }
-        }
-        else
-        {
-            outputFile = args[1];
-            if (Registrar::GetTypeFromFilename(args[1]) == ModuleType::NONE)
-            {
-                std::cerr << "ERROR: '" << GetFileExtension(args[1]) << "' is not a valid module type.\n";
-                return true;
-            }
-        }
-        
-        if (FileExists(outputFile) && !flags.force)
-        {
-            std::cerr << "ERROR: The output file '" << outputFile << "' already exists. Run with the '-f' flag to allow the file to be overwritten.\n";
-            return true;
-        }
-
-        inputOutputInfo.InputFile = inputFile;
-        inputOutputInfo.InputType = Registrar::GetTypeFromFilename(inputFile);
-        inputOutputInfo.OutputFile = outputFile;
-        inputOutputInfo.OutputType = Registrar::GetTypeFromFilename(outputFile);
-
-        if (inputOutputInfo.InputType == inputOutputInfo.OutputType)
-        {
-            std::cout << "The output file is the same type as the input file. No conversion necessary.\n";
-            return true;
-        }
-
-        // TODO: Check if a conversion between the two types is possible
-
-        // At this point, the input and output file arguments have been deemed valid
-
-        // Remove executable, output file, and input file from the args list, since they've already been processed
-        // What is left are module-specific command-line arguments
-        args.erase(args.begin(), args.begin() + 3);
-        argc -= 3;
-
-        ConversionOptionsPtr optionsTemp = ConversionOptions::Create(inputOutputInfo.OutputType);
-        if (!optionsTemp)
-        {
-            std::cerr << "ERROR: Failed to create ConversionOptionsBase-derived object for the module type '" << GetFileExtension(outputFile) 
-                << "'. The module may not be properly registered with dmf2mod.\n";
-            return true;
-        }
-
-        if (!args.empty() && optionsTemp->ParseArgs(args))
-        {
-            // An error occurred while parsing the module-specific arguments
-            return true;
-        }
-        
-        options = std::move(optionsTemp); // Invoke move assignment operator
-        return false;
-    }
-
-    return true;
-}
-
-bool ParseFlags(std::vector<std::string>& args, CommonFlags& flags)
-{
-    flags = {};
-
-    for (unsigned i = 3; i < args.size(); i++)
-    {
-        std::string& str = args[i];
-
-        // Handle single character flags
-        if (str.size() >= 2 && str[0] == '-' && str[1] != '-')
-        {
-            // Can have multiple flags together. For example "-fsd"
-            for (unsigned j = 1; j < str.size(); j++)
-            {
-                char c = str[j];
-                switch (c)
-                {
-                case 'f':
-                    flags.force = true;
-                    str.erase(j--, 1);
-                    break;
-                case 's':
-                    flags.silent = true;
-                    str.erase(j--, 1);
-                    break;
-                default:
-                    // If a flag is not recognized, it may be a flag used by a module, so don't throw an error
-                    break;
-                }
-            }
-
-            if (str.size() == 1) // Only the '-' left
-            {
-                args.erase(args.begin() + i);
-                i--; // Adjust for item that was removed
-                continue;
-            }
-        }
-        else if (str == "--force")
-        {
-            flags.force = true;
-            args.erase(args.begin() + i);
-            i--;
-        }
-        else if (str == "--silent")
-        {
-            flags.silent = true;
-            args.erase(args.begin() + i);
-            i--;
-        }
-    }
-
-    return false;
-}
+// File utils
 
 std::string ModuleUtils::GetBaseNameFromFilename(const std::string& filename)
 {
@@ -276,14 +77,243 @@ bool ModuleUtils::FileExists(const std::string& filename)
     return file.is_open();
 }
 
+// Command-line arguments and options utils
+
+std::vector<std::string> ModuleUtils::GetArgsAsVector(int argc, char *argv[])
+{
+    std::vector<std::string> args(argc, "");
+    for (int i = 0; i < argc; i++)
+    {
+        args[i] = argv[i];
+    }
+    return args;
+}
+
+bool ModuleUtils::ParseArgs(std::vector<std::string>& args, const ModuleOptions& optionDefinitions, OptionValues& values)
+{
+    // --foo
+    // --foo=bar
+    // --foo="bar"
+    // --foo="abc def ghi"
+    // --foo=-123
+    // --foo bar
+    // --foo "bar"
+    // --foo
+
+    std::unordered_set<int> optionsParsed;
+
+    // Sets the value of an option given a value string
+    auto SetValue = [&values, &optionsParsed](const char* valueStr, const ModuleOption* optionDef) -> bool
+    {
+        auto& value = values[optionDef->GetId()];
+        
+        ModuleOption::value_t valueTemp;
+        if (ModuleOptionUtils::ConvertToValue(valueStr, optionDef->GetType(), valueTemp))
+        {
+            return true; // Error occurred
+        }
+        
+        if (!optionDef->IsValid(valueTemp))
+        {
+            std::cerr << "ERROR: The value \"" << valueStr << "\" is not valid for the option \"" << optionDef->GetName() << "\".\n";
+            return true; // The value is not valid for this option definition
+        }
+
+        value = std::move(valueTemp);
+        optionsParsed.insert(optionDef->GetId());
+        return false;
+    };
+
+    // Main loop
+    const ModuleOption* handlingOption = nullptr;
+    for (unsigned i = 0; i < args.size(); i++)
+    {
+        auto& arg = args[i];
+        StringTrimBothEnds(arg);
+        if (arg.empty())
+        {
+            args.erase(args.begin() + i);
+            i--; // Adjust for item just erased
+            continue;
+        }
+
+        const ModuleOption* def = handlingOption;
+        size_t equalsPos = std::string::npos;
+        
+        const bool thisArgIsValue = handlingOption != nullptr;
+        if (thisArgIsValue)
+        {
+            handlingOption = nullptr;
+
+            // Set the value
+            if (SetValue(arg.c_str(), def))
+                return true; // Error occurred
+
+            // Erase both the flag and value since they have been consumed
+            args.erase(args.begin() + i - 1, args.begin() + i + 1);
+            i -= 2; // Adjust for items just erased
+            continue;
+        }
+
+        if (arg.size() <= 1 || arg[0] != '-')
+        {
+            // Error: Invalid argument
+            std::cerr << "ERROR: Invalid flag: \"" << arg << "\"\n";
+            return true;
+        }
+
+        const bool usingShortName = arg[1] != '-';
+        if (usingShortName) // -f format argument (short name)
+        {
+            if (!isalpha(arg[1]))
+            {
+                // Error: Short names must be alphabetic
+                std::cerr << "ERROR: Invalid flag '" << arg.substr(1) << "': Flags must be comprised of only alphabetic characters.\n";
+                return true;
+            }
+
+            equalsPos = arg.find_first_of('=');
+            const bool usingEquals = equalsPos != std::string::npos;
+            if (usingEquals) // Using the form: "-f=<value>"
+            {
+                if (equalsPos != 2)
+                {
+                    // Error: Short flags with an '=' must be of the form: "-f=<value>"
+                    std::cerr << "ERROR: Invalid flag \"" << arg.substr(1) << "\": Unable to parse.\n";
+                    return true;
+                }
+                def = optionDefinitions.FindByShortName(arg[1]);
+            }
+            else // Using the form: "-f", "-f <value>", or "-abcdef"
+            {
+                const bool usingSeveralShortArgs = arg.size() > 2;
+                if (!usingSeveralShortArgs) // Using the form: "-f" or "-f <value>"
+                {
+                    def = optionDefinitions.FindByShortName(arg[1]);
+                    // The argument may be of the form "-f <value>" if it is not a bool type. That will be handled later.
+                }
+                else // Using the form: "-abcdef"
+                {
+                    for (unsigned j = 1; j < arg.size(); j++)
+                    {
+                        const char c = arg[j];
+                        if (!isalpha(c))
+                        {
+                            // Error: Short names must be alphabetic
+                            std::cerr << "ERROR: Invalid flag '" << arg[j] << "': Flags must be comprised of only alphabetic characters.\n";
+                            return true;
+                        }
+
+                        const ModuleOption* tempDef = optionDefinitions.FindByShortName(c);
+                        
+                        // Skip unrecognized options
+                        if (!tempDef)
+                            continue;
+                        
+                        if (tempDef->GetType() != ModuleOption::BOOL)
+                        {
+                            // Error: When multiple short flags are strung together, all of them must be bool-typed options
+                            return true;
+                        }
+
+                        // Set the value
+                        SetValue("1", tempDef);
+
+                        arg.erase(j--, 1); // Remove this flag from argument, since it has been consumed
+                    }
+
+                    if (arg.empty())
+                    {
+                        // Erase argument since it has been consumed
+                        args.erase(args.begin() + i);
+                        i--; // Adjust for item just erased
+                    }
+
+                    continue; // SetValue() was called here and does not need to be called below.
+                }
+            }
+        }
+        else // --foo format argument
+        {
+            equalsPos = arg.find_first_of('=');
+            std::string name = arg.substr(2, equalsPos); // From start to '=' or end of string - whichever comes first
+            def = optionDefinitions.FindByName(name);
+        }
+        
+
+        if (!def)
+        {
+            // Unknown argument; skip it
+            continue;
+        }
+
+        if (optionsParsed.count(def->GetId()) > 0)
+        {
+            // ERROR: Setting the same option twice
+            if (usingShortName)
+            {
+                std::cerr << "ERROR: The flag '" << arg[1] << "' is used more than once.\n";
+            }
+            else
+            {
+                std::cerr << "ERROR: The flag \"" << arg.substr(2) << "\" is used more than once.\n";
+            }
+            
+            return true;
+        }
+
+        std::string valueStr;
+        if (equalsPos != std::string::npos) // Value is after the '='
+        {
+            valueStr = arg.substr(equalsPos + 1);
+            
+            // Set the value
+            if (SetValue(valueStr.c_str(), def))
+                return true; // Error occurred
+            
+            // Erase argument since it has been consumed
+            args.erase(args.begin() + i);
+            i--; // Adjust for item just erased
+        }
+        else // No '=' present
+        {
+            if (def->GetType() != ModuleOption::BOOL)
+            {
+                // The next argument will be the value
+                handlingOption = def;
+            }
+            else
+            {
+                // The presence of a bool argument means its value is true. Unless '=' is present, no value is expected to follow.
+                //  So unlike other types, "--foobar false" would not be valid, but "--foobar=false" is.
+                
+                // Set the value
+                SetValue("1", def);
+
+                // Erase argument since it has been consumed
+                args.erase(args.begin() + i);
+                i--; // Adjust for item just erased
+            }
+        }
+    }
+
+    if (handlingOption)
+    {
+        std::cerr << "ERROR: The flag \"" << args.back() << "\" did not provide a value.\n";
+        return true;
+    }
+
+    return false;
+}
+
 void ModuleUtils::PrintHelp(ModuleType moduleType)
 {
     if (moduleType == ModuleType::NONE)
         return;
+    
+    const ModuleOptions& options = Registrar::GetAvailableOptions(moduleType);
 
     std::string name = Registrar::GetExtensionFromType(moduleType);
-    const ModuleOptions options = Registrar::GetAvailableOptions(moduleType);
-
     if (name.empty())
         return;
 
@@ -300,6 +330,11 @@ void ModuleUtils::PrintHelp(ModuleType moduleType)
 
     std::cout << name << " Options:\n";
 
+    PrintHelp(options);
+}
+
+void ModuleUtils::PrintHelp(const ModuleOptions& options)
+{
     std::cout.setf(std::ios_base::left);
 
     for (const auto& mapPair : options)
@@ -307,7 +342,7 @@ void ModuleUtils::PrintHelp(ModuleType moduleType)
         const auto& option = mapPair.second;
 
         std::string str1 = "  ";
-        str1 += option.HasShortName() ? "-" + option.GetShortName() + ", " : "";
+        str1 += option.HasShortName() ? "-" + std::string(1, option.GetShortName()) + ", " : "";
         str1 += "--" + option.GetName();
 
         const ModuleOption::Type optionType = option.GetType();
@@ -385,46 +420,27 @@ void ModuleUtils::PrintHelp(ModuleType moduleType)
     }
 }
 
-bool ModuleUtils::PrintHelp(const std::string& executable, ModuleType moduleType)
+// String utils (borrowed from Stack Overflow)
+
+void ModuleUtils::StringTrimLeft(std::string &str)
 {
-    // If module-specific help was requested
-    if (moduleType != ModuleType::NONE)
-    {
-        ConversionOptionsPtr options = ConversionOptions::Create(moduleType);
-        if (!options)
-        {
-            std::string extension = Registrar::GetExtensionFromType(moduleType);
-            if (extension.empty())
-            {
-                std::cerr << "ERROR: The module is not properly registered with dmf2mod.\n";
-            }
-            else
-            {
-                std::cerr << "ERROR: Failed to create ConversionOptions-derived object for the module type '" << extension 
-                    << "'. The module may not be properly registered with dmf2mod.\n";
-            }
-            return true;
-        }
+    // Trim string from start (in place)
+    str.erase(str.begin(), std::find_if(str.begin(), str.end(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }));
+}
 
-        options->PrintHelp();
-        return false;
-    }
+void ModuleUtils::StringTrimRight(std::string &str)
+{
+    // Trim string from end (in place)
+    str.erase(std::find_if(str.rbegin(), str.rend(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }).base(), str.end());
+}
 
-    // Print generic help
-
-    std::cout << "dmf2mod v" << DMF2MOD_VERSION << "\n";
-    std::cout << "Created by Dalton Messmer <messmer.dalton@gmail.com>\n\n";
-
-    std::cout.setf(std::ios_base::left);
-    std::cout << "Usage: dmf2mod output.[ext] input.dmf [options]\n";
-    std::cout << std::setw(7) << "" << "dmf2mod" << " [ext] input.dmf [options]\n";
-
-    std::cout << "Options:\n";
-
-    std::cout.setf(std::ios_base::left);
-    std::cout << std::setw(30) << "  -f, --force" << "Overwrite output file.\n";
-    std::cout << std::setw(30) << "  --help [module type]" << "Display this help message. Provide module type (i.e. mod) for module-specific options.\n";
-    std::cout << std::setw(30) << "  -s, --silent" << "Print nothing to console except errors and/or warnings.\n";
-
-    return false;
+void ModuleUtils::StringTrimBothEnds(std::string &str)
+{
+    // Trim string from both ends (in place)
+    StringTrimLeft(str);
+    StringTrimRight(str);
 }

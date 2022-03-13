@@ -20,7 +20,17 @@ using namespace d2m;
 
 static ModulePtr G_Module;
 static std::string G_InputFilename;
-static CommonFlags G_CoreOptions;
+static OptionValues G_GlobalValues;
+
+enum class WebAppOptionsEnum
+{
+    Force
+};
+
+static ModuleOptions G_GlobalOptions =
+{
+    {WebAppOptionsEnum::Force, "force", 'f', false, "Overwrite output file.", true}
+};
 
 static void SetStatusType(bool isError);
 
@@ -28,10 +38,9 @@ int main()
 {
     Registrar::RegisterModules();
 
-    // Initialize core options (for web app, user won't provide them)
-    G_CoreOptions.force = true;
-    G_CoreOptions.silent = true;
-    ModuleUtils::SetCoreOptions(G_CoreOptions);
+    // Initialize global options (for web app, user won't provide them)
+    ModuleOptionUtils::SetGlobalOptionsDefinitions(G_GlobalOptions);
+    ModuleOptionUtils::SetGlobalOptionValue((int)WebAppOptionsEnum::Force, true);
 
     return 0;
 }

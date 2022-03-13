@@ -22,18 +22,20 @@ class ConversionOptionsInterface : public ConversionOptionsBase, public Conversi
 public:
     ConversionOptionsInterface()
     {
+        SetToDefault();
+    }
+
+    ConversionOptionsInterface(std::vector<std::string>& args)
+    {
+        // Parse arguments to set option values
+        SetToDefault();
+        ModuleUtils::ParseArgs(args, GetAvailableOptions(), m_ValuesMap);
+    }
+
+    void SetToDefault() override
+    {
         // Set the option values to their defaults
-        m_ValuesMap.clear();
-        const auto options = GetAvailableOptions();
-        for (const auto& mapPair : options)
-        {
-            const int id = mapPair.first;
-            const auto& option = mapPair.second;
-
-            assert(m_ValuesMap.count(id) == 0 && "ConversionOptionsInterface(): Duplicate option id found.");
-
-            m_ValuesMap[id] = option.GetDefaultValue();
-        }
+        ModuleOptionUtils::SetToDefault(GetAvailableOptions(), m_ValuesMap);
     }
 
     ModuleOption::value_t& GetValueRef(int id) override
@@ -62,9 +64,15 @@ protected:
         return ConversionOptionsStatic<T>::GetTypeStatic();
     }
 
-    ModuleOptions GetAvailableOptions() const override
+    const ModuleOptions& GetAvailableOptions() const override
     {
         return ConversionOptionsStatic<T>::GetAvailableOptionsStatic();
+    }
+
+    // Uses ModuleUtils::ParseArgs(...) by default, but can be overridden if desired
+    virtual bool ParseArgs(std::vector<std::string>& args) override
+    {
+        return ModuleUtils::ParseArgs(args, GetAvailableOptions(), m_ValuesMap);
     }
 
     // Uses ModuleUtils::PrintHelp() by default, but can be overridden if desired

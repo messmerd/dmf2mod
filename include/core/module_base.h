@@ -178,7 +178,7 @@ public:
      * Cast a Module pointer to a pointer of a derived type
      */
     template <class T, 
-        class = typename std::enable_if<std::is_base_of<ModuleInterface<T, typename T::OptionsType>, T>{}>::type>
+        class = typename std::enable_if_t<std::is_base_of<ModuleInterface<T, typename T::OptionsType>, T>{}>>
     const T* Cast() const
     {
         return reinterpret_cast<const T*>(this);
@@ -205,12 +205,12 @@ public:
     /*
      * Get the available command-line options for this module
      */
-    virtual ModuleOptions GetAvailableOptions() const = 0;
+    virtual const ModuleOptions& GetAvailableOptions() const = 0;
 
     /*
      * Get the available command-line options for the given module type
      */
-    static ModuleOptions GetAvailableOptions(ModuleType moduleType)
+    static const ModuleOptions& GetAvailableOptions(ModuleType moduleType)
     {
         return Registrar::GetAvailableOptions(moduleType);
     }

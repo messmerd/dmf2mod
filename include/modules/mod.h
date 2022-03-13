@@ -319,7 +319,7 @@ public:
     }
 
 private:
-    bool ParseArgs(std::vector<std::string>& args) override;
+    //bool ParseArgs(std::vector<std::string>& args) override;
 
     bool& GetDownsampleRef()
     {

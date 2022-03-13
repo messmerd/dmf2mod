@@ -43,6 +43,8 @@ void Registrar::RegisterModules()
     m_RegistrationMap.clear();
     m_FileExtensionMap.clear();
     m_ConversionOptionsRegistrationMap.clear();
+    m_AvailableOptionsMap.clear();
+    m_AvailableOptionsMap[ModuleType::NONE] = {};
 
     // Register all modules here:
     Register<DMF>();
@@ -137,9 +139,9 @@ std::string Registrar::GetExtensionFromType(ModuleType moduleType)
     return "";
 }
 
-ModuleOptions Registrar::GetAvailableOptions(ModuleType moduleType)
+const ModuleOptions& Registrar::GetAvailableOptions(ModuleType moduleType)
 {
     if (m_AvailableOptionsMap.count(moduleType) > 0)
         return m_AvailableOptionsMap.at(moduleType);
-    return {};
+    return m_AvailableOptionsMap.at(ModuleType::NONE); // Return empty ModuleOptions
 }

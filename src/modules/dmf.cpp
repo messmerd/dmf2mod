@@ -158,7 +158,7 @@ void DMF::ImportRaw(const std::string& filename)
 {
     CleanUp();
 
-    const bool silent = ModuleUtils::GetCoreOptions().silent;
+    const bool silent = ModuleOptionUtils::GetGlobalOptionValue<bool>("silent");
 
     if (!silent)
         std::cout << "Starting to import the DMF file...\n";

@@ -39,21 +39,18 @@ public:
 
     // Constructors
 
-    ModuleOption()
-        : m_Id(-1), m_Type(Type::BOOL), m_Name(""), m_ShortName('\0'), m_DefaultValue(false)
-    {}
+    ModuleOption() : m_Id(-1), m_Type(Type::BOOL), m_Name(""), m_ShortName('\0'), m_DefaultValue(false) {}
 
     // ModuleOption without accepted values; The value can be anything allowed by the variant
     template<typename T, typename = std::enable_if_t<std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{})>>
     ModuleOption(T id, const std::string& name, char shortName, const value_t& defaultValue, const std::string& description, bool equalsPreferred)
         : m_Id(static_cast<int>(id)), m_Name(name), m_ShortName(shortName), m_DefaultValue(defaultValue), m_AcceptedValues({}), m_Description(description), m_EqualsPreferred(equalsPreferred)
     {
-        #ifndef NDEBUG
         for (char c : name)
         {
-            assert(std::isalpha(c) && "In ModuleOption constructor: name must only contain alphabetic characters or be empty.");
+            if (!std::isalpha(c))
+                assert(false && "In ModuleOption constructor: name must only contain alphabetic characters or be empty.");
         }
-        #endif
 
         assert((shortName == '\0' || std::isalpha(shortName)) && "In ModuleOption constructor: shortName must be an alphabetic character or '\\0'.");
 
@@ -67,24 +64,34 @@ public:
     ModuleOption(T id, const std::string& name, char shortName, const U& defaultValue, const std::initializer_list<U>& acceptedValues, const std::string& description, bool equalsPreferred)
         : m_Id(static_cast<int>(id)), m_Name(name), m_ShortName(shortName), m_DefaultValue(defaultValue), m_Description(description), m_EqualsPreferred(equalsPreferred)
     {
+        m_AcceptedValuesContainSpaces = false;
+
         bool found = false;
         for (const U& val : acceptedValues)
         {
-            m_AcceptedValues.insert(value_t(val));
+            const auto& insertRet = m_AcceptedValues.insert(value_t(val));
+
+            // Check for spaces (used when printing help)
+            if (insertRet.first->index() == ModuleOption::STRING)
+            {
+                const std::string& str = std::get<std::string>(*insertRet.first);
+                if (str.find(' ') != std::string::npos)
+                    m_AcceptedValuesContainSpaces = true;
+            }
 
             if (val == defaultValue)
                 found = true;
         }
-        
+
         if (!found) // Avoid "unused variable" warning
             assert(false && "In ModuleOption constructor: acceptedValues must contain the default value.");
         
-        #ifndef NDEBUG
+
         for (char c : name)
         {
-            assert(std::isalpha(c) && "In ModuleOption constructor: name must only contain alphabetic characters or be empty.");
+            if (!std::isalpha(c))
+                assert(false && "In ModuleOption constructor: name must only contain alphabetic characters or be empty.");
         }
-        #endif
 
         assert((shortName == '\0' || std::isalpha(shortName)) && "In ModuleOption constructor: shortName must be an alphabetic character or '\\0'.");
 
@@ -94,24 +101,36 @@ public:
     // Allows the use of string literals, which are converted to std::string
     template<typename T, typename = std::enable_if_t<std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{})>>
     ModuleOption(T id, const std::string& name, char shortName, const char* defaultValue, const std::initializer_list<std::string>& acceptedValues, const std::string& description, bool equalsPreferred)
-        : ModuleOption(id, name, shortName, std::string(defaultValue), acceptedValues, description, equalsPreferred)
-    {}
+        : ModuleOption(id, name, shortName, std::string(defaultValue), acceptedValues, description, equalsPreferred) {}
+
+    // Allows custom accepted values text which is used when printing help for this option. m_AcceptedValues is empty.
+    template<typename T, typename U, typename = std::enable_if_t<std::is_constructible<value_t, U>{} && /* U must be a valid variant alternative */
+    (std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}))>> /* T must be int or enum class with int underlying type */
+    ModuleOption(T id, const std::string& name, char shortName, const U& defaultValue, const char* customAcceptedValuesText, const std::string& description, bool equalsPreferred)
+        : ModuleOption(id, name, shortName, defaultValue, description, equalsPreferred)
+    {
+        m_CustomAcceptedValuesText = customAcceptedValuesText;
+    }
 
     // Getters and helpers
 
     int GetId() const { return m_Id; }
     Type GetType() const { return m_Type; }
-    std::string GetName() const;
+    std::string GetName() const { return m_Name; };
     char GetShortName() const { return m_ShortName; }
+    std::string GetDisplayName() const;
     value_t GetDefaultValue() const { return m_DefaultValue; }
     std::set<value_t> GetAcceptedValues() const { return m_AcceptedValues; }
     std::string GetDescription() const { return m_Description; }
     bool IsEqualsPreferred() const { return m_EqualsPreferred; }
-    
+    std::string GetCustomAcceptedValuesText() const { return m_CustomAcceptedValuesText; }
+    bool AreDoubleQuotesNeeded() const { return m_AcceptedValuesContainSpaces; }
+
     bool HasName() const { return !m_Name.empty(); }
     bool HasShortName() const { return m_ShortName != '\0'; }
     bool UsesAcceptedValues() const { return m_AcceptedValues.size() > 0; }
     bool IsValid(const value_t& value) const;
+    bool UsesCustomAcceptedValuesText() const { return !m_CustomAcceptedValuesText.empty(); }
 
 private:
 
@@ -125,11 +144,16 @@ private:
     value_t m_DefaultValue;
 
     std::set<value_t> m_AcceptedValues;
+    bool m_AcceptedValuesContainSpaces; // Whether double quotes are needed when printing
 
     std::string m_Description;
 
     // Whether "--foo=bar" is preferred over "--foo bar" for non-boolean options. Used when printing.
     bool m_EqualsPreferred;
+
+    // Only string-typed options can use custom accepted values text.
+    // To use this feature, accepted values must take the form of: {"=<custom text here>"}
+    std::string m_CustomAcceptedValuesText;
 };
 
 class ModuleOptions

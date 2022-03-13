@@ -115,7 +115,7 @@ bool ModuleUtils::ParseArgs(std::vector<std::string>& args, const ModuleOptions&
         
         if (!optionDef->IsValid(valueTemp))
         {
-            std::cerr << "ERROR: The value \"" << valueStr << "\" is not valid for the option \"" << optionDef->GetName() << "\".\n";
+            std::cerr << "ERROR: The value \"" << valueStr << "\" is not valid for the option \"" << optionDef->GetDisplayName() << "\".\n";
             return true; // The value is not valid for this option definition
         }
 
@@ -342,14 +342,25 @@ void ModuleUtils::PrintHelp(const ModuleOptions& options)
         const auto& option = mapPair.second;
 
         std::string str1 = "  ";
-        str1 += option.HasShortName() ? "-" + std::string(1, option.GetShortName()) + ", " : "";
-        str1 += "--" + option.GetName();
+        
+        if (option.HasShortName())
+        {
+            str1 += "-" + std::string(1, option.GetShortName());
+            if (option.HasName())
+                str1 += ", ";
+        }
+        if (option.HasName())
+        {
+            str1 += "--" + option.GetName();
+        }
+
+        const bool useDoubleQuotes = option.AreDoubleQuotesNeeded();
 
         const ModuleOption::Type optionType = option.GetType();
         if (option.UsesAcceptedValues() && optionType != ModuleOption::BOOL)
         {
-            str1 += "=[";
-            
+            str1 += option.IsEqualsPreferred() ? "=[" : " [";
+
             unsigned i = 0;
             const size_t total = option.GetAcceptedValues().size();
             for (auto& val : option.GetAcceptedValues())
@@ -361,7 +372,11 @@ void ModuleUtils::PrintHelp(const ModuleOptions& options)
                     case ModuleOption::DOUBLE:
                         str1 += std::to_string(std::get<ModuleOption::DOUBLE>(val)); break;
                     case ModuleOption::STRING:
-                        str1 += "\"" + std::get<ModuleOption::STRING>(val) + "\""; break;
+                        if (useDoubleQuotes)
+                            str1 += "\"" + std::get<ModuleOption::STRING>(val) + "\"";
+                        else
+                            str1 += std::get<ModuleOption::STRING>(val);
+                        break;
                     default:
                         break;
                 }
@@ -374,14 +389,21 @@ void ModuleUtils::PrintHelp(const ModuleOptions& options)
 
             str1 += "]";
         }
+        else if (option.UsesCustomAcceptedValuesText())
+        {
+            str1 += option.IsEqualsPreferred() ? "=" : " ";
+            str1 += option.GetCustomAcceptedValuesText();
+        }
         else
         {
             switch (optionType)
             {
                 case ModuleOption::INT:
                 case ModuleOption::DOUBLE:
+                    str1 += option.IsEqualsPreferred() ? "=" : " ";
                     str1 += "<value>"; break;
                 case ModuleOption::STRING:
+                    str1 += option.IsEqualsPreferred() ? "=" : " ";
                     str1 += "\"<value>\""; break;
                 default:
                     break;
@@ -406,9 +428,12 @@ void ModuleUtils::PrintHelp(const ModuleOptions& options)
                 const std::string defaultValue = std::get<ModuleOption::STRING>(option.GetDefaultValue());
                 if (!defaultValue.empty())
                 {
-                    str2 += "(Default: \"";
-                    str2 += defaultValue;
-                    str2 += "\")";
+                    str2 += "(Default: ";
+                    if (useDoubleQuotes)
+                        str2 += "\"" + defaultValue + "\"";
+                    else
+                        str2 += defaultValue;
+                    str2 += ")";
                 }
                 break;
             }

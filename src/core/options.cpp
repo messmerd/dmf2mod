@@ -14,11 +14,11 @@ using namespace d2m;
 
 // ModuleOption
 
-std::string ModuleOption::GetName() const
+std::string ModuleOption::GetDisplayName() const
 {
-    if (m_Name.empty())
-        return std::string(1, m_ShortName);
-    return m_Name;
+    if (!m_Name.empty())
+        return m_Name;
+    return std::string(1, m_ShortName);
 }
 
 bool ModuleOption::IsValid(const value_t& value) const

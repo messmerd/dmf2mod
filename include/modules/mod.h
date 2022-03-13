@@ -275,11 +275,8 @@ struct State
 class MODException : public ModuleException
 {
 public:
-    template <class T, 
-        class = std::enable_if_t<std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{})>>
-    MODException(Category category, T errorCode, const std::string errorMessage = "")
-        : ModuleException(category, errorCode, CreateErrorMessage(category, (int)errorCode, errorMessage))
-    {}
+    // Inherit all constructors from ModuleException
+    using ModuleException::ModuleException;
 
 private:
     // Creates module-specific error message from an error code and string argument

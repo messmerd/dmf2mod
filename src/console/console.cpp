@@ -49,7 +49,7 @@ static bool PrintHelp(const std::string& executable, ModuleType moduleType);
 static ModuleOptions G_ConsoleOptions =
 {
     {ConsoleOptionsEnum::Force, "force", 'f', false, "Overwrite output file.", true},
-    {ConsoleOptionsEnum::Help, "help", '\0', "", "Display this help message. Provide module type (i.e. mod) for module-specific options.", false},
+    {ConsoleOptionsEnum::Help, "help", '\0', "", "[module type]", "Display this help message. Provide module type (i.e. mod) for module-specific options.", false},
     {ConsoleOptionsEnum::Silence, "silent", 's', false, "Print nothing to console except errors and/or warnings.", true}
 };
 

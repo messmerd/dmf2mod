@@ -7,13 +7,9 @@
 
 #pragma once
 
-#include "options.h"
-#include "registrar.h"
-#include "status.h"
-
 #include <string>
 #include <vector>
-#include <map>
+#include <algorithm>
 
 namespace d2m {
 
@@ -29,14 +25,30 @@ public:
 
     // Command-line arguments and options utils
     static std::vector<std::string> GetArgsAsVector(int argc, char *argv[]);
-    static bool ParseArgs(std::vector<std::string>& args, const ModuleOptions& optionDefinitions, OptionValues& values);
-    static void PrintHelp(ModuleType moduleType);
-    static void PrintHelp(const ModuleOptions& options);
-    
+
     // String utils (borrowed from Stack Overflow)
-    static inline void StringTrimLeft(std::string &str);
-    static inline void StringTrimRight(std::string &str);
-    static inline void StringTrimBothEnds(std::string &str);
+    static inline void StringTrimLeft(std::string &str)
+    {
+        // Trim string from start (in place)
+        str.erase(str.begin(), std::find_if(str.begin(), str.end(), [](unsigned char ch) {
+            return !std::isspace(ch);
+        }));
+    }
+
+    static inline void StringTrimRight(std::string &str)
+    {
+        // Trim string from end (in place)
+        str.erase(std::find_if(str.rbegin(), str.rend(), [](unsigned char ch) {
+            return !std::isspace(ch);
+        }).base(), str.end());
+    }
+
+    static inline void StringTrimBothEnds(std::string &str)
+    {
+        // Trim string from both ends (in place)
+        StringTrimLeft(str);
+        StringTrimRight(str);
+    }
 };
 
 } // namespace d2m

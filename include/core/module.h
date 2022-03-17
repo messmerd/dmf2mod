@@ -10,6 +10,7 @@
 
 #include "module_base.h"
 #include "conversion_options.h"
+#include "global_options.h"
 
 namespace d2m {
 
@@ -31,9 +32,14 @@ protected:
         return ModuleStatic<T>::GetFileExtensionStatic();
     }
 
-    const ModuleOptions& GetAvailableOptions() const override
+    const std::shared_ptr<OptionDefinitionCollection>& GetOptionDefinitions() const override
     {
-        return ConversionOptionsStatic<O>::GetAvailableOptionsStatic();
+        return ConversionOptionsStatic<O>::GetDefinitionsStatic();
+    }
+
+    std::shared_ptr<OptionsType> GetOptions()
+    {
+        return std::reinterpret_pointer_cast<OptionsType>(m_Options);
     }
 };
 
@@ -45,24 +51,24 @@ protected:
 #define MODULE_DECLARE(moduleClass, optionsClass) \
 class moduleClass; \
 class optionsClass; \
-template<> ModuleBase* ModuleStatic<moduleClass>::CreateStatic(); \
-template<> ConversionOptionsBase* ConversionOptionsStatic<optionsClass>::CreateStatic(); \
-template<> std::string ModuleStatic<moduleClass>::GetFileExtensionStatic(); \
-template<> const ModuleOptions& ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic();
+template<> ModuleBase* d2m::ModuleStatic<moduleClass>::CreateStatic(); \
+template<> ConversionOptionsBase* d2m::ConversionOptionsStatic<optionsClass>::CreateStatic(); \
+template<> std::string d2m::ModuleStatic<moduleClass>::GetFileExtensionStatic(); \
+template<> const std::shared_ptr<OptionDefinitionCollection>& d2m::ConversionOptionsStatic<optionsClass>::GetDefinitionsStatic();
 
 /*
     Helper macro for defining static data members for a template specialization 
     of module and conversion options.
     Must be called in a module's cpp file AFTER including the header.
 */
-#define MODULE_DEFINE(moduleClass, optionsClass, enumType, fileExt, availOptions) \
-template<> const ModuleType ModuleStatic<moduleClass>::m_Type = enumType; \
-template<> const std::string ModuleStatic<moduleClass>::m_FileExtension = fileExt; \
-template<> const ModuleType ConversionOptionsStatic<optionsClass>::m_Type = enumType; \
-template<> const ModuleOptions ConversionOptionsStatic<optionsClass>::m_AvailableOptions = availOptions; \
-template<> ModuleBase* ModuleStatic<moduleClass>::CreateStatic() { return new moduleClass; } \
-template<> ConversionOptionsBase* ConversionOptionsStatic<optionsClass>::CreateStatic() { return new optionsClass; } \
-template<> std::string ModuleStatic<moduleClass>::GetFileExtensionStatic() { return m_FileExtension; } \
-template<> const ModuleOptions& ConversionOptionsStatic<optionsClass>::GetAvailableOptionsStatic() { return m_AvailableOptions; };
+#define MODULE_DEFINE(moduleClass, optionsClass, enumType, fileExt, optionDefinitionsPtr) \
+template<> const ModuleType d2m::ModuleStatic<moduleClass>::m_Type = enumType; \
+template<> const std::string d2m::ModuleStatic<moduleClass>::m_FileExtension = fileExt; \
+template<> const ModuleType d2m::ConversionOptionsStatic<optionsClass>::m_Type = enumType; \
+template<> const std::shared_ptr<OptionDefinitionCollection> d2m::ConversionOptionsStatic<optionsClass>::m_OptionDefinitions = optionDefinitionsPtr; \
+template<> ModuleBase* d2m::ModuleStatic<moduleClass>::CreateStatic() { return new moduleClass; } \
+template<> ConversionOptionsBase* d2m::ConversionOptionsStatic<optionsClass>::CreateStatic() { return new optionsClass; } \
+template<> std::string d2m::ModuleStatic<moduleClass>::GetFileExtensionStatic() { return m_FileExtension; } \
+template<> const std::shared_ptr<OptionDefinitionCollection>& d2m::ConversionOptionsStatic<optionsClass>::GetDefinitionsStatic() { return m_OptionDefinitions; };
 
 } // namespace d2m

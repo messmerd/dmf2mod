@@ -2,8 +2,8 @@
     options.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Declares ModuleOption and ModuleOptions which are used
-    when working with command-line options.
+    Declares Option, OptionCollection, OptionDefinition, and OptionDefinitionCollection, 
+    which are used when working with command-line options.
 */
 
 #pragma once
@@ -13,18 +13,23 @@
 #include <set>
 #include <vector>
 #include <variant>
+#include <memory>
 #include <cassert>
 
 namespace d2m {
 
 // Forward declares
-class ModuleOptions;
+class OptionDefinition;
+class OptionDefinitionCollection;
+class Option;
+class OptionCollection;
 
-// Store definition for a single command-line option
-class ModuleOption
+
+// Stores a definition for a single command-line option
+class OptionDefinition
 {
 public:
-    friend class ModuleOptions;
+    friend class OptionDefinitionCollection;
 
     // The values correspond to value_t indices
     enum Type
@@ -39,29 +44,29 @@ public:
 
     // Constructors
 
-    ModuleOption() : m_Id(-1), m_Type(Type::BOOL), m_Name(""), m_ShortName('\0'), m_DefaultValue(false) {}
+    OptionDefinition() : m_Id(-1), m_Type(Type::BOOL), m_Name(""), m_ShortName('\0'), m_DefaultValue(false) {}
 
-    // ModuleOption without accepted values; The value can be anything allowed by the variant
+    // OptionDefinition without accepted values; The value can be anything allowed by the variant
     template<typename T, typename = std::enable_if_t<std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{})>>
-    ModuleOption(T id, const std::string& name, char shortName, const value_t& defaultValue, const std::string& description, bool equalsPreferred)
+    OptionDefinition(T id, const std::string& name, char shortName, const value_t& defaultValue, const std::string& description, bool equalsPreferred)
         : m_Id(static_cast<int>(id)), m_Name(name), m_ShortName(shortName), m_DefaultValue(defaultValue), m_AcceptedValues({}), m_Description(description), m_EqualsPreferred(equalsPreferred)
     {
         for (char c : name)
         {
             if (!std::isalpha(c))
-                assert(false && "In ModuleOption constructor: name must only contain alphabetic characters or be empty.");
+                assert(false && "In OptionDefinition constructor: name must only contain alphabetic characters or be empty.");
         }
 
-        assert((shortName == '\0' || std::isalpha(shortName)) && "In ModuleOption constructor: shortName must be an alphabetic character or '\\0'.");
+        assert((shortName == '\0' || std::isalpha(shortName)) && "In OptionDefinition constructor: shortName must be an alphabetic character or '\\0'.");
 
         m_Type = static_cast<Type>(defaultValue.index());
     }
 
-    // ModuleOption with accepted values; Ensures that defaultValue and acceptedValues are the same type and are a valid variant alternative
+    // OptionDefinition with accepted values; Ensures that defaultValue and acceptedValues are the same type and are a valid variant alternative
     template <typename T, typename U, 
         typename = std::enable_if_t<std::is_constructible<value_t, U>{} && /* U must be a valid variant alternative */
         (std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}))>> /* T must be int or enum class with int underlying type */
-    ModuleOption(T id, const std::string& name, char shortName, const U& defaultValue, const std::initializer_list<U>& acceptedValues, const std::string& description, bool equalsPreferred)
+    OptionDefinition(T id, const std::string& name, char shortName, const U& defaultValue, const std::initializer_list<U>& acceptedValues, const std::string& description, bool equalsPreferred)
         : m_Id(static_cast<int>(id)), m_Name(name), m_ShortName(shortName), m_DefaultValue(defaultValue), m_Description(description), m_EqualsPreferred(equalsPreferred)
     {
         m_AcceptedValuesContainSpaces = false;
@@ -72,7 +77,7 @@ public:
             const auto& insertRet = m_AcceptedValues.insert(value_t(val));
 
             // Check for spaces (used when printing help)
-            if (insertRet.first->index() == ModuleOption::STRING)
+            if (insertRet.first->index() == OptionDefinition::STRING)
             {
                 const std::string& str = std::get<std::string>(*insertRet.first);
                 if (str.find(' ') != std::string::npos)
@@ -84,30 +89,30 @@ public:
         }
 
         if (!found) // Avoid "unused variable" warning
-            assert(false && "In ModuleOption constructor: acceptedValues must contain the default value.");
+            assert(false && "In OptionDefinition constructor: acceptedValues must contain the default value.");
         
 
         for (char c : name)
         {
             if (!std::isalpha(c))
-                assert(false && "In ModuleOption constructor: name must only contain alphabetic characters or be empty.");
+                assert(false && "In OptionDefinition constructor: name must only contain alphabetic characters or be empty.");
         }
 
-        assert((shortName == '\0' || std::isalpha(shortName)) && "In ModuleOption constructor: shortName must be an alphabetic character or '\\0'.");
+        assert((shortName == '\0' || std::isalpha(shortName)) && "In OptionDefinition constructor: shortName must be an alphabetic character or '\\0'.");
 
         m_Type = static_cast<Type>(m_DefaultValue.index());
     }
 
     // Allows the use of string literals, which are converted to std::string
     template<typename T, typename = std::enable_if_t<std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{})>>
-    ModuleOption(T id, const std::string& name, char shortName, const char* defaultValue, const std::initializer_list<std::string>& acceptedValues, const std::string& description, bool equalsPreferred)
-        : ModuleOption(id, name, shortName, std::string(defaultValue), acceptedValues, description, equalsPreferred) {}
+    OptionDefinition(T id, const std::string& name, char shortName, const char* defaultValue, const std::initializer_list<std::string>& acceptedValues, const std::string& description, bool equalsPreferred)
+        : OptionDefinition(id, name, shortName, std::string(defaultValue), acceptedValues, description, equalsPreferred) {}
 
     // Allows custom accepted values text which is used when printing help for this option. m_AcceptedValues is empty.
     template<typename T, typename U, typename = std::enable_if_t<std::is_constructible<value_t, U>{} && /* U must be a valid variant alternative */
     (std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}))>> /* T must be int or enum class with int underlying type */
-    ModuleOption(T id, const std::string& name, char shortName, const U& defaultValue, const char* customAcceptedValuesText, const std::string& description, bool equalsPreferred)
-        : ModuleOption(id, name, shortName, defaultValue, description, equalsPreferred)
+    OptionDefinition(T id, const std::string& name, char shortName, const U& defaultValue, const char* customAcceptedValuesText, const std::string& description, bool equalsPreferred)
+        : OptionDefinition(id, name, shortName, defaultValue, description, equalsPreferred)
     {
         m_CustomAcceptedValuesText = customAcceptedValuesText;
     }
@@ -122,19 +127,20 @@ public:
     value_t GetDefaultValue() const { return m_DefaultValue; }
     std::set<value_t> GetAcceptedValues() const { return m_AcceptedValues; }
     std::string GetDescription() const { return m_Description; }
-    bool IsEqualsPreferred() const { return m_EqualsPreferred; }
-    std::string GetCustomAcceptedValuesText() const { return m_CustomAcceptedValuesText; }
-    bool AreDoubleQuotesNeeded() const { return m_AcceptedValuesContainSpaces; }
 
     bool HasName() const { return !m_Name.empty(); }
     bool HasShortName() const { return m_ShortName != '\0'; }
     bool UsesAcceptedValues() const { return m_AcceptedValues.size() > 0; }
+
+    // Returns whether the given value can be assigned to an option with this option definition
     bool IsValid(const value_t& value) const;
-    bool UsesCustomAcceptedValuesText() const { return !m_CustomAcceptedValuesText.empty(); }
 
-private:
+    // Prints help info
+    void PrintHelp() const;
 
-    // Used for quickly accessing specific options in ModuleOptions collection
+protected:
+
+    // Used for quickly accessing specific options in OptionDefinitionCollection collection
     int m_Id;
 
     Type m_Type;
@@ -156,102 +162,166 @@ private:
     std::string m_CustomAcceptedValuesText;
 };
 
-class ModuleOptions
+
+// A collection of OptionDefinition objects
+class OptionDefinitionCollection
 {
 public:
     static constexpr int npos = -1;
-    using iterator = std::map<int, ModuleOption>::iterator;
-    using const_iterator = std::map<int, ModuleOption>::const_iterator;
 
-    ModuleOptions() {};
-    ModuleOptions(const ModuleOptions& other);
-    ModuleOptions(std::initializer_list<ModuleOption> options);
+    OptionDefinitionCollection() {};
+    OptionDefinitionCollection(const OptionDefinitionCollection& other);
+    OptionDefinitionCollection(std::initializer_list<OptionDefinition> options);
 
     size_t Count() const;
 
-    // Iteration
-    iterator begin() { return m_IdOptionsMap.begin(); }
-    iterator end() { return m_IdOptionsMap.end(); }
-    const_iterator begin() const { return m_IdOptionsMap.begin(); }
-    const_iterator end() const { return m_IdOptionsMap.end(); }
+    // Access
+    const std::map<int, OptionDefinition>& GetIdMap() const { return m_IdOptionsMap; }
 
     // Find methods
-    const ModuleOption* FindById(int id) const;
-    const ModuleOption* FindByName(const std::string& name) const;
-    const ModuleOption* FindByShortName(char shortName) const;
+    const OptionDefinition* FindById(int id) const;
+    const OptionDefinition* FindByName(const std::string& name) const;
+    const OptionDefinition* FindByShortName(char shortName) const;
     int FindIdByName(const std::string& name) const;
     int FindIdByShortName(char shortName) const;
 
+    // Other
+    void PrintHelp() const;
+
 private:
-    std::map<int, ModuleOption> m_IdOptionsMap;
-    std::map<std::string, ModuleOption*> m_NameOptionsMap;
-    std::map<char, ModuleOption*> m_ShortNameOptionsMap;
+    std::map<int, OptionDefinition> m_IdOptionsMap;
+    std::map<std::string, OptionDefinition*> m_NameOptionsMap;
+    std::map<char, OptionDefinition*> m_ShortNameOptionsMap;
 };
 
 
-// Maps a ModuleOption id to that option's value
-using OptionValues = std::map<int, ModuleOption::value_t>;
+// An OptionDefinition + option value
+class Option
+{
+public:
+    using value_t = OptionDefinition::value_t;
+
+    Option() : m_Definitions(nullptr), m_Id(-1) {}
+
+    // Construct with definitions defined elsewhere
+    Option(const std::shared_ptr<OptionDefinitionCollection>& definitions, int id);
+
+    // Construct with value. The definitions are defined elsewhere
+    Option(const std::shared_ptr<OptionDefinitionCollection>& definitions, int id, value_t value);
+
+    void SetValue(value_t value);
+
+    void SetValueToDefault();
+
+    const value_t& GetValue() const { return m_Value; }
+    value_t& GetValue() { return m_Value; }
+
+    template<typename T>
+    const T& GetValue() const
+    {
+        // Will throw an exception if T is the wrong type
+        return std::get<T>(m_Value);
+    }
+
+    template<typename T>
+    T& GetValue()
+    {
+        // Will throw an exception if T is the wrong type
+        return std::get<T>(m_Value);
+    }
+
+private:
+
+    const OptionDefinition* GetDefinition() const;
+
+    // Rather than making a copy of definition for each Option, it instead will point to definitions defined elsewhere + an id.
+    // This will work well for both definitions from the ConversionOptionsStatic class and custom definitions used by frontends.
+    // std::shared_ptr<OptionDefinition> is not used to avoid the complications of having to use shared_ptr with each individual 
+    // OptionDefinition.
+    std::shared_ptr<OptionDefinitionCollection> m_Definitions;
+    int m_Id;
+
+    value_t m_Value;
+};
 
 
+// A collection of Option objects
+class OptionCollection
+{
+public:
+    using value_t = OptionDefinition::value_t;
+
+    OptionCollection();
+    OptionCollection(const std::shared_ptr<OptionDefinitionCollection>& definitions);
+
+    // Access to definitions
+
+    void SetDefinitions(const std::shared_ptr<OptionDefinitionCollection>& definitions);
+    const std::shared_ptr<OptionDefinitionCollection>& GetDefinitions() const { return m_Definitions; }
+
+    // Access to collection
+
+    const std::map<int, Option>& GetOptionsMap() const { return m_OptionsMap; }
+
+    // Get options based on id, name, or short name
+
+    const Option& GetOption(int id) const { return m_OptionsMap.at(id); }
+    Option& GetOption(int id) { return m_OptionsMap[id]; }
+
+    template<typename T, class = std::enable_if_t<std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}>>
+    const Option& GetOption(T id) const
+    {
+        return GetOption(static_cast<int>(id));
+    }
+
+    template<typename T, class = std::enable_if_t<std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}>>
+    Option& GetOption(T id)
+    {
+        return GetOption(static_cast<int>(id));
+    }
+
+    const Option& GetOption(std::string name) const;
+    Option& GetOption(std::string name);
+    const Option& GetOption(char shortName) const;
+    Option& GetOption(char shortName);
+
+    // Other
+
+    bool ParseArgs(std::vector<std::string>& args);
+    void SetValuesToDefault();
+
+private:
+    std::shared_ptr<OptionDefinitionCollection> m_Definitions;
+
+    std::map<int, Option> m_OptionsMap;
+};
+
+
+// Provides option value conversion tools
 class ModuleOptionUtils
 {
 public:
-    using value_t = ModuleOption::value_t;
-
-    // Initializes values to their defaults found in optionDefs
-    static void SetToDefault(const ModuleOptions& optionDefs, OptionValues& valuesMap);
+    using value_t = OptionDefinition::value_t;
 
     // Convert value_t to a string
     static std::string ConvertToString(const value_t& value);
 
     // Convert string + type to a value_t
-    static bool ConvertToValue(const std::string& valueStr, ModuleOption::Type type, value_t& returnVal);
+    static bool ConvertToValue(const std::string& valueStr, OptionDefinition::Type type, value_t& returnVal);
 
     // Convert string + type to a value_t
-    static bool ConvertToValue(const char* valueStr, ModuleOption::Type type, value_t& returnVal);
-
-    // Global options/values can be set/retrieved using these methods:
-
-    static void SetGlobalOptions(const ModuleOptions& globalOptionsDefs, const OptionValues& globalValuesMap);
-    static void SetGlobalOptionsDefinitions(const ModuleOptions& globalOptionsDefs);
-    static const ModuleOptions& GetGlobalOptionsDefinitions();
-    static const OptionValues& GetGlobalOptionsValues();
-    
-    template<typename T>
-    static T GetGlobalOptionValue(int optionId)
-    {
-        // Will throw an exception if optionName doesn't exist
-        return std::get<T>(ModuleOptionUtils::m_GlobalValuesMap.at(optionId));
-    }
-    
-    template<typename T>
-    static void SetGlobalOptionValue(int optionId, T value)
-    {
-        // Will throw an exception if optionName doesn't exist
-        ModuleOptionUtils::m_GlobalValuesMap[optionId] = value;
-    }
-
-    template<typename T>
-    static T GetGlobalOptionValue(const char* optionName)
-    {
-        // Will throw an exception if optionName doesn't exist
-        const int optionId = ModuleOptionUtils::m_GlobalOptions.FindIdByName(optionName);
-        return GetGlobalOptionValue<T>(optionId);
-    }
-    
-    template<typename T>
-    static void SetGlobalOptionValue(const char* optionName, T value)
-    {
-        // Will throw an exception if optionName doesn't exist
-        const int optionId = ModuleOptionUtils::m_GlobalOptions.FindIdByName(optionName);
-        SetGlobalOptionValue<T>(optionId, value);
-    }
+    static bool ConvertToValue(const char* valueStr, OptionDefinition::Type type, value_t& returnVal);
 
 private:
 
-    // Global options/values
-    static ModuleOptions m_GlobalOptions;
-    static OptionValues m_GlobalValuesMap;
 };
+
+/*
+    Helper function that allows an OptionDefinitionCollection to be easily created and passed to MODULE_DEFINE
+*/
+inline const std::shared_ptr<OptionDefinitionCollection> CreateOptionDefinitions(const std::initializer_list<OptionDefinition>& optionsDefinitions)
+{
+    return std::make_shared<OptionDefinitionCollection>(optionsDefinitions);
+}
 
 } // namespace d2m

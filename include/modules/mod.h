@@ -114,8 +114,8 @@ struct ChannelRow
     unsigned EffectValue;
 };
 
-typedef int dmf_sample_id_t;
-typedef int mod_sample_id_t;
+using dmf_sample_id_t = int;
+using mod_sample_id_t = int;
 
 /*
  * MOD has only a 3 octave range while Deflemask has 8.
@@ -301,12 +301,12 @@ public:
 
     bool GetDownsample() const
     {
-        return std::get<bool>(GetValueRef((int)OptionEnum::Downsample));
+        return GetOption((int)OptionEnum::Downsample).GetValue<bool>();
     }
 
     EffectsEnum GetEffects() const
     {
-        const auto& effects = std::get<std::string>(GetValueRef((int)OptionEnum::Effects));
+        const auto& effects = GetOption((int)OptionEnum::Effects).GetValue<std::string>();
         if (effects == "min")
             return EffectsEnum::Min;
         else if (effects == "max")
@@ -320,12 +320,12 @@ private:
 
     bool& GetDownsampleRef()
     {
-        return std::get<bool>(GetValueRef((int)OptionEnum::Downsample));
+        return GetOption((int)OptionEnum::Downsample).GetValue<bool>();
     }
 
     std::string& GetEffectsRef()
     {
-        return std::get<std::string>(GetValueRef((int)OptionEnum::Effects));
+        return GetOption((int)OptionEnum::Effects).GetValue<std::string>();
     }
 
 };
@@ -375,10 +375,10 @@ private:
 
     void ImportRaw(const std::string& filename) override;
     void ExportRaw(const std::string& filename) override;
-    void ConvertRaw(const Module* input, const ConversionOptionsPtr& options) override;
+    void ConvertRaw(const Module* input) override;
 
     // Conversion from DMF:
-    void ConvertFromDMF(const DMF& dmf, const ConversionOptionsPtr& options);
+    void ConvertFromDMF(const DMF& dmf);
     void DMFConvertSamples(const DMF& dmf, SampleMap& sampleMap);
     void DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSampleNoteRangeMap& sampleIdLowestHighestNotesMap);
     void DMFSampleSplittingAndAssignment(SampleMap& sampleMap, const DMFSampleNoteRangeMap& sampleIdLowestHighestNotesMap);
@@ -416,8 +416,6 @@ private:
     }
 
 private:
-    MODConversionOptions* m_Options;
-
     //////////// Temporaries used during DMF-->MOD conversion
     const bool m_UsingSetupPattern = true; // Whether to use a pattern at the start of the module to set up the initial tempo and other stuff.
 

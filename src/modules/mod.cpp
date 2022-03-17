@@ -34,12 +34,12 @@ using namespace d2m::mod;
 
 // Define the command-line options that MOD accepts:
 using MODOptionEnum = MODConversionOptions::OptionEnum;
-const ModuleOptions MODOptions = 
+auto MODOptions = CreateOptionDefinitions(
 {
     /* Option id               / Full name     / Short / Default / Possib. vals / Description */
     {MODOptionEnum::Downsample, "downsample",   '\0',     false,                  "Allow wavetables to lose information through downsampling if needed.", true},
     {MODOptionEnum::Effects,    "effects",      '\0',     "max",  {"min", "max"}, "The number of ProTracker effects to use.", true}
-};
+});
 
 // Register module info
 MODULE_DEFINE(MOD, MODConversionOptions, ModuleType::MOD, "mod", MODOptions)
@@ -79,7 +79,7 @@ void MOD::ImportRaw(const std::string& filename)
     throw NotImplementedException();
 }
 
-void MOD::ConvertRaw(const Module* input, const ConversionOptionsPtr& options)
+void MOD::ConvertRaw(const Module* input)
 {
     if (!input)
     {
@@ -89,7 +89,7 @@ void MOD::ConvertRaw(const Module* input, const ConversionOptionsPtr& options)
     switch (input->GetType())
     {
         case ModuleType::DMF:
-            ConvertFromDMF(*(input->Cast<DMF>()), options);
+            ConvertFromDMF(*(input->Cast<DMF>()));
             break;
         // Add other input types here if support is added
         default:
@@ -100,16 +100,14 @@ void MOD::ConvertRaw(const Module* input, const ConversionOptionsPtr& options)
 
 ///////// CONVERT FROM DMF /////////
 
-void MOD::ConvertFromDMF(const DMF& dmf, const ConversionOptionsPtr& options)
+void MOD::ConvertFromDMF(const DMF& dmf)
 {
-    m_Options = reinterpret_cast<MODConversionOptions*>(options.get());
-
-    const bool silent = ModuleOptionUtils::GetGlobalOptionValue<bool>("silent");
+    const bool silent = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Silence).GetValue<bool>();
 
     if (!silent)
         std::cout << "Starting to convert to MOD...\n";
 
-    if (dmf.GetSystem().id != DMF::Systems(DMF::SystemType::GameBoy).id) // If it's not a Game Boy
+    if (dmf.GetSystem().type != DMF::SystemType::GameBoy) // If it's not a Game Boy
     {
         throw MODException(ModuleException::Category::Convert, MOD::ConvertError::NotGameBoy);
     }
@@ -338,7 +336,7 @@ void MOD::DMFSampleSplittingAndAssignment(SampleMap& sampleMap, const DMFSampleN
         const auto& lowHighNotes = sampleIdLowestHighestNotesMap.at(sampleId);
         currentMODSampleId = sampleMapper.Init(sampleId, currentMODSampleId, lowHighNotes);
 
-        if (sampleMapper.IsDownsamplingNeeded() && !m_Options->GetDownsample())
+        if (sampleMapper.IsDownsamplingNeeded() && !GetOptions()->GetDownsample())
         {
             throw MODException(ModuleException::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(sampleId - 4));
         }
@@ -1619,7 +1617,7 @@ void MOD::ExportRaw(const std::string& filename)
 
     outFile.close();
 
-    const bool silent = ModuleOptionUtils::GetGlobalOptionValue<bool>("silent");
+    const bool silent = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Silence).GetValue<bool>();
 
     if (!silent)
         std::cout << "Saved MOD file to disk.\n\n";

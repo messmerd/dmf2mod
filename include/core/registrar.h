@@ -32,19 +32,40 @@ enum class ModuleType
     MOD
 };
 
-
 // Forward declares
 class ModuleBase;
 class ConversionOptionsBase;
 template <typename T, typename O> class ModuleInterface;
 
+// Using's to make usage easier
+using Module = ModuleBase;
+using ModulePtr = std::shared_ptr<Module>;
+using ConversionOptions = ConversionOptionsBase;
+using ConversionOptionsPtr = std::shared_ptr<ConversionOptions>;
 
-// Typedefs to make usage easier
-typedef ModuleBase Module;
-typedef std::unique_ptr<Module> ModulePtr;
-typedef ConversionOptionsBase ConversionOptions;
-typedef std::unique_ptr<ConversionOptions> ConversionOptionsPtr;
+/*
+// TODO: Experiment with this:
+//https://stackoverflow.com/questions/58622516/c-decltype-from-enum-value
 
+// Could potentially remove Modulestatic<T>::CreateStatic() and other methods
+//  or even the entire class? Might simplify and reduce the size of MODULE_DECLARE 
+//  and MODULE_DEFINE, and allow more of that work to be done by the Registrar.
+
+template<ModuleType>
+struct ModuleTypeMapper;
+
+template<ModuleType enum_value>
+ModulePtr make_module()
+{
+    return ModulePtr(new typename ModuleTypeMapper<enum_value>::type);
+}
+
+template<ModuleType enum_value>
+using GetModuleType = typename ModuleTypeMapper<enum_value>::type;
+
+// Each module would use this in their header (can add to MODULE_DECLARE):
+#define EXPERIMENTAL(moduleClass, enumType) template<> struct ModuleTypeMapper<enumType>  { using type = moduleClass; };
+*/
 
 // Handles module registration and creation
 class Registrar
@@ -64,7 +85,7 @@ public:
     static ModuleType GetTypeFromFilename(const std::string& filename);
     static ModuleType GetTypeFromFileExtension(const std::string& extension);
     static std::string GetExtensionFromType(ModuleType moduleType);
-    static const ModuleOptions& GetAvailableOptions(ModuleType moduleType);
+    static const std::shared_ptr<OptionDefinitionCollection>& GetOptionDefinitions(ModuleType moduleType);
 
 private:
     /*
@@ -86,7 +107,7 @@ private:
     static std::map<ModuleType, std::function<ConversionOptionsBase*(void)>> m_ConversionOptionsRegistrationMap;
 
     // Map which maps a module type to the available command-line options for that module type
-    static std::map<ModuleType, ModuleOptions> m_AvailableOptionsMap;
+    static std::map<ModuleType, std::shared_ptr<OptionDefinitionCollection>> m_OptionDefinitionsMap;
 };
 
 } // namespace d2m

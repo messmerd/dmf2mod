@@ -35,7 +35,7 @@ using namespace d2m;
 std::map<ModuleType, std::function<ModuleBase*(void)>> Registrar::m_RegistrationMap = {};
 std::map<std::string, ModuleType> Registrar::m_FileExtensionMap = {};
 std::map<ModuleType, std::function<ConversionOptionsBase*(void)>> Registrar::m_ConversionOptionsRegistrationMap = {};
-std::map<ModuleType, ModuleOptions> Registrar::m_AvailableOptionsMap = {};
+std::map<ModuleType, std::shared_ptr<OptionDefinitionCollection>> Registrar::m_OptionDefinitionsMap = {};
 
 // Registers all modules by associating their ModuleType enum values with their corresponding module classes
 void Registrar::RegisterModules()
@@ -43,8 +43,8 @@ void Registrar::RegisterModules()
     m_RegistrationMap.clear();
     m_FileExtensionMap.clear();
     m_ConversionOptionsRegistrationMap.clear();
-    m_AvailableOptionsMap.clear();
-    m_AvailableOptionsMap[ModuleType::NONE] = {};
+    m_OptionDefinitionsMap.clear();
+    m_OptionDefinitionsMap[ModuleType::NONE] = std::make_shared<OptionDefinitionCollection>();
 
     // Register all modules here:
     Register<DMF>();
@@ -65,8 +65,12 @@ void Registrar::Register()
 
     m_ConversionOptionsRegistrationMap[moduleType] = &T::OptionsType::CreateStatic;
     
-    //typedef typename T::OptionsType OPT;
-    m_AvailableOptionsMap[moduleType] = T::OptionsType::GetAvailableOptionsStatic();
+    //using OPT = T::OptionsType;
+    m_OptionDefinitionsMap[moduleType] = T::OptionsType::GetDefinitionsStatic();
+
+    // TODO: Is this a good idea?
+    if (!m_OptionDefinitionsMap[moduleType])
+        m_OptionDefinitionsMap[moduleType] = std::make_shared<OptionDefinitionCollection>();
 }
 
 ModulePtr Registrar::CreateModule(ModuleType moduleType)
@@ -93,7 +97,7 @@ ConversionOptionsPtr Registrar::CreateConversionOptions(ModuleType moduleType)
 
 std::vector<std::string> Registrar::GetAvailableModules()
 {
-    // TODO: Create a ModuleInfo class that contains ModuleOptions, module type, friendly name, file extension, etc.
+    // TODO: Create a ModuleInfo class that contains OptionDefinitionCollection, module type, friendly name, file extension, etc.
     //          Then that object could be created in mod.cpp and dmf.cpp and used to register module info.
 
     std::vector<std::string> vec;
@@ -139,9 +143,9 @@ std::string Registrar::GetExtensionFromType(ModuleType moduleType)
     return "";
 }
 
-const ModuleOptions& Registrar::GetAvailableOptions(ModuleType moduleType)
+const std::shared_ptr<OptionDefinitionCollection>& Registrar::GetOptionDefinitions(ModuleType moduleType)
 {
-    if (m_AvailableOptionsMap.count(moduleType) > 0)
-        return m_AvailableOptionsMap.at(moduleType);
-    return m_AvailableOptionsMap.at(ModuleType::NONE); // Return empty ModuleOptions
+    if (m_OptionDefinitionsMap.count(moduleType) > 0)
+        return m_OptionDefinitionsMap.at(moduleType);
+    return m_OptionDefinitionsMap.at(ModuleType::NONE); // Return empty OptionDefinitionCollection
 }

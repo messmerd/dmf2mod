@@ -20,17 +20,6 @@ using namespace d2m;
 
 static ModulePtr G_Module;
 static std::string G_InputFilename;
-static OptionValues G_GlobalValues;
-
-enum class WebAppOptionsEnum
-{
-    Force
-};
-
-static ModuleOptions G_GlobalOptions =
-{
-    {WebAppOptionsEnum::Force, "force", 'f', false, "Overwrite output file.", true}
-};
 
 static void SetStatusType(bool isError);
 
@@ -39,8 +28,7 @@ int main()
     Registrar::RegisterModules();
 
     // Initialize global options (for web app, user won't provide them)
-    ModuleOptionUtils::SetGlobalOptionsDefinitions(G_GlobalOptions);
-    ModuleOptionUtils::SetGlobalOptionValue((int)WebAppOptionsEnum::Force, true);
+    GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Force).SetValue(true);
 
     return 0;
 }
@@ -67,18 +55,18 @@ std::string GetAvailableModules()
  * the command-line options available for the given
  * module type
  */
-std::string GetAvailableOptions(std::string moduleType)
+std::string GetOptionDefinitions(std::string moduleType)
 {
     ModuleType moduleTypeEnum = Registrar::GetTypeFromFileExtension(moduleType);
-    ModuleOptions options = Module::GetAvailableOptions(moduleTypeEnum);
+    auto options = Module::GetOptionDefinitions(moduleTypeEnum);
     
     std::string optionsString;
     unsigned i = 0;
-    for (const auto& mapPair : options)
+    for (const auto& mapPair : options->GetIdMap())
     {
         const auto& option = mapPair.second;
         optionsString += option.GetName();
-        if (i != options.Count() - 1)
+        if (i != options->Count() - 1)
             optionsString += ";";
         i++;
     }
@@ -216,7 +204,7 @@ static void SetStatusType(bool isError)
 EMSCRIPTEN_BINDINGS(dmf2mod)
 {
     emscripten::function("getAvailableModules", &GetAvailableModules);
-    emscripten::function("getAvailableOptions", &GetAvailableOptions);
+    emscripten::function("getAvailableOptions", &GetOptionDefinitions);
     emscripten::function("moduleImport", &ModuleImport);
     emscripten::function("moduleConvert", &ModuleConvert);
 }

@@ -27,7 +27,7 @@ using namespace d2m::dmf;
 // DO NOT use any module namespace other than d2m::dmf
 
 // Define module info
-MODULE_DEFINE(DMF, DMFConversionOptions, ModuleType::DMF, "dmf", {})
+MODULE_DEFINE(DMF, DMFConversionOptions, ModuleType::DMF, "dmf", nullptr)
 
 #define DMF_FILE_VERSION_MIN 17 // DMF files as old as version 17 (0x11) are supported
 #define DMF_FILE_VERSION_MAX 25 // DMF files as new as version 25 (0x19) are supported
@@ -158,7 +158,7 @@ void DMF::ImportRaw(const std::string& filename)
 {
     CleanUp();
 
-    const bool silent = ModuleOptionUtils::GetGlobalOptionValue<bool>("silent");
+    const bool silent = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Silence).GetValue<bool>();
 
     if (!silent)
         std::cout << "Starting to import the DMF file...\n";
@@ -279,7 +279,7 @@ void DMF::ExportRaw(const std::string& filename)
     throw NotImplementedException();
 }
 
-void DMF::ConvertRaw(const Module* input, const ConversionOptionsPtr& options)
+void DMF::ConvertRaw(const Module* input)
 {
     // Not implemented
     throw NotImplementedException();

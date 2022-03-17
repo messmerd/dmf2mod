@@ -10,15 +10,18 @@
 #include "registrar.h"
 #include "module_base.h"
 #include "utils.h"
+#include "options.h"
 
 #include <string>
 #include <vector>
 #include <map>
 #include <variant>
+#include <memory>
 
 namespace d2m {
 
 // Forward declares
+class ConversionOptionsBase;
 template <typename T> class ConversionOptionsInterface;
 
 // CRTP so each class derived from ConversionOptions can have its own static creation
@@ -27,6 +30,7 @@ class ConversionOptionsStatic
 {
 protected:
     friend class Registrar;
+    friend class ConversionOptionsBase;
     template<class A, class B> friend class ModuleInterface;
 
     // This class needs to be inherited
@@ -38,7 +42,7 @@ protected:
 
     // Returns a list of strings of the format: "-o, --option=[min,max]" or "-a" or "--flag" or "--flag=[]" etc.
     //  representing the command-line options for this module and their acceptable values
-    static const ModuleOptions& GetAvailableOptionsStatic();
+    static const std::shared_ptr<OptionDefinitionCollection>& GetDefinitionsStatic();
 
     // The output module type
     static ModuleType GetTypeStatic()
@@ -48,16 +52,16 @@ protected:
 
 private:
     static const ModuleType m_Type;
-    static const ModuleOptions m_AvailableOptions;
+    static const std::shared_ptr<OptionDefinitionCollection> m_OptionDefinitions;
 };
 
 
 // Base class for conversion options
-class ConversionOptionsBase
+class ConversionOptionsBase : public OptionCollection
 {
 public:
     ConversionOptionsBase() = default; // See ConversionOptionsInterface constructor
-    ConversionOptionsBase(std::vector<std::string>& args) {};
+    ConversionOptionsBase(std::vector<std::string>& args); // See ConversionOptionsInterface constructor
     virtual ~ConversionOptionsBase() = default;
 
     /*
@@ -83,8 +87,7 @@ public:
     /*
      * Cast an options pointer to a pointer of a derived type
      */
-    template <class optionsClass, 
-        class = std::enable_if_t<std::is_base_of<ConversionOptionsInterface<optionsClass>, optionsClass>{}>>
+    template <class optionsClass, class = std::enable_if_t<std::is_base_of<ConversionOptionsInterface<optionsClass>, optionsClass>{}>>
     const optionsClass* Cast() const
     {
         return reinterpret_cast<const optionsClass*>(this);
@@ -96,18 +99,16 @@ public:
     virtual ModuleType GetType() const = 0;
 
     /*
-     * Returns a list of strings of the format: "-o, --option=[min,max]" or "-a" or "--flag" or "--flag=[]" etc.
-     *  representing the command-line options for this module and their acceptable values
+     * Returns a collection of option definitions which define the options available to modules of this type
      */
-    virtual const ModuleOptions& GetAvailableOptions() const = 0;
+    virtual const std::shared_ptr<OptionDefinitionCollection>& GetDefinitions() const = 0;
 
     /*
-     * Returns a list of strings of the format: "-o, --option=[min,max]" or "-a" or "--flag" or "--flag=[]" etc.
-     *  representing the command-line options and their acceptable values for the given module type
+     * Returns a collection of option definitions which define the options available to modules of type moduleType
      */
-    static const ModuleOptions& GetAvailableOptions(ModuleType moduleType)
+    static const std::shared_ptr<OptionDefinitionCollection>& GetDefinitions(ModuleType moduleType)
     {
-        return Registrar::GetAvailableOptions(moduleType);
+        return Registrar::GetOptionDefinitions(moduleType);
     }
 
     /*
@@ -116,45 +117,25 @@ public:
     std::string GetOutputFilename() const { return m_OutputFile; }
 
     /*
-     * Sets the option values to their defaults for this module type.
+     * Prints help message for this module's options
      */
-    virtual void SetToDefault() = 0;
-
-    /*
-     * Get a reference to the value of the option with the given id
-     */
-    virtual ModuleOption::value_t& GetValueRef(int id) = 0;
-
-    /*
-     * Get a const reference to the value of the option with the given id
-     */
-    virtual const ModuleOption::value_t& GetValueRef(int id) const = 0;
-    
-    /*
-     * Get a reference to the value of the option with the given name
-     */
-    virtual ModuleOption::value_t& GetValueRef(const std::string& name) = 0;
-
-    /*
-     * Get a const reference to the value of the option with the given name
-     */
-    virtual const ModuleOption::value_t& GetValueRef(const std::string& name) const = 0;
-
-    /*
-     * Fills in this object's command-line arguments from a list of arguments.
-     * Arguments are removed from the list if they are successfully parsed.
-     */
-    virtual bool ParseArgs(std::vector<std::string>& args) = 0;
-
     virtual void PrintHelp() const = 0;
+
+    template <class optionsClass, class = std::enable_if_t<std::is_base_of<ConversionOptionsInterface<optionsClass>, optionsClass>{}>>
+    static void PrintHelp()
+    {
+        PrintHelp(ConversionOptionsStatic<optionsClass>::GetTypeStatic());
+    }
+
+    /*
+     * Prints help message for the options of the given module type
+     */
+    static void PrintHelp(ModuleType moduleType);
 
 protected:
     friend class Registrar;
 
     std::string m_OutputFile;
-
-    // Stores the values of each option. Maps unique option id to its value.
-    OptionValues m_ValuesMap;
 };
 
 } // namespace d2m

@@ -29,6 +29,7 @@ set(CORE_SOURCES
     ${SRC}/core/status.cpp
     ${SRC}/core/registrar.cpp
     ${SRC}/core/options.cpp
+    ${SRC}/core/global_options.cpp
 )
 
 set(MODULE_SOURCES

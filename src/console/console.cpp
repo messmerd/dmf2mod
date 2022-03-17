@@ -29,13 +29,6 @@ struct InputOutput
     ModuleType OutputType;
 };
 
-enum class ConsoleOptionsEnum
-{
-    Force,
-    Help,
-    Silence
-};
-
 enum class OperationType
 {
     Error,
@@ -46,27 +39,17 @@ enum class OperationType
 static OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutputInfo);
 static bool PrintHelp(const std::string& executable, ModuleType moduleType);
 
-static ModuleOptions G_ConsoleOptions =
-{
-    {ConsoleOptionsEnum::Force, "force", 'f', false, "Overwrite output file.", true},
-    {ConsoleOptionsEnum::Help, "help", '\0', "", "[module type]", "Display this help message. Provide module type (i.e. mod) for module-specific options.", false},
-    {ConsoleOptionsEnum::Silence, "silent", 's', false, "Print nothing to console except errors and/or warnings.", true}
-};
-
-static OptionValues G_ConsoleOptionValues;
-
 int main(int argc, char *argv[])
 {
     Registrar::RegisterModules();
 
     auto args = ModuleUtils::GetArgsAsVector(argc, argv);
-    ModuleOptionUtils::SetToDefault(G_ConsoleOptions, G_ConsoleOptionValues);
 
     InputOutput io;
     OperationType operationType = ParseArgs(args, io);
     if (operationType == OperationType::Error)
         return 1;
-    
+
     // A help message was printed or some other action that doesn't require conversion
     if (operationType == OperationType::Help)
         return 0;
@@ -131,10 +114,9 @@ int main(int argc, char *argv[])
     output->Export(io.OutputFile);
     if (output->HandleResults())
         return 1;
-    
+
     return 0;
 }
-
 
 
 // TODO: Move to console.cpp
@@ -172,12 +154,11 @@ OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutput
 
         std::vector<std::string> argsOnlyFlags(args.begin() + 3, args.end());
 
-        if (ModuleUtils::ParseArgs(argsOnlyFlags, G_ConsoleOptions, G_ConsoleOptionValues))
+        if (GlobalOptions::Get().ParseArgs(argsOnlyFlags))
             return OperationType::Error;
 
-        ModuleOptionUtils::SetGlobalOptions(G_ConsoleOptions, G_ConsoleOptionValues);
-        const bool force = std::get<bool>(G_ConsoleOptionValues[(int)ConsoleOptionsEnum::Force]);
-        //const bool silence = std::get<bool>(G_ConsoleOptionValues[(int)ConsoleOptionsEnum::Silence]);
+        const bool force = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Force).GetValue<bool>();
+        //const bool silent = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Silence).GetValue<bool>();
 
         std::string outputFile, inputFile;
         
@@ -267,27 +248,11 @@ bool PrintHelp(const std::string& executable, ModuleType moduleType)
     // If module-specific help was requested
     if (moduleType != ModuleType::NONE)
     {
-        ConversionOptionsPtr options = ConversionOptions::Create(moduleType);
-        if (!options)
-        {
-            std::string extension = Registrar::GetExtensionFromType(moduleType);
-            if (extension.empty())
-            {
-                std::cerr << "ERROR: The module is not properly registered with dmf2mod.\n";
-            }
-            else
-            {
-                std::cerr << "ERROR: Failed to create ConversionOptions-derived object for the module type '" << extension 
-                    << "'. The module may not be properly registered with dmf2mod.\n";
-            }
-            return true;
-        }
-
-        options->PrintHelp();
+        ConversionOptions::PrintHelp(moduleType);
         return false;
     }
 
-    // Print generic help
+    // Else, print generic help
 
     std::cout << "dmf2mod v" << DMF2MOD_VERSION << "\n";
     std::cout << "Created by Dalton Messmer <messmer.dalton@gmail.com>\n\n";
@@ -298,15 +263,7 @@ bool PrintHelp(const std::string& executable, ModuleType moduleType)
 
     std::cout << "Options:\n";
 
-    ModuleUtils::PrintHelp(G_ConsoleOptions);
-
-    /*
-    std::cout.setf(std::ios_base::left);
-    std::cout << std::setw(30) << "  -f, --force" << "Overwrite output file.\n";
-    std::cout << std::setw(30) << "  --help [module type]" << "Display this help message. Provide module type (i.e. mod) for module-specific options.\n";
-    std::cout << std::setw(30) << "  -s, --silent" << "Print nothing to console except errors and/or warnings.\n";
-    */
+    GlobalOptions::Get().GetDefinitions()->PrintHelp();
 
     return false;
 }
-

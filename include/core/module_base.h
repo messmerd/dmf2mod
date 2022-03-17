@@ -61,8 +61,7 @@ public:
     /*
      * Create a new module of the desired module type
      */
-    template <class T, 
-        class = typename std::enable_if<std::is_base_of<ModuleInterface<T, typename T::OptionsType>, T>{}>::type>
+    template <class T, class = std::enable_if_t<std::is_base_of<ModuleInterface<T, typename T::OptionsType>, T>{}>>
     static ModulePtr Create()
     {
         return ModulePtr(new T);
@@ -149,11 +148,12 @@ public:
             return nullptr;
 
         output->m_Status.Reset(Status::Category::Convert);
+        output->m_Options = options;
 
         try
         {
             // Perform the conversion
-            output->ConvertRaw(this, options);
+            output->ConvertRaw(this);
         }
         catch (ModuleException& e)
         {
@@ -177,8 +177,7 @@ public:
     /*
      * Cast a Module pointer to a pointer of a derived type
      */
-    template <class T, 
-        class = typename std::enable_if_t<std::is_base_of<ModuleInterface<T, typename T::OptionsType>, T>{}>>
+    template <class T, class = std::enable_if_t<std::is_base_of<ModuleInterface<T, typename T::OptionsType>, T>{}>>
     const T* Cast() const
     {
         return reinterpret_cast<const T*>(this);
@@ -205,14 +204,14 @@ public:
     /*
      * Get the available command-line options for this module
      */
-    virtual const ModuleOptions& GetAvailableOptions() const = 0;
+    virtual const std::shared_ptr<OptionDefinitionCollection>& GetOptionDefinitions() const = 0;
 
     /*
      * Get the available command-line options for the given module type
      */
-    static const ModuleOptions& GetAvailableOptions(ModuleType moduleType)
+    static const std::shared_ptr<OptionDefinitionCollection>& GetOptionDefinitions(ModuleType moduleType)
     {
-        return Registrar::GetAvailableOptions(moduleType);
+        return Registrar::GetOptionDefinitions(moduleType);
     }
 
     /*
@@ -225,9 +224,10 @@ protected:
 
     virtual void ImportRaw(const std::string& filename) = 0;
     virtual void ExportRaw(const std::string& filename) = 0;
-    virtual void ConvertRaw(const Module* input, const ConversionOptionsPtr& options) = 0;
+    virtual void ConvertRaw(const Module* input) = 0;
 
     Status m_Status;
+    ConversionOptionsPtr m_Options;
 };
 
 } // namespace d2m

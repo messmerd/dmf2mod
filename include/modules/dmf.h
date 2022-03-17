@@ -288,8 +288,6 @@ class DMFConversionOptions : public ConversionOptionsInterface<DMFConversionOpti
 public:
     DMFConversionOptions() = default;
     ~DMFConversionOptions() {}
-
-    bool ParseArgs(std::vector<std::string>& args) override { return false; } // DMF files don't have any conversion flags right now
 };
 
 class DMF : public ModuleInterface<DMF, DMFConversionOptions>
@@ -349,7 +347,7 @@ public:
 private:
     void ImportRaw(const std::string& filename) override;
     void ExportRaw(const std::string& filename) override;
-    void ConvertRaw(const Module* input, const ConversionOptionsPtr& options) override;
+    void ConvertRaw(const Module* input) override;
 
     dmf::System GetSystem(uint8_t systemByte) const;
     void LoadVisualInfo(zstr::ifstream& fin);

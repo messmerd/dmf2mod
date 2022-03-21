@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 set(SRC ${PROJECT_SOURCE_DIR}/src)
-configure_file(${PROJECT_SOURCE_DIR}/dmf2mod_config.h.in ${PROJECT_SOURCE_DIR}/include/dmf2mod_config.h)
+configure_file(${PROJECT_SOURCE_DIR}/include/config.h.in ${PROJECT_SOURCE_DIR}/include/config.h)
 
 # set sources
 set(CONSOLE_SOURCES

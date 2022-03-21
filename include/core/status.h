@@ -84,8 +84,7 @@ public: // Should this be private once DMF gets its own DMFException class?
     // Construct using an enum for an error code
     template <class T, class = std::enable_if_t<std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}>>
     ModuleException(Category category, T errorCode, const std::string errorMessage = "")
-        : ModuleException(category, static_cast<int>(errorCode), errorMessage)
-    {}
+        : ModuleException(category, static_cast<int>(errorCode), errorMessage) {}
 
     // Construct using an integer for an error code
     ModuleException(Category category, int errorCode, const std::string errorMessage = "")
@@ -111,7 +110,7 @@ public: // Should this be private once DMF gets its own DMFException class?
         }
         else
         {
-            m_ErrorMessage = "ERROR: " + categoryString + CommonErrorMessageCreator(category, m_ErrorCode, errorMessage);
+            m_ErrorMessage = "ERROR: " + categoryString + CreateCommonErrorMessage(category, m_ErrorCode, errorMessage);
         }
     }
 
@@ -120,7 +119,7 @@ protected:
     std::string m_ErrorMessage;
 
 private:
-    std::string CommonErrorMessageCreator(Category category, int errorCode, const std::string& arg);
+    std::string CreateCommonErrorMessage(Category category, int errorCode, const std::string& arg);
 };
 
 
@@ -173,7 +172,7 @@ private:
 
     template <typename T>
     using poor_mans_optional = std::pair<bool, T>;
-
+    
     poor_mans_optional<ModuleException> m_Error;
     std::vector<std::string> m_WarningMessages;
     Category m_Category;

@@ -42,19 +42,18 @@ Options:
 ```
 -f, --force              Overwrite output file.
 --help [module type]     Displays the help message. Provide module type (i.e. mod) for module-specific options.
--s, --silent             Print nothing to console except errors and/or warnings.
+--verbose                Print debug info to console in addition to errors and/or warnings.
 ```
 
 Options when converting to MOD:
 ```
---downsample             Allow wavetables to lose information through downsampling if needed.
 --effects=[min,max]      The number of ProTracker effects to use. (Default: max)
 ```
 
 ## DMF&#8680;MOD Conversions
 Because of the severe limitations of the MOD format, there are several restrictions on the DMF files that can be converted to MOD. For example, DMF files must use the Game Boy system, patterns must have 64 or fewer rows, only one effect column is allowed per channel, etc. 
 
-The range of notes that ProTracker can play is about half that of Deflemask, and because of this, dmf2mod may need to downsample some wavetables to play them at higher frequencies in MOD. This is not done by default: You must pass the `--downsample` flag to allow dmf2mod to do this.
+The range of notes that ProTracker can play is about half that of Deflemask, and because of this, dmf2mod may need to downsample some wavetables to play them at higher frequencies in MOD.
 
 Unlike Deflemask, the MOD format implements volume changes as effects, and since the MOD format is already severely limited by only one effects column per channel, most conversions will require the `--effects=min` flag which tells dmf2mod to only convert Deflemask volume changes (not including volume envelopes - see below) and ignore all Deflemask effects except for wavetable changes, position jumps, and the like.
 

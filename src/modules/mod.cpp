@@ -37,7 +37,6 @@ using MODOptionEnum = MODConversionOptions::OptionEnum;
 auto MODOptions = CreateOptionDefinitions(
 {
     /* Option id               / Full name     / Short / Default / Possib. vals / Description */
-    {MODOptionEnum::Downsample, "downsample",   '\0',     false,                  "Allow wavetables to lose information through downsampling if needed.", true},
     {MODOptionEnum::Effects,    "effects",      '\0',     "max",  {"min", "max"}, "The number of ProTracker effects to use.", true}
 });
 
@@ -50,7 +49,7 @@ static std::vector<int8_t> GenerateSquareWaveSample(unsigned dutyCycle, unsigned
 static std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned length);
 static int16_t GetNewDMFVolume(int16_t dmfRowVol, const ChannelState& state);
 
-static std::string GetWarningMessage(MOD::ConvertWarning warning);
+static std::string GetWarningMessage(MOD::ConvertWarning warning, std::string info = "");
 
 static bool GetTempoAndSpeedFromBPM(double desiredBPM, unsigned& tempo, unsigned& speed);
 static unsigned GCD(unsigned u, unsigned v);
@@ -102,9 +101,9 @@ void MOD::ConvertRaw(const Module* input)
 
 void MOD::ConvertFromDMF(const DMF& dmf)
 {
-    const bool silent = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Silence).GetValue<bool>();
+    const bool verbose = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Verbose).GetValue<bool>();
 
-    if (!silent)
+    if (verbose)
         std::cout << "Starting to convert to MOD...\n";
 
     if (dmf.GetSystem().type != DMF::SystemType::GameBoy) // If it's not a Game Boy
@@ -143,7 +142,7 @@ void MOD::ConvertFromDMF(const DMF& dmf)
 
     ///////////////// CONVERT SAMPLE INFO
 
-    if (!silent)
+    if (verbose)
         std::cout << "Converting samples...\n";
 
     SampleMap sampleMap;
@@ -151,14 +150,14 @@ void MOD::ConvertFromDMF(const DMF& dmf)
 
     ///////////////// CONVERT PATTERN DATA
 
-    if (!silent)
+    if (verbose)
         std::cout << "Converting pattern data...\n";
 
     DMFConvertPatterns(dmf, sampleMap);
     
     ///////////////// CLEAN UP
 
-    if (!silent)
+    if (verbose)
         std::cout << "Done converting to MOD.\n\n";
 }
 
@@ -333,9 +332,9 @@ void MOD::DMFSampleSplittingAndAssignment(SampleMap& sampleMap, const DMFSampleN
         const auto& lowHighNotes = sampleIdLowestHighestNotesMap.at(sampleId);
         currentMODSampleId = sampleMapper.Init(sampleId, currentMODSampleId, lowHighNotes);
 
-        if (sampleMapper.IsDownsamplingNeeded() && !GetOptions()->GetDownsample())
+        if (sampleMapper.IsDownsamplingNeeded())
         {
-            throw MODException(ModuleException::Category::Convert, MOD::ConvertError::WaveDownsample, std::to_string(sampleId - 4));
+            m_Status.AddWarning(GetWarningMessage(MOD::ConvertWarning::WaveDownsample, std::to_string(sampleId - 4)));
         }
     }
 
@@ -1611,9 +1610,9 @@ void MOD::ExportRaw(const std::string& filename)
 
     outFile.close();
 
-    const bool silent = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Silence).GetValue<bool>();
+    const bool verbose = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Verbose).GetValue<bool>();
 
-    if (!silent)
+    if (verbose)
         std::cout << "Saved MOD file to disk.\n\n";
 }
 
@@ -1727,7 +1726,7 @@ void MOD::ExportSampleData(std::ofstream& fout) const
 
 ///////// OTHER /////////
 
-static std::string GetWarningMessage(MOD::ConvertWarning warning)
+static std::string GetWarningMessage(MOD::ConvertWarning warning, std::string info)
 {
     switch (warning)
     {
@@ -1740,9 +1739,11 @@ static std::string GetWarningMessage(MOD::ConvertWarning warning)
             return std::string("Tempo is too high for ProTracker. Using 127.5 bpm instead.\n")
                     + std::string("         ProTracker only supports tempos between 16 and 127.5 bpm.");
         case MOD::ConvertWarning::TempoPrecision:
-            return std::string("Tempo does not exactly match, but the closest possible value was used.\n");
+            return std::string("Tempo does not exactly match, but the closest possible value was used.");
         case MOD::ConvertWarning::EffectIgnored:
             return "A Deflemask effect was ignored due to limitations of the MOD format.";
+        case MOD::ConvertWarning::WaveDownsample:
+            return std::string("Wavetable instrument #") + info + std::string(" was downsampled in MOD to allow higher notes to be played.");
         default:
             return "";
     }
@@ -1770,9 +1771,6 @@ std::string MODException::CreateErrorMessage(Category category, int errorCode, c
                 case (int)MOD::ConvertError::Over64RowPattern:
                     return std::string("Patterns must have 64 or fewer rows.\n")
                             + std::string("       A workaround for this issue is planned for a future update to dmf2mod.");
-                case (int)MOD::ConvertError::WaveDownsample:
-                    return std::string("Cannot use wavetable instrument #") + arg + std::string(" without loss of information.\n")
-                            + std::string("       Try using the '--downsample' option.");
                 case (int)MOD::ConvertError::EffectVolume:
                     return std::string("An effect and a volume change cannot both appear in the same row of the same channel.\n")
                             + std::string("       Try fixing this issue in Deflemask or use the '--effects=min' option.");

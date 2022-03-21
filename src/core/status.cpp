@@ -18,9 +18,9 @@ void Status::PrintError(bool useStdErr) const
         return;
 
     if (useStdErr)
-        std::cerr << m_Error.second.what() << "\n\n";
+        std::cerr << m_Error.second.what() << "\n";
     else
-        std::cout << m_Error.second.what() << "\n\n";
+        std::cout << m_Error.second.what() << "\n";
 }
 
 void Status::PrintWarnings(bool useStdErr) const
@@ -34,10 +34,6 @@ void Status::PrintWarnings(bool useStdErr) const
             else
                 std::cout << message << "\n";
         }
-        if (useStdErr)
-            std::cerr << "\n";
-        else
-            std::cout << "\n";
     }
 }
 
@@ -45,6 +41,7 @@ bool Status::HandleResults() const
 {
     PrintError();
 
+    /*
     std::string actionStr;
     switch (m_Category)
     {
@@ -57,17 +54,22 @@ bool Status::HandleResults() const
         case Category::Convert:
             actionStr = "conversion"; break;
     }
+    */
 
     if (WarningsIssued())
     {
-        const std::string plural = m_WarningMessages.size() > 1 ? "s" : "";
-        std::cout << "Warning" << plural << " issued during " << actionStr << ":\n";
+        if (ErrorOccurred())
+            std::cerr << "\n";
+
+        //const std::string plural = m_WarningMessages.size() > 1 ? "s" : "";
+        //std::cout << "Warning" << plural << " issued during " << actionStr << ":\n";
+        
         PrintWarnings();
     }
     return ErrorOccurred();
 }
 
-std::string ModuleException::CommonErrorMessageCreator(Category category, int errorCode, const std::string& arg)
+std::string ModuleException::CreateCommonErrorMessage(Category category, int errorCode, const std::string& arg)
 {
     switch (category)
     {

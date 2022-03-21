@@ -158,9 +158,9 @@ void DMF::ImportRaw(const std::string& filename)
 {
     CleanUp();
 
-    const bool silent = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Silence).GetValue<bool>();
+    const bool verbose = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Verbose).GetValue<bool>();
 
-    if (!silent)
+    if (verbose)
         std::cout << "Starting to import the DMF file...\n";
 
     if (Registrar::GetTypeFromFilename(filename) != ModuleType::DMF)
@@ -168,7 +168,7 @@ void DMF::ImportRaw(const std::string& filename)
         throw ModuleException(ModuleException::Category::Import, DMF::ImportError::UnspecifiedError, "Input file has the wrong file extension.\nPlease use a DMF file.");
     }
 
-    if (!silent)
+    if (verbose)
         std::cout << "DMF Filename: " << filename << "\n";
 
     zstr::ifstream fin(filename, std::ios_base::binary);
@@ -214,7 +214,7 @@ void DMF::ImportRaw(const std::string& filename)
         
         throw ModuleException(ModuleException::Category::Import, DMF::ImportError::UnspecifiedError, errorMsg);
     }
-    else if (!silent)
+    else if (verbose)
     {
         std::stringstream stream;
         stream << "0x" << std::setfill('0') << std::setw(2) << std::hex << (int)m_DMFFileVersion;
@@ -227,12 +227,12 @@ void DMF::ImportRaw(const std::string& filename)
     
     m_System = GetSystem(fin.get());
 
-    if (!silent)
+    if (verbose)
         std::cout << "System: " << m_System.name << " (channels: " << std::to_string(m_System.channels) << ")\n";
 
     ///////////////// VISUAL INFORMATION
     LoadVisualInfo(fin);
-    if (!silent)
+    if (verbose)
     {
         std::cout << "Title: " << m_VisualInfo.songName << "\n";
         std::cout << "Author: " << m_VisualInfo.songAuthor << "\n";
@@ -241,35 +241,35 @@ void DMF::ImportRaw(const std::string& filename)
 
     ///////////////// MODULE INFORMATION
     LoadModuleInfo(fin);
-    if (!silent)
+    if (verbose)
         std::cout << "Loaded module.\n";
 
     ///////////////// PATTERN MATRIX VALUES
     LoadPatternMatrixValues(fin);
-    if (!silent)
+    if (verbose)
         std::cout << "Loaded pattern matrix values.\n";
 
     ///////////////// INSTRUMENTS DATA
     LoadInstrumentsData(fin);
-    if (!silent)
+    if (verbose)
         std::cout << "Loaded instruments.\n";
 
     ///////////////// WAVETABLES DATA
     LoadWavetablesData(fin);
-    if (!silent)
+    if (verbose)
         std::cout << "Loaded " << std::to_string(m_TotalWavetables) << " wavetable(s).\n";
 
     ///////////////// PATTERNS DATA
     LoadPatternsData(fin);
-    if (!silent)
+    if (verbose)
         std::cout << "Loaded patterns.\n";
 
     ///////////////// PCM SAMPLES DATA
     LoadPCMSamplesData(fin);
-    if (!silent)
+    if (verbose)
         std::cout << "Loaded PCM Samples.\n";
 
-    if (!silent)
+    if (verbose)
         std::cout << "Done importing DMF file.\n\n";
 }
 

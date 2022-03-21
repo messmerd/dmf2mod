@@ -11,7 +11,7 @@ public:
     {
         Force,
         Help,
-        Silence
+        Verbose
     };
 
     static void Set(const OptionCollection& globalOptions) { m_GlobalOptions = globalOptions; }

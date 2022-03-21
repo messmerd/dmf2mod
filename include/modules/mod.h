@@ -275,8 +275,9 @@ struct State
 class MODException : public ModuleException
 {
 public:
-    // Inherit all constructors from ModuleException
-    using ModuleException::ModuleException;
+    template <class T, class = std::enable_if_t<std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}>>
+    MODException(Category category, T errorCode, const std::string errorMessage = "")
+        : ModuleException(category, static_cast<int>(errorCode), CreateErrorMessage(category, (int)errorCode, errorMessage)) {}
 
 private:
     // Creates module-specific error message from an error code and string argument
@@ -291,18 +292,13 @@ public:
 
     enum class OptionEnum
     {
-        Downsample, Effects
+        Effects
     };
 
     enum class EffectsEnum
     {
         Error, Min, Max
     };
-
-    bool GetDownsample() const
-    {
-        return GetOption(OptionEnum::Downsample).GetValue<bool>();
-    }
 
     EffectsEnum GetEffects() const
     {
@@ -316,18 +312,11 @@ public:
     }
 
 private:
-    //bool ParseArgs(std::vector<std::string>& args) override;
-
-    bool& GetDownsampleRef()
-    {
-        return GetOption(OptionEnum::Downsample).GetValue<bool>();
-    }
 
     std::string& GetEffectsRef()
     {
         return GetOption(OptionEnum::Effects).GetValue<std::string>();
     }
-
 };
 
 class MOD : public ModuleInterface<MOD, MODConversionOptions>
@@ -351,7 +340,6 @@ public:
         NotGameBoy,
         TooManyPatternMatrixRows,
         Over64RowPattern,
-        WaveDownsample,
         EffectVolume,
         MultipleEffects
     };
@@ -363,7 +351,8 @@ public:
         TempoLow,
         TempoHigh,
         TempoPrecision,
-        EffectIgnored
+        EffectIgnored,
+        WaveDownsample
     };
     
     static constexpr unsigned VolumeMax = 64u; // Yes, there are 65 different values for the volume

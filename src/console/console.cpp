@@ -16,7 +16,7 @@
 #include <iomanip>
 
 #include "utils.h"
-#include "dmf2mod_config.h"
+#include "config.h"
 
 using namespace d2m;
 

@@ -241,7 +241,7 @@ void OptionDefinitionCollection::PrintHelp() const
 
 // Option
 
-Option::Option(const std::shared_ptr<OptionDefinitionCollection>& definitions, int id)
+Option::Option(const std::shared_ptr<const OptionDefinitionCollection>& definitions, int id)
 {
     assert(definitions.get() && "Option definition cannot be null.");
     m_Definitions = definitions;
@@ -249,7 +249,7 @@ Option::Option(const std::shared_ptr<OptionDefinitionCollection>& definitions, i
     SetValueToDefault();
 }
 
-Option::Option(const std::shared_ptr<OptionDefinitionCollection>& definitions, int id, value_t value)
+Option::Option(const std::shared_ptr<const OptionDefinitionCollection>& definitions, int id, value_t value)
 {
     assert(definitions.get() && "Option definition cannot be null.");
     m_Definitions = definitions;
@@ -281,12 +281,12 @@ const OptionDefinition* Option::GetDefinition() const
 
 OptionCollection::OptionCollection() : m_Definitions(std::make_shared<OptionDefinitionCollection>()), m_OptionsMap({}) {}
 
-OptionCollection::OptionCollection(const std::shared_ptr<OptionDefinitionCollection>& definitions)
+OptionCollection::OptionCollection(const std::shared_ptr<const OptionDefinitionCollection>& definitions)
 {
     SetDefinitions(definitions);
 }
 
-void OptionCollection::SetDefinitions(const std::shared_ptr<OptionDefinitionCollection>& definitions)
+void OptionCollection::SetDefinitions(const std::shared_ptr<const OptionDefinitionCollection>& definitions)
 {
     m_Definitions = definitions;
 
@@ -303,7 +303,7 @@ void OptionCollection::SetDefinitions(const std::shared_ptr<OptionDefinitionColl
     else
     {
         // m_Definitions must always point to an OptionDefinitionCollection, even if it is empty.
-        m_Definitions = std::make_shared<OptionDefinitionCollection>();
+        m_Definitions = std::make_shared<const OptionDefinitionCollection>();
     }
 }
 

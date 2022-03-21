@@ -2,7 +2,7 @@
     module_base.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Declares classes that ModuleInterface inherits.
+    Declares ModuleBase which ModuleInterface inherits.
 */
 
 #pragma once
@@ -11,41 +11,15 @@
 #include "status.h"
 
 #include <string>
-#include <vector>
+#include <memory>
 
 namespace d2m {
-
-// CRTP so each class derived from Module can have its own static type variable and static creation
-template<typename T>
-class ModuleStatic
-{
-protected:
-    friend class Registrar;
-
-    // This class needs to be inherited
-    ModuleStatic() = default;
-    ModuleStatic(const ModuleStatic&) = default;
-    ModuleStatic(ModuleStatic&&) = default;
-
-    static ModuleBase* CreateStatic();
-
-    static ModuleType GetTypeStatic()
-    {
-        return m_Type;
-    }
-
-    static std::string GetFileExtensionStatic();
-    
-private:
-    const static ModuleType m_Type;
-    const static std::string m_FileExtension; // Without dot
-};
-
 
 // Base class for all module types (DMF, MOD, XM, etc.)
 class ModuleBase
 {
 public:
+    ModuleBase() = default;
     virtual ~ModuleBase() = default;
 
     /*
@@ -53,9 +27,9 @@ public:
      * If the resulting Module object evaluates to false or Get() == nullptr, the module type is 
      * probably not registered
      */
-    static ModulePtr Create(ModuleType type)
+    static ModulePtr Create(ModuleType moduleType)
     {
-        return Registrar::CreateModule(type);
+        return Registrar::GetModuleInfo(moduleType)->m_CreateFunc();
     }
 
     /*
@@ -77,7 +51,7 @@ public:
         ModulePtr m = Module::Create(type);
         if (!m)
             return nullptr;
-        
+
         try
         {
             m->Import(filename);
@@ -86,7 +60,7 @@ public:
         {
             m->m_Status.AddError(std::move(e));
         }
-        
+
         return m;
     }
 
@@ -180,47 +154,57 @@ public:
     template <class T, class = std::enable_if_t<std::is_base_of<ModuleInterface<T, typename T::OptionsType>, T>{}>>
     const T* Cast() const
     {
-        return reinterpret_cast<const T*>(this);
+        return static_cast<const T*>(this);
     }
-    
+
+    /*
+     * Get the name of the module
+     * Module classes must implement this
+     */
+    virtual std::string GetName() const = 0;
+
+
+    ////////////////////////////////////////////////////////
+    // Methods for getting static info about module type  //
+    ////////////////////////////////////////////////////////
+
     /*
      * Get a ModuleType enum value representing the type of the module
      */
     virtual ModuleType GetType() const = 0;
 
     /*
-     * Get the file extension of the module (does not include dot)
+     * Get info about this type of module
      */
-    virtual std::string GetFileExtension() const = 0;
-
-    /*
-     * Get the file extension of the module of the given type (does not include dot)
-     */
-    static std::string GetFileExtension(ModuleType moduleType)
+    const ModuleInfo* GetModuleInfo() const
     {
-        return Registrar::GetExtensionFromType(moduleType);
+        return Registrar::GetModuleInfo(GetType());
     }
 
     /*
-     * Get the available command-line options for this module
+     * Get info about the given type of module
      */
-    virtual const std::shared_ptr<OptionDefinitionCollection>& GetOptionDefinitions() const = 0;
-
-    /*
-     * Get the available command-line options for the given module type
-     */
-    static const std::shared_ptr<OptionDefinitionCollection>& GetOptionDefinitions(ModuleType moduleType)
+    static const ModuleInfo* GetModuleInfo(ModuleType moduleType)
     {
-        return Registrar::GetOptionDefinitions(moduleType);
+        return Registrar::GetModuleInfo(moduleType);
     }
 
+    // Note: For the following methods, rather than return ConversionOptionsInfo objects,
+    //      return OptionDefinitionCollection from those objects, since it is the only
+    //      new information that Modules do not have access to.
+
     /*
-     * Get the name of the module
+     * Get option definitions for this type of module
      */
-    virtual std::string GetName() const = 0;
+    const std::shared_ptr<const OptionDefinitionCollection>& GetOptionDefinitions() const;
+
+    /*
+     * Get option definitions for the given type of module
+     */
+    static const std::shared_ptr<const OptionDefinitionCollection>& GetOptionDefinitions(ModuleType moduleType);
 
 protected:
-    // Import() and Export() and Convert() are wrappers for these methods:
+    // Import() and Export() and Convert() are wrappers for these methods, which must be implemented by a module class:
 
     virtual void ImportRaw(const std::string& filename) = 0;
     virtual void ExportRaw(const std::string& filename) = 0;

@@ -204,10 +204,10 @@ public:
     Option() : m_Definitions(nullptr), m_Id(-1) {}
 
     // Construct with definitions defined elsewhere
-    Option(const std::shared_ptr<OptionDefinitionCollection>& definitions, int id);
+    Option(const std::shared_ptr<const OptionDefinitionCollection>& definitions, int id);
 
     // Construct with value. The definitions are defined elsewhere
-    Option(const std::shared_ptr<OptionDefinitionCollection>& definitions, int id, value_t value);
+    Option(const std::shared_ptr<const OptionDefinitionCollection>& definitions, int id, value_t value);
 
     void SetValue(value_t value);
 
@@ -238,7 +238,7 @@ private:
     // This will work well for both definitions from the ConversionOptionsStatic class and custom definitions used by frontends.
     // std::shared_ptr<OptionDefinition> is not used to avoid the complications of having to use shared_ptr with each individual 
     // OptionDefinition.
-    std::shared_ptr<OptionDefinitionCollection> m_Definitions;
+    std::shared_ptr<const OptionDefinitionCollection> m_Definitions;
     int m_Id;
 
     value_t m_Value;
@@ -252,12 +252,12 @@ public:
     using value_t = OptionDefinition::value_t;
 
     OptionCollection();
-    OptionCollection(const std::shared_ptr<OptionDefinitionCollection>& definitions);
+    OptionCollection(const std::shared_ptr<const OptionDefinitionCollection>& definitions);
 
     // Access to definitions
 
-    void SetDefinitions(const std::shared_ptr<OptionDefinitionCollection>& definitions);
-    const std::shared_ptr<OptionDefinitionCollection>& GetDefinitions() const { return m_Definitions; }
+    void SetDefinitions(const std::shared_ptr<const OptionDefinitionCollection>& definitions);
+    const std::shared_ptr<const OptionDefinitionCollection>& GetDefinitions() const { return m_Definitions; }
 
     // Access to collection
 
@@ -291,7 +291,7 @@ public:
     void SetValuesToDefault();
 
 private:
-    std::shared_ptr<OptionDefinitionCollection> m_Definitions;
+    std::shared_ptr<const OptionDefinitionCollection> m_Definitions;
 
     std::map<int, Option> m_OptionsMap;
 };

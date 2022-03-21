@@ -32,19 +32,16 @@
 using namespace d2m;
 
 // Initialize module registration maps
-std::map<ModuleType, std::function<ModuleBase*(void)>> Registrar::m_RegistrationMap = {};
+std::map<ModuleType, const ModuleInfo*> Registrar::m_ModuleRegistrationMap = {};
+std::map<ModuleType, const ConversionOptionsInfo*> Registrar::m_ConversionOptionsRegistrationMap = {};
 std::map<std::string, ModuleType> Registrar::m_FileExtensionMap = {};
-std::map<ModuleType, std::function<ConversionOptionsBase*(void)>> Registrar::m_ConversionOptionsRegistrationMap = {};
-std::map<ModuleType, std::shared_ptr<OptionDefinitionCollection>> Registrar::m_OptionDefinitionsMap = {};
 
 // Registers all modules by associating their ModuleType enum values with their corresponding module classes
 void Registrar::RegisterModules()
 {
-    m_RegistrationMap.clear();
-    m_FileExtensionMap.clear();
+    m_ModuleRegistrationMap.clear();
     m_ConversionOptionsRegistrationMap.clear();
-    m_OptionDefinitionsMap.clear();
-    m_OptionDefinitionsMap[ModuleType::NONE] = std::make_shared<OptionDefinitionCollection>();
+    m_FileExtensionMap.clear();
 
     // Register all modules here:
     Register<DMF>();
@@ -54,52 +51,20 @@ void Registrar::RegisterModules()
 template <class T, class>
 void Registrar::Register()
 {
-    const ModuleType moduleType = T::GetTypeStatic();
-    const std::string fileExtension = T::GetFileExtensionStatic();
+    using Option = typename T::OptionsType;
+    const ModuleType moduleType = T::GetInfo().GetType();
 
-    // TODO: Check for file extension clashes here.
-    // In order to make modules fully dynamically loaded, would need to make ModuleType an int and 
-    // assign it to the module here rather than let them choose their own ModuleType.
-    m_RegistrationMap[moduleType] = &T::CreateStatic;
-    m_FileExtensionMap[fileExtension] = moduleType;
+    const ModuleInfo& moduleInfo = ModuleInterface<T, Option>::GetInfo();
+    const ConversionOptionsInfo& conversionOptionsInfo = ConversionOptionsInterface<Option>::GetInfo();
 
-    m_ConversionOptionsRegistrationMap[moduleType] = &T::OptionsType::CreateStatic;
-    
-    //using OPT = T::OptionsType;
-    m_OptionDefinitionsMap[moduleType] = T::OptionsType::GetDefinitionsStatic();
+    m_ModuleRegistrationMap[moduleType] = &moduleInfo;
+    m_ConversionOptionsRegistrationMap[moduleType] = &conversionOptionsInfo;
 
-    // TODO: Is this a good idea?
-    if (!m_OptionDefinitionsMap[moduleType])
-        m_OptionDefinitionsMap[moduleType] = std::make_shared<OptionDefinitionCollection>();
-}
-
-ModulePtr Registrar::CreateModule(ModuleType moduleType)
-{
-    const auto iter = m_RegistrationMap.find(moduleType);
-    if (iter != m_RegistrationMap.end())
-    {
-        // Call ModuleStatic<T>::CreateStatic()
-        return ModulePtr(iter->second());
-    }
-    return nullptr;
-}
-
-ConversionOptionsPtr Registrar::CreateConversionOptions(ModuleType moduleType)
-{
-    const auto iter = m_ConversionOptionsRegistrationMap.find(moduleType);
-    if (iter != m_ConversionOptionsRegistrationMap.end())
-    {
-        // Call ConversionOptionsStatic<T>::CreateStatic()
-        return ConversionOptionsPtr(iter->second());
-    }
-    return nullptr;
+    m_FileExtensionMap[moduleInfo.GetFileExtension()] = moduleType;
 }
 
 std::vector<std::string> Registrar::GetAvailableModules()
 {
-    // TODO: Create a ModuleInfo class that contains OptionDefinitionCollection, module type, friendly name, file extension, etc.
-    //          Then that object could be created in mod.cpp and dmf.cpp and used to register module info.
-
     std::vector<std::string> vec;
     for (const auto& mapPair : m_FileExtensionMap)
     {
@@ -135,17 +100,27 @@ ModuleType Registrar::GetTypeFromFileExtension(const std::string& extension)
 
 std::string Registrar::GetExtensionFromType(ModuleType moduleType)
 {
-    for (const auto& mapPair : m_FileExtensionMap)
+    for (const auto& [tempFileExt, tempType] : m_FileExtensionMap)
     {
-        if (mapPair.second == moduleType)
-            return mapPair.first;
+        if (tempType == moduleType)
+            return tempFileExt;
     }
     return "";
 }
 
-const std::shared_ptr<OptionDefinitionCollection>& Registrar::GetOptionDefinitions(ModuleType moduleType)
+std::shared_ptr<const OptionDefinitionCollection> Registrar::GetOptionDefinitions(ModuleType moduleType)
 {
-    if (m_OptionDefinitionsMap.count(moduleType) > 0)
-        return m_OptionDefinitionsMap.at(moduleType);
-    return m_OptionDefinitionsMap.at(ModuleType::NONE); // Return empty OptionDefinitionCollection
+    if (m_ConversionOptionsRegistrationMap.count(moduleType) > 0)
+        return m_ConversionOptionsRegistrationMap.at(moduleType)->GetDefinitions();
+    return nullptr;
+}
+
+const ModuleInfo* Registrar::GetModuleInfo(ModuleType moduleType)
+{
+    return m_ModuleRegistrationMap.at(moduleType);
+}
+
+const ConversionOptionsInfo* Registrar::GetConversionOptionsInfo(ModuleType moduleType)
+{
+    return m_ConversionOptionsRegistrationMap.at(moduleType);
 }

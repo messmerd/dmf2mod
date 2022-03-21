@@ -2,7 +2,7 @@
     conversion_options_base.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Declares classes that ConversionOptionsInterface inherits.
+    Declares ConversionOptionsBase which is inherited by ConversionOptionsInterface.
 */
 
 #pragma once
@@ -17,6 +17,7 @@
 #include <map>
 #include <variant>
 #include <memory>
+#include <type_traits>
 
 namespace d2m {
 
@@ -24,54 +25,21 @@ namespace d2m {
 class ConversionOptionsBase;
 template <typename T> class ConversionOptionsInterface;
 
-// CRTP so each class derived from ConversionOptions can have its own static creation
-template <typename T>
-class ConversionOptionsStatic
-{
-protected:
-    friend class Registrar;
-    friend class ConversionOptionsBase;
-    template<class A, class B> friend class ModuleInterface;
-
-    // This class needs to be inherited
-    ConversionOptionsStatic() = default;
-    ConversionOptionsStatic(const ConversionOptionsStatic&) = default;
-    ConversionOptionsStatic(ConversionOptionsStatic&&) = default;
-
-    static ConversionOptionsBase* CreateStatic();
-
-    // Returns a list of strings of the format: "-o, --option=[min,max]" or "-a" or "--flag" or "--flag=[]" etc.
-    //  representing the command-line options for this module and their acceptable values
-    static const std::shared_ptr<OptionDefinitionCollection>& GetDefinitionsStatic();
-
-    // The output module type
-    static ModuleType GetTypeStatic()
-    {
-        return m_Type;
-    }
-
-private:
-    static const ModuleType m_Type;
-    static const std::shared_ptr<OptionDefinitionCollection> m_OptionDefinitions;
-};
-
-
 // Base class for conversion options
 class ConversionOptionsBase : public OptionCollection
 {
 public:
     ConversionOptionsBase() = default; // See ConversionOptionsInterface constructor
-    ConversionOptionsBase(std::vector<std::string>& args); // See ConversionOptionsInterface constructor
     virtual ~ConversionOptionsBase() = default;
 
     /*
      * Create a new ConversionOptions object for the desired module type
      */
     template <class moduleClass, 
-        class = std::enable_if_t<std::is_base_of<ModuleInterface<moduleClass, typename moduleClass::OptionsType>, moduleClass>{}>>
+        class = std::enable_if_t<std::is_base_of<ModuleInterface<moduleClass, class moduleClass::OptionsType>, moduleClass>{}>>
     static ConversionOptionsPtr Create()
     {
-        return ConversionOptionsPtr(ModuleStatic<moduleClass>::m_CreateConversionOptionsStatic());
+        return ModuleInterface<moduleClass, class moduleClass::OptionsType>::m_Info.m_CreateOptionsFunc();
     }
 
     /*
@@ -79,18 +47,18 @@ public:
      * If the resulting ConversionOptions object evaluates to false or Get() == nullptr, the module type 
      * is probably not registered
      */
-    static ConversionOptionsPtr Create(ModuleType type)
+    static ConversionOptionsPtr Create(ModuleType moduleType)
     {
-        return Registrar::CreateConversionOptions(type);
+        return Registrar::GetConversionOptionsInfo(moduleType)->m_CreateFunc();
     }
 
     /*
      * Cast an options pointer to a pointer of a derived type
      */
-    template <class optionsClass, class = std::enable_if_t<std::is_base_of<ConversionOptionsInterface<optionsClass>, optionsClass>{}>>
-    const optionsClass* Cast() const
+    template <class Derived, class = std::enable_if_t<std::is_base_of<ConversionOptionsInterface<Derived>, Derived>{}>>
+    const Derived* Cast() const
     {
-        return reinterpret_cast<const optionsClass*>(this);
+        return static_cast<const Derived*>(this);
     }
 
     /*
@@ -101,14 +69,14 @@ public:
     /*
      * Returns a collection of option definitions which define the options available to modules of this type
      */
-    virtual const std::shared_ptr<OptionDefinitionCollection>& GetDefinitions() const = 0;
+    virtual const std::shared_ptr<const OptionDefinitionCollection>& GetDefinitions() const = 0;
 
     /*
      * Returns a collection of option definitions which define the options available to modules of type moduleType
      */
-    static const std::shared_ptr<OptionDefinitionCollection>& GetDefinitions(ModuleType moduleType)
+    static const std::shared_ptr<const OptionDefinitionCollection>& GetDefinitions(ModuleType moduleType)
     {
-        return Registrar::GetOptionDefinitions(moduleType);
+        return Registrar::GetConversionOptionsInfo(moduleType)->GetDefinitions();
     }
 
     /*
@@ -124,13 +92,21 @@ public:
     template <class optionsClass, class = std::enable_if_t<std::is_base_of<ConversionOptionsInterface<optionsClass>, optionsClass>{}>>
     static void PrintHelp()
     {
-        PrintHelp(ConversionOptionsStatic<optionsClass>::GetTypeStatic());
+        PrintHelp(ConversionOptionsInterface<optionsClass>::GetTypeStatic());
     }
 
     /*
      * Prints help message for the options of the given module type
      */
     static void PrintHelp(ModuleType moduleType);
+
+    /*
+     * Get info about this type of conversion options
+     */
+    const ConversionOptionsInfo* GetConversionOptionsInfo() const
+    {
+        return Registrar::GetConversionOptionsInfo(GetType());
+    }
 
 protected:
     friend class Registrar;

@@ -42,7 +42,7 @@ auto MODOptions = CreateOptionDefinitions(
 });
 
 // Register module info
-MODULE_DEFINE(MOD, MODConversionOptions, ModuleType::MOD, "mod", MODOptions)
+MODULE_DEFINE(MOD, MODConversionOptions, ModuleType::MOD, "ProTracker", "mod", MODOptions)
 
 #define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 
@@ -94,7 +94,7 @@ void MOD::ConvertRaw(const Module* input)
         // Add other input types here if support is added
         default:
             // Unsupported input type for conversion to MOD
-            throw MODException(ModuleException::Category::Convert, ModuleException::ConvertError::UnsupportedInputType, input->GetFileExtension());
+            throw MODException(ModuleException::Category::Convert, ModuleException::ConvertError::UnsupportedInputType, input->GetModuleInfo()->GetFileExtension());
     }
 }
 
@@ -320,11 +320,8 @@ void MOD::DMFSampleSplittingAndAssignment(SampleMap& sampleMap, const DMFSampleN
     mod_sample_id_t currentMODSampleId = 1; // Sample #0 is special in ProTracker
 
     // Only the samples we need will be in this map (+ the silent sample possibly)
-    for (auto& mapPair : sampleMap)
+    for (auto& [sampleId, sampleMapper] : sampleMap)
     {
-        dmf_sample_id_t sampleId = mapPair.first;
-        DMFSampleMapper& sampleMapper = mapPair.second;
-
         // Special handling of silent sample
         if (sampleId == -1)
         {
@@ -352,12 +349,9 @@ void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap)
     // Fill out information needed to define a MOD sample
     m_Samples.clear();
     
-    for (const auto& mapPair : sampleMap)
+    for (const auto& [dmfSampleId, sampleMapper] : sampleMap)
     {
-        dmf_sample_id_t dmfSampleId = mapPair.first;
-        const DMFSampleMapper& sampleMapper = mapPair.second;
-
-        const int totalNoteRanges = sampleMapper.GetNumMODSamples();        
+        const int totalNoteRanges = sampleMapper.GetNumMODSamples();
 
         for (int noteRangeInt = 0; noteRangeInt < totalNoteRanges; noteRangeInt++)
         {

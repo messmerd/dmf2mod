@@ -6,19 +6,16 @@
 */
 
 #include "module_base.h"
+#include "conversion_options_base.h"
 
 using namespace d2m;
 
-// Non-specialized class template data member values:
-template<typename T> const ModuleType ModuleStatic<T>::m_Type = ModuleType::NONE;
-template<typename T> const std::string ModuleStatic<T>::m_FileExtension = "";
-
-template<typename T> ModuleBase* ModuleStatic<T>::CreateStatic()
+const std::shared_ptr<const OptionDefinitionCollection>& ModuleBase::GetOptionDefinitions() const
 {
-    return nullptr;
+    return ConversionOptionsBase::GetDefinitions(GetType());
 }
 
-template<typename T> std::string ModuleStatic<T>::GetFileExtensionStatic()
+const std::shared_ptr<const OptionDefinitionCollection>& ModuleBase::GetOptionDefinitions(ModuleType moduleType)
 {
-    return m_FileExtension;
+    return ConversionOptionsBase::GetDefinitions(moduleType);
 }

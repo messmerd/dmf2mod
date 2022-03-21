@@ -301,12 +301,12 @@ public:
 
     bool GetDownsample() const
     {
-        return GetOption((int)OptionEnum::Downsample).GetValue<bool>();
+        return GetOption(OptionEnum::Downsample).GetValue<bool>();
     }
 
     EffectsEnum GetEffects() const
     {
-        const auto& effects = GetOption((int)OptionEnum::Effects).GetValue<std::string>();
+        const auto& effects = GetOption(OptionEnum::Effects).GetValue<std::string>();
         if (effects == "min")
             return EffectsEnum::Min;
         else if (effects == "max")
@@ -320,12 +320,12 @@ private:
 
     bool& GetDownsampleRef()
     {
-        return GetOption((int)OptionEnum::Downsample).GetValue<bool>();
+        return GetOption(OptionEnum::Downsample).GetValue<bool>();
     }
 
     std::string& GetEffectsRef()
     {
-        return GetOption((int)OptionEnum::Effects).GetValue<std::string>();
+        return GetOption(OptionEnum::Effects).GetValue<std::string>();
     }
 
 };
@@ -334,7 +334,7 @@ class MOD : public ModuleInterface<MOD, MODConversionOptions>
 {
 public:
     MOD();
-    ~MOD() {};
+    ~MOD() = default;
     void CleanUp() {};
 
     std::string GetName() const override { return m_ModuleName; }

@@ -287,7 +287,7 @@ class DMFConversionOptions : public ConversionOptionsInterface<DMFConversionOpti
 {
 public:
     DMFConversionOptions() = default;
-    ~DMFConversionOptions() {}
+    ~DMFConversionOptions() = default;
 };
 
 class DMF : public ModuleInterface<DMF, DMFConversionOptions>

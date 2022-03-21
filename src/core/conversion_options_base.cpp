@@ -11,27 +11,11 @@
 
 using namespace d2m;
 
-// Non-specialized class template data member values:
-template<typename T> const ModuleType ConversionOptionsStatic<T>::m_Type = ModuleType::NONE;
-template<typename T> const std::shared_ptr<OptionDefinitionCollection> ConversionOptionsStatic<T>::m_OptionDefinitions = nullptr;
-
-template<typename T>
-ConversionOptionsBase* ConversionOptionsStatic<T>::CreateStatic()
-{
-    return nullptr;
-}
-
-template<typename T>
-const std::shared_ptr<OptionDefinitionCollection>& ConversionOptionsStatic<T>::GetDefinitionsStatic()
-{
-    return m_OptionDefinitions;
-}
-
 void ConversionOptionsBase::PrintHelp(ModuleType moduleType)
 {
-    const auto& definitions = Registrar::GetOptionDefinitions(moduleType);
+    const auto& definitions = GetDefinitions(moduleType);
 
-    std::string name = Registrar::GetExtensionFromType(moduleType);
+    std::string name = Module::GetModuleInfo(moduleType)->m_FileExtension;
     if (name.empty())
         return;
 

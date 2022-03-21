@@ -16,41 +16,48 @@
 
 namespace d2m {
 
-// All conversion options classes must inherit this
-template <typename T>
-class ConversionOptionsInterface : public ConversionOptionsBase, public ConversionOptionsStatic<T>
+// All conversion options classes must inherit this using CRTP
+template <class Derived>
+class ConversionOptionsInterface : public ConversionOptionsBase
 {
-public:
+protected:
+    friend class Registrar;
+
     ConversionOptionsInterface()
     {
-        SetDefinitions(ConversionOptionsStatic<T>::GetDefinitionsStatic());
+        SetDefinitions(GetDefinitions());
     }
 
     ConversionOptionsInterface(std::vector<std::string>& args)
     {
         // Parse arguments to set option values
-        SetDefinitions(ConversionOptionsStatic<T>::GetDefinitionsStatic());
+        SetDefinitions(GetDefinitions());
         ParseArgs(args);
     }
 
-    /* 
-     * Prints help message for this object's options
-     */
-    void PrintHelp() const override
-    {
-        ConversionOptionsBase::PrintHelp(ConversionOptionsStatic<T>::GetTypeStatic());
-    }
+    ConversionOptionsInterface(const ConversionOptionsInterface&) = default;
+    ConversionOptionsInterface(ConversionOptionsInterface&&) = default;
 
-protected:
+    static const ConversionOptionsInfo& GetInfo();
+
     ModuleType GetType() const override
     {
-        return ConversionOptionsStatic<T>::GetTypeStatic();
+        return m_Info.GetType();
     }
 
-    const std::shared_ptr<OptionDefinitionCollection>& GetDefinitions() const override
+    const std::shared_ptr<const OptionDefinitionCollection>& GetDefinitions() const override
     {
-        return ConversionOptionsStatic<T>::GetDefinitionsStatic();
+        return m_Info.GetDefinitions();
     }
+
+    void PrintHelp() const override
+    {
+        ConversionOptionsBase::PrintHelp(GetType());
+    }
+
+private:
+
+    static const ConversionOptionsInfo m_Info;
 };
 
 } // namespace d2m

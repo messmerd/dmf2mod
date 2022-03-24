@@ -37,7 +37,8 @@ using MODOptionEnum = MODConversionOptions::OptionEnum;
 auto MODOptions = CreateOptionDefinitions(
 {
     /* Type / Option id             / Full name / Short / Default / Possib. vals  / Description */
-    {OPTION, MODOptionEnum::Effects, "effects",  '\0',   "max",    {"min", "max"}, "The number of ProTracker effects to use."}
+    {OPTION, MODOptionEnum::Effects, "effects",  '\0',   "min",    {"min", "max"}, "The number of ProTracker effects to use"},
+    {OPTION, MODOptionEnum::AmigaFilter, "amiga",  '\0',   false, "Enables Amiga filter"}
 });
 
 // Register module info
@@ -536,7 +537,15 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
         posJumpRow.EffectCode = EffectCode::PatBreak;
         posJumpRow.EffectValue = 0;
         SetChannelRow(0, 0, 2, posJumpRow);
-        
+
+        // Set Amiga Filter
+        ChannelRow amigaFilterRow;
+        amigaFilterRow.SampleNumber = 0;
+        amigaFilterRow.SamplePeriod = 0;
+        amigaFilterRow.EffectCode = EffectCode::SetFilter;
+        amigaFilterRow.EffectValue = !GetOptions()->GetOption(MODOptionEnum::AmigaFilter).GetValue<bool>();
+        SetChannelRow(0, 0, 3, amigaFilterRow);
+
         // All other channel rows in the pattern are already zeroed out so nothing needs to be done for them
     }
 
@@ -608,7 +617,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
                     DMFGetAdditionalEffects(dmf, state, chanRow, modEffects);
                     DMFConvertNote(state, chanRow, sampleMap, modEffects, modSampleId, period);
                 }
-                
+
                 state.channelRows[chan] = DMFApplyNoteAndEffect(state, modEffects, modSampleId, period);
             }
 
@@ -647,7 +656,7 @@ MOD::PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat)
      * - Unsupported effect
      */
 
-    //const bool useMaxEffects = GetOptions()->GetEffects() == OptionsType::EffectsEnum::Max;
+    const bool useMaxEffects = GetOptions()->GetEffects() == OptionsType::EffectsEnum::Max;
 
     using EffectPair = std::pair<EffectPriority, Effect>;
     MOD::PriorityEffectsMap modEffects;
@@ -662,6 +671,41 @@ MOD::PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat)
 
         switch (dmf::EffectCode(dmfEffect.code))
         {
+        case dmf::EffectCode::Arp:
+            {
+                if (!useMaxEffects) break;
+                effectPair.first = EffectPriorityUnsupportedEffect;
+                effectPair.second = {EffectCode::Arp, (uint16_t)dmfEffect.value};
+                break;
+            }
+        case dmf::EffectCode::PortUp:
+            {
+                if (!useMaxEffects) break;
+                effectPair.first = EffectPriorityOtherEffect;
+                effectPair.second = {EffectCode::PortUp, (uint16_t)dmfEffect.value};
+                break;
+            }
+        case dmf::EffectCode::PortDown:
+            {
+                if (!useMaxEffects) break;
+                effectPair.first = EffectPriorityOtherEffect;
+                effectPair.second = {EffectCode::PortDown, (uint16_t)dmfEffect.value};
+                break;
+            }
+        case dmf::EffectCode::Port2Note:
+            {
+                if (!useMaxEffects) break;
+                effectPair.first = EffectPriorityUnsupportedEffect;
+                effectPair.second = {EffectCode::Port2Note, (uint16_t)dmfEffect.value};
+                break;
+            }
+        case dmf::EffectCode::Vibrato:
+            {
+                if (!useMaxEffects) break;
+                effectPair.first = EffectPriorityOtherEffect;
+                effectPair.second = {EffectCode::Vibrato, (uint16_t)dmfEffect.value};
+                break;
+            }
         case dmf::EffectCode::NoteCut:
             if (dmfEffect.value == 0)
             {
@@ -683,6 +727,7 @@ MOD::PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat)
             effectPair.second = {EffectCode::PosJump, (uint16_t)dest};
             break;
         }
+
         default:
             break; // Unsupported. priority remains UnsupportedEffect
         }

@@ -292,12 +292,12 @@ public:
 
     enum class OptionEnum
     {
-        Effects
+        Effects, AmigaFilter
     };
 
     enum class EffectsEnum
     {
-        Error, Min, Max
+        Min, Max
     };
 
     inline EffectsEnum GetEffects() const;

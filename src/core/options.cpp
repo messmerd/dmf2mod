@@ -399,16 +399,17 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
     auto SetValue = [this, &optionsParsed](const char* valueStr, const OptionDefinition* optionDef) -> bool
     {
         auto& option = m_OptionsMap[optionDef->GetId()];
-        
+
         OptionDefinition::value_t valueTemp;
         if (ModuleOptionUtils::ConvertToValue(valueStr, optionDef->GetValueType(), valueTemp))
         {
             return true; // Error occurred
         }
-        
+
         if (!optionDef->IsValid(valueTemp))
         {
-            std::cerr << "ERROR: The value \"" << valueStr << "\" is not valid for the option \"" << optionDef->GetDisplayName() << "\".\n";
+            const std::string optionTypeStr = optionDef->GetOptionType() == OPTION ? "option" : "command";
+            std::cerr << "ERROR: The value \"" << valueStr << "\" is not valid for the " << optionTypeStr << " \"" << optionDef->GetDisplayName() << "\".\n";
             return true; // The value is not valid for this option definition
         }
 
@@ -608,13 +609,14 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
         if (optionsParsed.count(def->GetId()) > 0)
         {
             // ERROR: Setting the same option twice
+            const std::string optionTypeStr = def->GetOptionType() == OPTION ? "option" : "command";
             if (usingShortName)
             {
-                std::cerr << "ERROR: The flag \"-" << def->GetShortName() << "\" is used more than once.\n";
+                std::cerr << "ERROR: The " << optionTypeStr << " \"-" << def->GetShortName() << "\" is used more than once.\n";
             }
             else
             {
-                std::cerr << "ERROR: The flag \"--" << def->GetName() << "\" is used more than once.\n";
+                std::cerr << "ERROR: The " << optionTypeStr << " \"--" << def->GetName() << "\" is used more than once.\n";
             }
             
             return true;
@@ -657,7 +659,8 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
 
     if (handlingOption)
     {
-        std::cerr << "ERROR: The flag \"" << args.back() << "\" did not provide a value.\n";
+        const std::string optionTypeStr = handlingOption->GetOptionType() == OPTION ? "option" : "command";
+        std::cerr << "ERROR: The " << optionTypeStr << " \"" << handlingOption->GetDisplayName() << "\" did not provide a value.\n";
         return true;
     }
 

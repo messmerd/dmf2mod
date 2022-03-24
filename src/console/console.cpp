@@ -157,6 +157,10 @@ OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutput
         if (GlobalOptions::Get().ParseArgs(argsOnlyFlags))
             return OperationType::Error;
 
+        const bool helpProvided = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Help).GetExplicitlyProvided();
+        if (helpProvided)
+            std::cout << "Ignoring the \"--help\" command.\n";
+
         const bool force = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Force).GetValue<bool>();
         //const bool silent = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Silence).GetValue<bool>();
 

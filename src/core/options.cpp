@@ -21,13 +21,13 @@ using namespace d2m;
 std::string OptionDefinition::GetDisplayName() const
 {
     if (!m_Name.empty())
-        return m_Name;
-    return std::string(1, m_ShortName);
+        return "--" + m_Name;
+    return "-" + std::string(1, m_ShortName);
 }
 
 bool OptionDefinition::IsValid(const value_t& value) const
 {
-    if (value.index() != GetType())
+    if (value.index() != GetValueType())
         return false;
     if (!UsesAcceptedValues())
         return true;
@@ -51,15 +51,16 @@ void OptionDefinition::PrintHelp() const
     }
 
     const bool useDoubleQuotes = m_AcceptedValuesContainSpaces;
+    const std::string preferredSeparator = GetOptionType() == COMMAND ? " " : "=";
 
-    const OptionDefinition::Type optionType = GetType();
+    const OptionDefinition::Type optionType = GetValueType();
     if (UsesAcceptedValues() && optionType != OptionDefinition::BOOL)
     {
-        str1 += m_EqualsPreferred ? "=[" : " [";
+        str1 += preferredSeparator + "[";
 
         unsigned i = 0;
         const size_t total = GetAcceptedValues().size();
-        for (auto& val : GetAcceptedValues())
+        for (auto& [val, discard] : GetAcceptedValues())
         {
             switch (optionType)
             {
@@ -87,7 +88,7 @@ void OptionDefinition::PrintHelp() const
     }
     else if (!m_CustomAcceptedValuesText.empty()) // If it uses custom accepted values text
     {
-        str1 += m_EqualsPreferred ? "=" : " ";
+        str1 += preferredSeparator;
         str1 += m_CustomAcceptedValuesText;
     }
     else
@@ -96,10 +97,10 @@ void OptionDefinition::PrintHelp() const
         {
             case OptionDefinition::INT:
             case OptionDefinition::DOUBLE:
-                str1 += m_EqualsPreferred ? "=" : " ";
+                str1 += preferredSeparator;
                 str1 += "<value>"; break;
             case OptionDefinition::STRING:
-                str1 += m_EqualsPreferred ? "=" : " ";
+                str1 += preferredSeparator;
                 str1 += "\"<value>\""; break;
             default:
                 break;
@@ -246,6 +247,7 @@ Option::Option(const std::shared_ptr<const OptionDefinitionCollection>& definiti
     assert(definitions.get() && "Option definition cannot be null.");
     m_Definitions = definitions;
     m_Id = id;
+    m_ExplicitlyProvided = false;
     SetValueToDefault();
 }
 
@@ -254,19 +256,44 @@ Option::Option(const std::shared_ptr<const OptionDefinitionCollection>& definiti
     assert(definitions.get() && "Option definition cannot be null.");
     m_Definitions = definitions;
     m_Id = id;
+    m_ExplicitlyProvided = false;
     SetValue(value);
 }
 
-void Option::SetValue(value_t value)
+void Option::SetValue(value_t& value)
 {
     assert(GetDefinition()->IsValid(value) && "The value is not a valid type.");
     m_Value = value;
+    if (GetDefinition()->UsesAcceptedValues())
+    {
+        const auto& acceptedValues = GetDefinition()->GetAcceptedValues();
+        const int index = acceptedValues.at(m_Value);
+        m_ValueIndex = index;
+    }
+}
+
+void Option::SetValue(value_t&& value)
+{
+    assert(GetDefinition()->IsValid(value) && "The value is not a valid type.");
+    m_Value = std::move(value);
+    if (GetDefinition()->UsesAcceptedValues())
+    {
+        const auto& acceptedValues = GetDefinition()->GetAcceptedValues();
+        const int index = acceptedValues.at(m_Value);
+        m_ValueIndex = index;
+    }
 }
 
 void Option::SetValueToDefault()
 {
     const OptionDefinition* definition = GetDefinition();
     m_Value = definition->GetDefaultValue();
+    if (GetDefinition()->UsesAcceptedValues())
+    {
+        const auto& acceptedValues = GetDefinition()->GetAcceptedValues();
+        const int index = acceptedValues.at(m_Value);
+        m_ValueIndex = index;
+    }
 }
 
 const OptionDefinition* Option::GetDefinition() const
@@ -371,10 +398,10 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
     // Sets the value of an option given a value string
     auto SetValue = [this, &optionsParsed](const char* valueStr, const OptionDefinition* optionDef) -> bool
     {
-        auto& value = m_OptionsMap[optionDef->GetId()].GetValue();
+        auto& option = m_OptionsMap[optionDef->GetId()];
         
         OptionDefinition::value_t valueTemp;
-        if (ModuleOptionUtils::ConvertToValue(valueStr, optionDef->GetType(), valueTemp))
+        if (ModuleOptionUtils::ConvertToValue(valueStr, optionDef->GetValueType(), valueTemp))
         {
             return true; // Error occurred
         }
@@ -385,13 +412,22 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
             return true; // The value is not valid for this option definition
         }
 
-        value = std::move(valueTemp);
+        option.SetValue(std::move(valueTemp));
+        option.m_ExplicitlyProvided = true;
         optionsParsed.insert(optionDef->GetId());
         return false;
     };
 
-    // Main loop
     const OptionDefinition* handlingOption = nullptr;
+
+    /*
+     * If the previous argument is syntactically correct yet unrecognized (maybe it's a module option and
+     *  we are reading global options now), the current argument in the following loop may be its value if
+     *  the arguments were passed like: "--unrecognized value". Or it may be another option - recognized or not.
+    */
+    bool argMightBeValue = false;
+
+    // Main loop
     for (unsigned i = 0; i < args.size(); i++)
     {
         auto& arg = args[i];
@@ -405,7 +441,7 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
 
         const OptionDefinition* def = handlingOption;
         size_t equalsPos = std::string::npos;
-        
+
         const bool thisArgIsValue = handlingOption != nullptr;
         if (thisArgIsValue)
         {
@@ -423,6 +459,13 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
 
         if (arg.size() <= 1 || arg[0] != '-')
         {
+            if (argMightBeValue)
+            {
+                // Hopefully this is just a value from the preceding unrecognized argument
+                argMightBeValue = false;
+                continue;
+            }
+
             // Error: Invalid argument
             std::cerr << "ERROR: Invalid flag: \"" << arg << "\"\n";
             return true;
@@ -433,8 +476,15 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
         {
             if (!isalpha(arg[1]))
             {
+                if (argMightBeValue)
+                {
+                    // Hopefully this is just a value from the preceding unrecognized argument
+                    argMightBeValue = false;
+                    continue;
+                }
+
                 // Error: Short names must be alphabetic
-                std::cerr << "ERROR: Invalid flag '" << arg.substr(1) << "': Flags must be comprised of only alphabetic characters.\n";
+                std::cerr << "ERROR: Invalid flag \"" << arg << "\": Flags must be comprised of only alphabetic characters.\n";
                 return true;
             }
 
@@ -444,10 +494,19 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
             {
                 if (equalsPos != 2)
                 {
+                    if (argMightBeValue)
+                    {
+                        // Hopefully this is just a value from the preceding unrecognized argument
+                        argMightBeValue = false;
+                        continue;
+                    }
+
                     // Error: Short flags with an '=' must be of the form: "-f=<value>"
-                    std::cerr << "ERROR: Invalid flag \"" << arg.substr(1) << "\": Unable to parse.\n";
+                    std::cerr << "ERROR: Invalid flag \"" << arg << "\": Unable to parse.\n";
                     return true;
                 }
+
+                // At this point, argument is deemed syntactically valid
                 def = m_Definitions->FindByShortName(arg[1]);
             }
             else // Using the form: "-f", "-f <value>", or "-abcdef"
@@ -455,16 +514,37 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
                 const bool usingSeveralShortArgs = arg.size() > 2;
                 if (!usingSeveralShortArgs) // Using the form: "-f" or "-f <value>"
                 {
+                    if (!isalpha(arg[1]))
+                    {
+                        if (argMightBeValue)
+                        {
+                            // Hopefully this is just a value from the preceding unrecognized argument
+                            argMightBeValue = false;
+                            continue;
+                        }
+
+                        // Error: Short flags with an '=' must be of the form: "-f=<value>"
+                        std::cerr << "ERROR: Invalid flag \"" << arg << "\": Unable to parse.\n";
+                        return true;
+                    }
+
+                    // At this point, argument is deemed syntactically valid
                     def = m_Definitions->FindByShortName(arg[1]);
-                    // The argument may be of the form "-f <value>" if it is not a bool type. That will be handled later.
                 }
-                else // Using the form: "-abcdef"
+                else // Using the form: "-abcdef" - this form cannot have a value after it
                 {
                     for (unsigned j = 1; j < arg.size(); j++)
                     {
                         const char c = arg[j];
                         if (!isalpha(c))
                         {
+                            if (argMightBeValue)
+                            {
+                                // Hopefully this is just a value from the preceding unrecognized argument
+                                argMightBeValue = false;
+                                break; // Break out of inner loop, then hit the continue
+                            }
+
                             // Error: Short names must be alphabetic
                             std::cerr << "ERROR: Invalid flag '" << arg[j] << "': Flags must be comprised of only alphabetic characters.\n";
                             return true;
@@ -476,7 +556,7 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
                         if (!tempDef)
                             continue;
                         
-                        if (tempDef->GetType() != OptionDefinition::BOOL)
+                        if (tempDef->GetValueType() != OptionDefinition::BOOL)
                         {
                             // Error: When multiple short flags are strung together, all of them must be bool-typed options
                             return true;
@@ -488,6 +568,8 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
                         arg.erase(j--, 1); // Remove this flag from argument, since it has been consumed
                     }
 
+                    argMightBeValue = false; // Impossible for next arg to be a value
+
                     if (arg.empty())
                     {
                         // Erase argument since it has been consumed
@@ -495,34 +577,44 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
                         i--; // Adjust for item just erased
                     }
 
-                    continue; // SetValue() was called here and does not need to be called below.
+                    // SetValue() was called here and does not need to be called below.
+                    // Or this was a value from an unrecognized argument, which we are skipping.
+                    continue;
                 }
             }
         }
         else // --foo format argument
         {
             equalsPos = arg.find_first_of('=');
-            std::string name = arg.substr(2, equalsPos); // From start to '=' or end of string - whichever comes first
+            std::string name = arg.substr(2, equalsPos - 2); // From start to '=' or end of string - whichever comes first
             def = m_Definitions->FindByName(name);
         }
-        
 
         if (!def)
         {
-            // Unknown argument; skip it
-            continue;
+            // Syntactically valid argument, yet unknown
+            argMightBeValue = true; // Next arg may be this unrecognized option's value
+            continue; // Skip
         }
+
+        // At this point, the current argument is both syntactically valid and a recognized option.
+
+        /*
+         * This is a recognized option, not the preceding unrecognised option's value.
+         * Therefore, the next argument cannot be an unrecognized argument's value:
+         */
+        argMightBeValue = false;
 
         if (optionsParsed.count(def->GetId()) > 0)
         {
             // ERROR: Setting the same option twice
             if (usingShortName)
             {
-                std::cerr << "ERROR: The flag '" << arg[1] << "' is used more than once.\n";
+                std::cerr << "ERROR: The flag \"-" << def->GetShortName() << "\" is used more than once.\n";
             }
             else
             {
-                std::cerr << "ERROR: The flag \"" << arg.substr(2) << "\" is used more than once.\n";
+                std::cerr << "ERROR: The flag \"--" << def->GetName() << "\" is used more than once.\n";
             }
             
             return true;
@@ -543,7 +635,7 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
         }
         else // No '=' present
         {
-            if (def->GetType() != OptionDefinition::BOOL)
+            if (def->GetValueType() != OptionDefinition::BOOL)
             {
                 // The next argument will be the value
                 handlingOption = def;

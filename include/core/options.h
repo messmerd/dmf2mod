@@ -24,6 +24,11 @@ class OptionDefinitionCollection;
 class Option;
 class OptionCollection;
 
+enum OptionType
+{
+    OPTION=0,
+    COMMAND=1
+};
 
 // Stores a definition for a single command-line option
 class OptionDefinition
@@ -44,12 +49,12 @@ public:
 
     // Constructors
 
-    OptionDefinition() : m_Id(-1), m_Type(Type::BOOL), m_Name(""), m_ShortName('\0'), m_DefaultValue(false) {}
+    OptionDefinition() : m_OptionType(OPTION), m_Id(-1), m_ValueType(Type::BOOL), m_Name(""), m_ShortName('\0'), m_DefaultValue(false) {}
 
     // OptionDefinition without accepted values; The value can be anything allowed by the variant
     template<typename T, typename = std::enable_if_t<std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{})>>
-    OptionDefinition(T id, const std::string& name, char shortName, const value_t& defaultValue, const std::string& description, bool equalsPreferred)
-        : m_Id(static_cast<int>(id)), m_Name(name), m_ShortName(shortName), m_DefaultValue(defaultValue), m_AcceptedValues({}), m_Description(description), m_EqualsPreferred(equalsPreferred)
+    OptionDefinition(OptionType type, T id, const std::string& name, char shortName, const value_t& defaultValue, const std::string& description)
+        : m_OptionType(type), m_Id(static_cast<int>(id)), m_Name(name), m_ShortName(shortName), m_DefaultValue(defaultValue), m_AcceptedValues({}), m_Description(description)
     {
         for (char c : name)
         {
@@ -59,38 +64,38 @@ public:
 
         assert((shortName == '\0' || std::isalpha(shortName)) && "In OptionDefinition constructor: shortName must be an alphabetic character or '\\0'.");
 
-        m_Type = static_cast<Type>(defaultValue.index());
+        m_ValueType = static_cast<Type>(defaultValue.index());
     }
 
     // OptionDefinition with accepted values; Ensures that defaultValue and acceptedValues are the same type and are a valid variant alternative
     template <typename T, typename U, 
         typename = std::enable_if_t<std::is_constructible<value_t, U>{} && /* U must be a valid variant alternative */
         (std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}))>> /* T must be int or enum class with int underlying type */
-    OptionDefinition(T id, const std::string& name, char shortName, const U& defaultValue, const std::initializer_list<U>& acceptedValues, const std::string& description, bool equalsPreferred)
-        : m_Id(static_cast<int>(id)), m_Name(name), m_ShortName(shortName), m_DefaultValue(defaultValue), m_Description(description), m_EqualsPreferred(equalsPreferred)
+    OptionDefinition(OptionType type, T id, const std::string& name, char shortName, const U& defaultValue, const std::initializer_list<U>& acceptedValues, const std::string& description)
+        : m_OptionType(type), m_Id(static_cast<int>(id)), m_Name(name), m_ShortName(shortName), m_DefaultValue(defaultValue), m_Description(description)
     {
         m_AcceptedValuesContainSpaces = false;
 
         bool found = false;
+        int i = 0;
         for (const U& val : acceptedValues)
         {
-            const auto& insertRet = m_AcceptedValues.insert(value_t(val));
+            const auto& insertedVal = m_AcceptedValues.emplace(value_t(val), i++).first->first;
 
             // Check for spaces (used when printing help)
-            if (insertRet.first->index() == OptionDefinition::STRING)
+            if (insertedVal.index() == OptionDefinition::STRING)
             {
-                const std::string& str = std::get<std::string>(*insertRet.first);
+                const std::string& str = std::get<std::string>(insertedVal);
                 if (str.find(' ') != std::string::npos)
                     m_AcceptedValuesContainSpaces = true;
             }
 
-            if (val == defaultValue)
+            if (insertedVal == m_DefaultValue)
                 found = true;
         }
 
         if (!found) // Avoid "unused variable" warning
             assert(false && "In OptionDefinition constructor: acceptedValues must contain the default value.");
-        
 
         for (char c : name)
         {
@@ -100,32 +105,33 @@ public:
 
         assert((shortName == '\0' || std::isalpha(shortName)) && "In OptionDefinition constructor: shortName must be an alphabetic character or '\\0'.");
 
-        m_Type = static_cast<Type>(m_DefaultValue.index());
+        m_ValueType = static_cast<Type>(m_DefaultValue.index());
     }
 
     // Allows the use of string literals, which are converted to std::string
     template<typename T, typename = std::enable_if_t<std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{})>>
-    OptionDefinition(T id, const std::string& name, char shortName, const char* defaultValue, const std::initializer_list<std::string>& acceptedValues, const std::string& description, bool equalsPreferred)
-        : OptionDefinition(id, name, shortName, std::string(defaultValue), acceptedValues, description, equalsPreferred) {}
+    OptionDefinition(OptionType type, T id, const std::string& name, char shortName, const char* defaultValue, const std::initializer_list<std::string>& acceptedValues, const std::string& description)
+        : OptionDefinition(type, id, name, shortName, std::string(defaultValue), acceptedValues, description) {}
 
     // Allows custom accepted values text which is used when printing help for this option. m_AcceptedValues is empty.
     template<typename T, typename U, typename = std::enable_if_t<std::is_constructible<value_t, U>{} && /* U must be a valid variant alternative */
     (std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}))>> /* T must be int or enum class with int underlying type */
-    OptionDefinition(T id, const std::string& name, char shortName, const U& defaultValue, const char* customAcceptedValuesText, const std::string& description, bool equalsPreferred)
-        : OptionDefinition(id, name, shortName, defaultValue, description, equalsPreferred)
+    OptionDefinition(OptionType type, T id, const std::string& name, char shortName, const U& defaultValue, const char* customAcceptedValuesText, const std::string& description)
+        : OptionDefinition(type, id, name, shortName, defaultValue, description)
     {
         m_CustomAcceptedValuesText = customAcceptedValuesText;
     }
 
     // Getters and helpers
 
+    OptionType GetOptionType() const { return m_OptionType; }
     int GetId() const { return m_Id; }
-    Type GetType() const { return m_Type; }
+    Type GetValueType() const { return m_ValueType; }
     std::string GetName() const { return m_Name; };
     char GetShortName() const { return m_ShortName; }
     std::string GetDisplayName() const;
     value_t GetDefaultValue() const { return m_DefaultValue; }
-    std::set<value_t> GetAcceptedValues() const { return m_AcceptedValues; }
+    std::map<value_t, int> GetAcceptedValues() const { return m_AcceptedValues; }
     std::string GetDescription() const { return m_Description; }
 
     bool HasName() const { return !m_Name.empty(); }
@@ -140,22 +146,21 @@ public:
 
 protected:
 
+    OptionType m_OptionType;
+
     // Used for quickly accessing specific options in OptionDefinitionCollection collection
     int m_Id;
 
-    Type m_Type;
+    Type m_ValueType;
     std::string m_Name;
     char m_ShortName;
 
     value_t m_DefaultValue;
 
-    std::set<value_t> m_AcceptedValues;
+    std::map<value_t, int> m_AcceptedValues;
     bool m_AcceptedValuesContainSpaces; // Whether double quotes are needed when printing
 
     std::string m_Description;
-
-    // Whether "--foo=bar" is preferred over "--foo bar" for non-boolean options. Used when printing.
-    bool m_EqualsPreferred;
 
     // Only string-typed options can use custom accepted values text.
     // To use this feature, accepted values must take the form of: {"=<custom text here>"}
@@ -199,6 +204,7 @@ private:
 class Option
 {
 public:
+    friend class OptionCollection;
     using value_t = OptionDefinition::value_t;
 
     Option() : m_Definitions(nullptr), m_Id(-1) {}
@@ -209,12 +215,12 @@ public:
     // Construct with value. The definitions are defined elsewhere
     Option(const std::shared_ptr<const OptionDefinitionCollection>& definitions, int id, value_t value);
 
-    void SetValue(value_t value);
+    void SetValue(value_t& value);
+    void SetValue(value_t&& value);
 
     void SetValueToDefault();
 
     const value_t& GetValue() const { return m_Value; }
-    value_t& GetValue() { return m_Value; }
 
     template<typename T>
     const T& GetValue() const
@@ -223,11 +229,15 @@ public:
         return std::get<T>(m_Value);
     }
 
-    template<typename T>
-    T& GetValue()
+    int GetValueAsIndex() const
     {
-        // Will throw an exception if T is the wrong type
-        return std::get<T>(m_Value);
+        assert(GetDefinition()->UsesAcceptedValues());
+        return m_ValueIndex;
+    }
+
+    bool GetExplicitlyProvided() const
+    {
+        return m_ExplicitlyProvided;
     }
 
 private:
@@ -242,6 +252,12 @@ private:
     int m_Id;
 
     value_t m_Value;
+
+    // If using accepted values, this stores the index of m_Value within the accepted values list (enables better performance)
+    int m_ValueIndex;
+
+    // Whether the user explicitly provided the value for this option
+    bool m_ExplicitlyProvided;
 };
 
 

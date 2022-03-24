@@ -276,8 +276,8 @@ class MODException : public ModuleException
 {
 public:
     template <class T, class = std::enable_if_t<std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}>>
-    MODException(Category category, T errorCode, const std::string errorMessage = "")
-        : ModuleException(category, static_cast<int>(errorCode), CreateErrorMessage(category, (int)errorCode, errorMessage)) {}
+    MODException(Category category, T errorCode, const std::string args = "")
+        : ModuleException(category, static_cast<int>(errorCode), CreateErrorMessage(category, (int)errorCode, args)) {}
 
 private:
     // Creates module-specific error message from an error code and string argument
@@ -300,23 +300,10 @@ public:
         Error, Min, Max
     };
 
-    EffectsEnum GetEffects() const
-    {
-        const auto& effects = GetOption(OptionEnum::Effects).GetValue<std::string>();
-        if (effects == "min")
-            return EffectsEnum::Min;
-        else if (effects == "max")
-            return EffectsEnum::Max;
-        else
-            return EffectsEnum::Error;
-    }
+    inline EffectsEnum GetEffects() const;
 
 private:
 
-    std::string& GetEffectsRef()
-    {
-        return GetOption(OptionEnum::Effects).GetValue<std::string>();
-    }
 };
 
 class MOD : public ModuleInterface<MOD, MODConversionOptions>

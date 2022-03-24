@@ -36,8 +36,8 @@ using namespace d2m::mod;
 using MODOptionEnum = MODConversionOptions::OptionEnum;
 auto MODOptions = CreateOptionDefinitions(
 {
-    /* Option id               / Full name     / Short / Default / Possib. vals / Description */
-    {MODOptionEnum::Effects,    "effects",      '\0',     "max",  {"min", "max"}, "The number of ProTracker effects to use.", true}
+    /* Type / Option id             / Full name / Short / Default / Possib. vals  / Description */
+    {OPTION, MODOptionEnum::Effects, "effects",  '\0',   "max",    {"min", "max"}, "The number of ProTracker effects to use."}
 });
 
 // Register module info
@@ -69,6 +69,12 @@ static uint16_t proTrackerPeriodTable[5][12] = {
 };
 
 MODConversionOptions::MODConversionOptions() {}
+
+MODConversionOptions::EffectsEnum MODConversionOptions::GetEffects() const
+{
+    // Warning: This is fast, but requires the EffectsEnum values to match the order that accepted values are given to the OptionDefinition
+    return static_cast<EffectsEnum>(GetOption(OptionEnum::Effects).GetValueAsIndex());
+}
 
 MOD::MOD() {}
 
@@ -641,6 +647,8 @@ MOD::PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat)
      * - Unsupported effect
      */
 
+    //const bool useMaxEffects = GetOptions()->GetEffects() == OptionsType::EffectsEnum::Max;
+
     using EffectPair = std::pair<EffectPriority, Effect>;
     MOD::PriorityEffectsMap modEffects;
 
@@ -675,7 +683,6 @@ MOD::PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat)
             effectPair.second = {EffectCode::PosJump, (uint16_t)dest};
             break;
         }
-        
         default:
             break; // Unsupported. priority remains UnsupportedEffect
         }
@@ -1661,13 +1668,33 @@ void MOD::ExportSampleInfo(std::ofstream& fout) const
     // The remaining samples are blank:
     for (int i = m_TotalMODSamples; i < 31; i++)
     {
-        // According to real ProTracker files viewed in a hex viewer, the 30th and final byte
-        //    of a blank sample is 0x01 and all 29 other bytes are 0x00.
-        for (int j = 0; j < 29; j++)
+        if (i != 30)
         {
-            fout.put(0);
+            // According to real ProTracker files viewed in a hex viewer, the 30th and final byte
+            //    of a blank sample is 0x01 and all 29 other bytes are 0x00.
+            for (int j = 0; j < 29; j++)
+            {
+                fout.put(0);
+            }
+            fout.put(1);
         }
-        fout.put(1);
+        else
+        {
+            // Print credits message in last sample's name
+            std::string credits = "Made with dmf2mod";
+
+            // Pad name with zeros
+            while (credits.size() < 22)
+                credits += " ";
+
+            fout << credits;
+
+            for (int j = 22; j < 29; j++)
+            {
+                fout.put(0);
+            }
+            fout.put(1);
+        }
     }
 }
 

@@ -240,9 +240,9 @@ public:
         return m_ExplicitlyProvided;
     }
 
-private:
-
     const OptionDefinition* GetDefinition() const;
+
+private:
 
     // Rather than making a copy of definition for each Option, it instead will point to definitions defined elsewhere + an id.
     // This will work well for both definitions from the ConversionOptionsStatic class and custom definitions used by frontends.

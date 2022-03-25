@@ -63,10 +63,10 @@ void Registrar::Register()
     m_FileExtensionMap[moduleInfo.GetFileExtension()] = moduleType;
 }
 
-std::vector<std::string> Registrar::GetAvailableModules()
+std::vector<ModuleType> Registrar::GetAvailableModules()
 {
-    std::vector<std::string> vec;
-    for (const auto& mapPair : m_FileExtensionMap)
+    std::vector<ModuleType> vec;
+    for (const auto& mapPair : m_ModuleRegistrationMap)
     {
         vec.push_back(mapPair.first);
     }

@@ -200,6 +200,7 @@ public:
 
     /*
      * Get option definitions for the given type of module
+     * Will be nullptr if the module doesn't have any options
      */
     static const std::shared_ptr<const OptionDefinitionCollection>& GetOptionDefinitions(ModuleType moduleType);
 

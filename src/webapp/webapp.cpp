@@ -11,9 +11,6 @@
 #include <emscripten/emscripten.h>
 #include <emscripten/bind.h>
 
-#include <string>
-#include <sstream>
-
 using namespace d2m;
 
 // NOTE: When using std::cout, make sure you end it with a newline to flush output. Otherwise nothing will appear.
@@ -21,6 +18,26 @@ using namespace d2m;
 static ModulePtr G_Module;
 static std::string G_InputFilename;
 
+struct OptionDefinitionWrapper
+{
+    using Type = OptionDefinition::Type;
+    int id;
+    OptionType optionType;
+    Type valueType;
+    std::string name;
+    std::string displayName;
+    std::string defaultValue;
+    std::vector<std::string> acceptedValues;
+};
+
+struct OptionWrapper
+{
+    std::string name;
+    std::string value;
+};
+
+static OptionDefinitionWrapper WrapOptionDefinition(const OptionDefinition& definition);
+static bool UnwrapOptions(ConversionOptionsPtr& options, const std::vector<OptionWrapper>& optionsWrapped);
 static void SetStatusType(bool isError);
 
 int main()
@@ -33,44 +50,50 @@ int main()
     return 0;
 }
 
+//////////////////////////
+//  Exported functions  //
+//////////////////////////
+
 /*
- * Returns a comma-delimited string representing 
- * the file extensions of the registered modules
+ * Returns a vector of ints representing the module type that are supported.
+ * Int is used instead of ModuleType to avoid the need to redefine the ModuleType
+ *  enum in the Emscripten binding.
  */
-std::string GetAvailableModules()
+std::vector<int> GetAvailableModulesWrapper()
 {
-    auto modules = Registrar::GetAvailableModules();
-    std::string modulesString;
-    for (unsigned i = 0; i < modules.size(); i++)
+    std::vector<int> ret;
+    for (const auto& val : Registrar::GetAvailableModules())
     {
-        modulesString += modules[i];
-        if (i != modules.size() - 1)
-            modulesString += ",";
+        ret.push_back(static_cast<int>(val));
     }
-    return modulesString;
+    return ret;
 }
 
 /*
- * Returns a semi-colon delimited string representing 
- * the command-line options available for the given
- * module type
+ * Returns the module file extension when given a module type
  */
-std::string GetOptionDefinitions(std::string moduleType)
+std::string GetExtensionFromTypeWrapper(int moduleType)
 {
-    ModuleType moduleTypeEnum = Registrar::GetTypeFromFileExtension(moduleType);
-    auto options = Module::GetOptionDefinitions(moduleTypeEnum);
-    
-    std::string optionsString;
-    unsigned i = 0;
+    return Registrar::GetExtensionFromType(static_cast<ModuleType>(moduleType));
+}
+
+/*
+ * Returns a vector of option definitions for the given module type
+ */
+std::vector<OptionDefinitionWrapper> GetOptionDefinitionsWrapper(int moduleType)
+{
+    auto options = Module::GetOptionDefinitions(static_cast<ModuleType>(moduleType));
+    std::vector<OptionDefinitionWrapper> ret;
+
+    if (!options)
+        return ret;
+
     for (const auto& mapPair : options->GetIdMap())
     {
-        const auto& option = mapPair.second;
-        optionsString += option.GetName();
-        if (i != options->Count() - 1)
-            optionsString += ";";
-        i++;
+        ret.push_back(WrapOptionDefinition(mapPair.second));
     }
-    return optionsString;
+
+    return ret;
 }
 
 /*
@@ -95,14 +118,14 @@ bool ModuleImport(std::string filename)
         std::cerr << "ERROR: The module type may not be registered.\n\n";
         return true;
     }
-    
+
     if (G_Module->GetStatus().ErrorOccurred())
     {
         std::cerr << "Errors during import:\n";
         G_Module->GetStatus().PrintError();
         return true;
     }
-    
+
     if (G_Module->GetStatus().WarningsIssued())
     {
         SetStatusType(false);
@@ -114,27 +137,26 @@ bool ModuleImport(std::string filename)
 }
 
 /*
- * Converts the previously imported module to a module of the
- * given file extension.
- * Returns the filename of the converted file, or an empty string if an error occurred
+ * Converts the previously imported module to a module of the given file extension.
+ * Returns true if an error occurred, or false if successful.
  */
-std::string ModuleConvert(std::string outputFilename, std::string commandLineArgs)
+bool ModuleConvert(std::string outputFilename, const std::vector<OptionWrapper>& optionsWrapped)
 {
     if (!G_Module)
-        return ""; // Need to import the module first
-    
-    if (outputFilename == "")
-        return ""; // Invalid argument
+        return true; // Need to import the module first
+
+    if (outputFilename.empty())
+        return true; // Invalid argument
 
     if (outputFilename == G_InputFilename)
-        return ""; // Same type; No conversion necessary
+        return true; // Same type; No conversion necessary
 
     SetStatusType(true);
     const auto moduleType = Registrar::GetTypeFromFilename(outputFilename);
     if (moduleType == ModuleType::NONE)
     {
         std::cerr << "The output file is not recognized as a supported module type.\n\n";
-        return "";
+        return true;
     }
 
     // Create conversion options object
@@ -142,36 +164,23 @@ std::string ModuleConvert(std::string outputFilename, std::string commandLineArg
     if (!options)
     {
         std::cerr << "Error occurred when creating ConversionOptions object. Likely a registration issue.\n\n";
-        return ""; // Registration issue
+        return true; // Registration issue
     }
 
-    // Convert newline delimited string into vector of strings:
-    std::string temp;
-    std::stringstream ss(commandLineArgs);
-    std::vector<std::string> args;
-
-    while (getline(ss, temp, '\n'))
-    {
-        args.push_back(temp);
-    }
-
-    // Parse the command-line arguments
-    if (options->ParseArgs(args))
-    {
-        // ParseArgs will print error to stderr if one occurs.
-        return ""; // Failed to parse args
-    }
+    // Set options
+    if (UnwrapOptions(options, optionsWrapped))
+        return true; // Error unwrapping options
 
     ModulePtr output = G_Module->Convert(moduleType, options);
     if (!output)
-        return "";
-    
+        return true;
+
     if (output->GetStatus().ErrorOccurred())
     {
         SetStatusType(true);
         std::cerr << "Error during conversion:\n";
         output->GetStatus().PrintError();
-        return "";
+        return true;
     }
 
     if (output->GetStatus().WarningsIssued())
@@ -187,10 +196,50 @@ std::string ModuleConvert(std::string outputFilename, std::string commandLineArg
     {
         std::cerr << "Error during export:\n";
         output->GetStatus().PrintError();
-        return "";
+        return true;
     }
-    
-    return outputFilename;
+
+    return false;
+}
+
+
+////////////////////////
+//  Helper functions  //
+////////////////////////
+
+static OptionDefinitionWrapper WrapOptionDefinition(const OptionDefinition& definition)
+{
+    OptionDefinitionWrapper ret;
+    ret.id = definition.GetId();
+    ret.optionType = definition.GetOptionType();
+    ret.valueType = definition.GetValueType();
+    ret.name = definition.HasName() ? definition.GetName() : std::string(1, definition.GetShortName());
+    ret.displayName = definition.GetDisplayName();
+    ret.defaultValue = ModuleOptionUtils::ConvertToString(definition.GetDefaultValue());
+
+    ret.acceptedValues.clear();
+    for (const auto& mapPair : definition.GetAcceptedValues())
+    {
+        const auto& val = mapPair.first;
+        ret.acceptedValues.push_back(ModuleOptionUtils::ConvertToString(val));
+    }
+
+    return ret;
+}
+
+static bool UnwrapOptions(ConversionOptionsPtr& options, const std::vector<OptionWrapper>& optionsWrapped)
+{
+    for (const auto& optionWrapped : optionsWrapped)
+    {
+        auto& option = options->GetOption(optionWrapped.name);
+
+        OptionDefinition::value_t val;
+        if (ModuleOptionUtils::ConvertToValue(optionWrapped.value, option.GetDefinition()->GetValueType(), val))
+            return true; // Error converting string to value_t
+
+        option.SetValue(std::move(val));
+    }
+    return false;
 }
 
 static void SetStatusType(bool isError)
@@ -201,10 +250,46 @@ static void SetStatusType(bool isError)
 }
 
 
-EMSCRIPTEN_BINDINGS(dmf2mod)
-{
-    emscripten::function("getAvailableModules", &GetAvailableModules);
-    emscripten::function("getAvailableOptions", &GetOptionDefinitions);
+///////////////////////////
+//  Emscripten Bindings  //
+///////////////////////////
+
+EMSCRIPTEN_BINDINGS(my_value_example) {
+    // Register functions
+    emscripten::function("getAvailableModules", &GetAvailableModulesWrapper);
+    emscripten::function("getExtensionFromType", &GetExtensionFromTypeWrapper);
+    emscripten::function("getOptionDefinitions", &GetOptionDefinitionsWrapper);
     emscripten::function("moduleImport", &ModuleImport);
     emscripten::function("moduleConvert", &ModuleConvert);
+
+    // Register vectors
+    emscripten::register_vector<int>("VectorInt");
+    emscripten::register_vector<std::string>("VectorString");
+    emscripten::register_vector<OptionDefinitionWrapper>("VectorOptionDefinition");
+    emscripten::register_vector<OptionWrapper>("VectorOption");
+
+    // Register enums
+    emscripten::enum_<OptionType>("OptionType")
+        .value("OPTION", OPTION)
+        .value("COMMAND", COMMAND);
+
+    emscripten::enum_<OptionDefinitionWrapper::Type>("OptionValueType")
+        .value("BOOL", OptionDefinitionWrapper::Type::BOOL)
+        .value("INT", OptionDefinitionWrapper::Type::INT)
+        .value("DOUBLE", OptionDefinitionWrapper::Type::DOUBLE)
+        .value("STRING", OptionDefinitionWrapper::Type::STRING);
+
+    // Register structs
+    emscripten::value_object<OptionDefinitionWrapper>("OptionDefinition")
+        .field("id", &OptionDefinitionWrapper::id)
+        .field("optionType", &OptionDefinitionWrapper::optionType)
+        .field("valueType", &OptionDefinitionWrapper::valueType)
+        .field("name", &OptionDefinitionWrapper::name)
+        .field("displayName", &OptionDefinitionWrapper::displayName)
+        .field("defaultValue", &OptionDefinitionWrapper::defaultValue)
+        .field("acceptedValues", &OptionDefinitionWrapper::acceptedValues);
+
+    emscripten::value_array<OptionWrapper>("Option")
+        .element(&OptionWrapper::name)
+        .element(&OptionWrapper::value);
 }

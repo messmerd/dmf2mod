@@ -122,7 +122,7 @@ public:
     static void RegisterModules();
 
     // Helper methods that utilize module registration information
-    static std::vector<std::string> GetAvailableModules();
+    static std::vector<ModuleType> GetAvailableModules();
     
     static ModuleType GetTypeFromFilename(const std::string& filename);
     static ModuleType GetTypeFromFileExtension(const std::string& extension);

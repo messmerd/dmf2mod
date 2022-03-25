@@ -48,140 +48,115 @@ var disableControls = function(disable) {
     appFieldset.disabled = disable;
 }
 
-var arrayIsEmpty = function(a) {
-    if (!Array.isArray(a))
-        return true;
-    if (!a.length)
-        return true;
-    if (a.length == 1 && !a[0] && a[0].length == 0)
-        return true;
-    return false;
-}
-
 var loadOptions = function() {
     var optionsElement = document.getElementById('options');
     optionsElement.innerHTML = '<label><b>Output type:</b></label>';
 
-    var availMods = Module.getAvailableModules().split(',');
-    if (arrayIsEmpty(availMods)) {
+    var availMods = Module.getAvailableModules();
+    if (availMods.size() == 0) {
         optionsElement.innerHTML += '<br>ERROR: No supported modules';
         return;
     }
 
-    // Available options pattern
-    const pattern = String.raw`(?:-(\w+)(=\[((?:\w|,)+)?\]+)?,\s+)?(?:--(\w+)(=\[((?:\w|,)+)?\]+)?)?`;
-    const re = RegExp(pattern, '');
-
     // Add available modules to convert to
-    for (let i in availMods) {
-        const m = availMods[i];
+    for (var i = 0; i < availMods.size(); i++) {
+        const mtype = availMods.get(i);
+        const m = Module.getExtensionFromType(mtype);
+
         // Add radio button
         var typesHTML = '<input type="radio" id="' + m + '" name="output_type" value="' + m + '"';
         if (i == availMods.length - 1)
             typesHTML += ' checked'; // Last radio button is checked
         typesHTML += ' onchange="onOutputTypeChange(this)"><label for="' + m + '">' + m + '</label>';
+
         optionsElement.innerHTML += typesHTML;
     }
 
     // Add module-specific command-line options
-    for (let i in availMods) {
-        const m = availMods[i];
+    for (var i = 0; i < availMods.size(); i++) {
+        const mtype = availMods.get(i);
+        const m = Module.getExtensionFromType(mtype);
         var optionsHTML = '<div id="div_' + m + '" class="module_options" style="display:';
         if (i == availMods.length - 1)
             optionsHTML += ' block;">';
         else
             optionsHTML += ' none;">';
-        
-        var options = Module.getAvailableOptions(m);
-        if (!options || options.length == 0) {
+
+        var optionDefs = Module.getOptionDefinitions(mtype);
+        if (optionDefs.size() == 0) {
             optionsElement.innerHTML += optionsHTML + '<br>(No options)</div>';
             continue;
         }
 
         optionsHTML += '<br><label><b>Options:</b></label><br>';
-        var optionsArray = options.split(';');
-        for (let j in optionsArray) {
-            const o = optionsArray[j];
-            const found = re.exec(o);
-            if (!found || arrayIsEmpty(found)) {
-                optionsElement.innerHTML += optionsHTML + 'Error loading options</div>';
-                continue;
+
+        for (var j = 0; j < optionDefs.size(); j++) {
+            const o = optionDefs.get(j);
+
+            if (o.acceptedValues.size() == 0)
+            {
+                switch (o.valueType)
+                {
+                    case Module.OptionValueType.BOOL:
+                        const defaultIsChecked = o.defaultValue === "true" ? true : false;
+                        optionsHTML += o.displayName + ' ' + getSliderHTML(m, o.name, o.displayName, defaultIsChecked);
+                        break;
+                    case Module.OptionValueType.INT:
+                        optionsHTML += o.displayName + ' ' + getNumberHTML(m, o.name, o.displayName, true, o.defaultValue);
+                        break;
+                    case Module.OptionValueType.DOUBLE:
+                        optionsHTML += o.displayName + ' ' + getNumberHTML(m, o.name, o.displayName, false, o.defaultValue);
+                        break;
+                    case Module.OptionValueType.STRING:
+                        optionsHTML += o.displayName + ' ' + getTextboxHTML(m, o.name, o.displayName, o.defaultValue);
+                        break;
+                    default:
+                        optionsElement.innerHTML += optionsHTML + 'Error loading options</div>';
+                        continue;
+                }
+            }
+            else
+            {
+                optionsHTML += o.displayName + ' ' + getDropdownHTML(m, o.name, o.displayName, o.acceptedValues, o.defaultValue);
             }
 
-            const flagNameShort = found[1];
-            const flagShortValues = found[3];
-            const flagNameLong = found[4];
-            const flagLongValues = found[6];
-
-            // Parse acceptable values for option:
-            var values = [];
-            var hasValues = false;
-            if (found[5]) {
-                if (flagLongValues)
-                    values = flagLongValues.split(',');
-                else
-                    values = [];
-                hasValues = true;
-            } else if (found[2]) {
-                if (flagShortValues)
-                    values = flagShortValues.split(',');
-                else
-                    values = [];
-                hasValues = true;
-            }
-            
-            // Check if any string is acceptable for option:
-            var isAnything = false;
-            if (hasValues && arrayIsEmpty(values)) {
-                isAnything = true;
-            }
-
-            if (flagNameLong) {
-                if (!hasValues) { // The flag isn't set to anything. Its existence/non-existence represents a boolean.
-                    optionsHTML += '--' + flagNameLong + ' ' + getSliderHTML(m, flagNameLong, false);
-                }
-                else if (!isAnything) { // The flag has a few pre-defined options to set it to
-                    optionsHTML += '--' + flagNameLong + '=' + getDropdownHTML(m, flagNameLong, values);
-                } else { // The flag can be set to any string
-                    optionsHTML += '--' + flagNameLong + '=' + getTextboxHTML(m, flagNameLong);
-                }
-                optionsHTML += '<br>';
-            } else if (flagNameShort) {
-                if (!hasValues) { // The flag isn't set to anything. Its existence/non-existence represents a boolean.
-                    optionsHTML += '-' + flagNameShort + ' ' + getSliderHTML(m, flagNameShort, false);
-                }
-                else if (!isAnything) { // The flag has a few pre-defined options to set it to
-                    optionsHTML += '-' + flagNameShort + '=' + getDropdownHTML(m, flagNameShort, values);
-                } else { // The flag can be set to any string
-                    optionsHTML += '-' + flagNameShort + '=' + getTextboxHTML(m, flagNameShort);
-                }
-                optionsHTML += '<br>';
-            }
+            optionsHTML += '<br>';
         }
         optionsElement.innerHTML += optionsHTML + '</div>';
     }
 }
 
-var getSliderHTML = function(id, flagName, checked) {
-    var html = '<input type="checkbox" id="' + id + '_' + flagName + '" class="' + id + '_' + 'option" name="' + flagName + '"';
+var getSliderHTML = function(id, optionName, optionDisplayName, checked) {
+    var html = '<input type="checkbox" id="' + id + '_' + optionName + '" class="' + id + '_' + 'option" name="' + optionName + '"';
     if (checked)
         html += ' checked';
     html += '>';
     return html;
 }
 
-var getDropdownHTML = function(id, flagName, dropdownOptions) {
-    var html = '<select id="' + id + '_' + flagName + '" class="' + id + '_' + 'option" name="' + flagName + '">';
-    for (let i in dropdownOptions) {
-        const option = dropdownOptions[i];
-        html += '<option value="' + option + '">' + option + '</option>';
-    }
-    html += '</select>';
+var getNumberHTML = function(id, optionName, optionDisplayName, isInteger, defaultValue) {
+    var html = '<input type="number" id="' + id + '_' + optionName + '" class="' + id + '_' + 'option" name="' + optionName + '"';
+    if (isInteger)
+        html += ' step="1"';
+    html += ' value="' + defaultValue + '">';
     return html;
 }
 
-var getTextboxHTML = function(id, flagName) {
-    return '<input type="text" id="' + id + '_' + flagName + '" class="' + id + '_' + 'option" name="' + flagName + '">';
+var getTextboxHTML = function(id, optionName, optionDisplayName, defaultValue) {
+    return '<input type="text" id="' + id + '_' + optionName + '" class="' + id + '_' + 'option" name="' + optionName + '" value="' + defaultValue + '">';
+}
+
+var getDropdownHTML = function(id, optionName, optionDisplayName, dropdownOptions, defaultValue) {
+    var html = '<select id="' + id + '_' + optionName + '" class="' + id + '_' + 'option" name="' + optionName + '">';
+    for (var i = 0; i < dropdownOptions.size(); i++) {
+        const option = dropdownOptions.get(i);
+        html += '<option value="' + option + '"';
+        if (option === defaultValue)
+            html += ' selected';
+        html += '>' + option + '</option>';
+    }
+    html += '</select>';
+    return html;
 }
 
 var onOutputTypeChange = function(elem) {
@@ -200,39 +175,22 @@ var getOutputType = function() {
     return document.querySelector('input[name="output_type"]:checked').value;
 }
 
-var getCommandLineArgs = function() {
+var getOptions = function() {
     const currentOutputModule = getOutputType();
     const optionsForCurrentModule = document.getElementsByClassName(currentOutputModule  + '_option');
-    
-    var arguments = '';
+
+    var vo = new Module.VectorOption();
+
     const len = optionsForCurrentModule.length;
     for (let i = 0; i < len; i++) {
         const option = optionsForCurrentModule[i];
-        var flagName = '';
-        if (option.name.length == 1)
-            flagName = '-' + option.name;
-        else
-            flagName = '--' + option.name;
 
-        if (option.nodeName.toLowerCase() == 'select') { // dropdown
-            arguments += flagName + '=' + option.value;
-            if (i != len - 1)
-                arguments += '\n'; // Using newline delimiter b/c text box value can contain spaces
-        } else if (option.nodeName.toLowerCase() == 'input') {
-            if (option.type == 'checkbox') { // checkbox
-                if (option.checked) {
-                    arguments += flagName;
-                    if (i != len - 1)
-                        arguments += '\n'; // Using newline delimiter b/c text box value can contain spaces
-                } 
-            } else if (option.type == 'text') { // text box
-                arguments += flagName + '="' + option.value + '"';
-                if (i != len - 1)
-                    arguments += '\n'; // Using newline delimiter b/c text box value can contain spaces
-            }
-        }
+        if (option.nodeName.toLowerCase() == 'input' && option.type == 'checkbox')
+            vo.push_back([option.name, option.checked ? 'true' : 'false']);
+        else
+            vo.push_back([option.name, option.value]);
     }
-    return arguments;
+    return vo;
 }
 
 var importFileLocal = async function(externalFile, internalFilename) {
@@ -254,7 +212,7 @@ var importFileLocal = async function(externalFile, internalFilename) {
 var importFileOnline = async function(url, internalFilename) {
     if (!appInitialised)
         return true;
-    
+
     // Download a file
     let blob;
     try {
@@ -276,7 +234,7 @@ var importFileOnline = async function(url, internalFilename) {
 
     // Convert blob to Uint8Array (more abstract: ArrayBufferView)
     let data = new Uint8Array(await blob.arrayBuffer());
-    
+
     // Store the file
     let stream = FS.open(internalFilename, 'w+');
     FS.write(stream, data, 0, data.length, 0);
@@ -287,7 +245,7 @@ var importFileOnline = async function(url, internalFilename) {
 
 var convertFile = async function(event) {
     disableControls(true);
-    
+
     errorMessage = '';
     warningMessage = '';
     setStatusMessage();
@@ -305,7 +263,7 @@ var convertFile = async function(event) {
 
     // Change file extension to get internal filename for output from dmf2mod
     const outputType = getOutputType();
-    const commandLineArgs = getCommandLineArgs();
+    const options = getOptions();
     var internalFilenameOutput = internalFilenameInput;
     internalFilenameOutput = internalFilenameOutput.replace(/\.[^/.]+$/, '') + '.' + outputType;
     
@@ -329,20 +287,20 @@ var convertFile = async function(event) {
         disableControls(false);
         return true;
     }
-    
+
     let stream = FS.open(internalFilenameOutput, 'w+');
     FS.close(stream);
 
-    const result = Module.moduleConvert(internalFilenameOutput, commandLineArgs);
+    const result = Module.moduleConvert(internalFilenameOutput, options);
     setStatusMessage();
-    if (result != internalFilenameOutput) {
+    if (result) {
         disableControls(false);
         return true;
     }
-    
+
     const byteArray = FS.readFile(internalFilenameOutput);
     const blob = new Blob([byteArray]);
-    
+
     var a = document.createElement('a');
     a.download = internalFilenameOutput;
     a.href = window.URL.createObjectURL(blob);

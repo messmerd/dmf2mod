@@ -65,7 +65,7 @@ var loadOptions = function() {
 
         // Add radio button
         var typesHTML = '<input type="radio" id="' + m + '" name="output_type" value="' + m + '"';
-        if (i == availMods.length - 1)
+        if (i == availMods.size() - 1)
             typesHTML += ' checked'; // Last radio button is checked
         typesHTML += ' onchange="onOutputTypeChange(this)"><label for="' + m + '">' + m + '</label>';
 
@@ -77,7 +77,7 @@ var loadOptions = function() {
         const mtype = availMods.get(i);
         const m = Module.getExtensionFromType(mtype);
         var optionsHTML = '<div id="div_' + m + '" class="module_options" style="display:';
-        if (i == availMods.length - 1)
+        if (i == availMods.size() - 1)
             optionsHTML += ' block;">';
         else
             optionsHTML += ' none;">';
@@ -99,16 +99,16 @@ var loadOptions = function() {
                 {
                     case Module.OptionValueType.BOOL:
                         const defaultIsChecked = o.defaultValue === "true" ? true : false;
-                        optionsHTML += o.displayName + ' ' + getSliderHTML(m, o.name, o.displayName, defaultIsChecked);
+                        optionsHTML += o.displayName + ' ' + getSliderHTML(m, o.name, defaultIsChecked);
                         break;
                     case Module.OptionValueType.INT:
-                        optionsHTML += o.displayName + ' ' + getNumberHTML(m, o.name, o.displayName, true, o.defaultValue);
+                        optionsHTML += o.displayName + ' ' + getNumberHTML(m, o.name, true, o.defaultValue);
                         break;
                     case Module.OptionValueType.DOUBLE:
-                        optionsHTML += o.displayName + ' ' + getNumberHTML(m, o.name, o.displayName, false, o.defaultValue);
+                        optionsHTML += o.displayName + ' ' + getNumberHTML(m, o.name, false, o.defaultValue);
                         break;
                     case Module.OptionValueType.STRING:
-                        optionsHTML += o.displayName + ' ' + getTextboxHTML(m, o.name, o.displayName, o.defaultValue);
+                        optionsHTML += o.displayName + ' ' + getTextboxHTML(m, o.name, o.defaultValue);
                         break;
                     default:
                         optionsElement.innerHTML += optionsHTML + 'Error loading options</div>';
@@ -117,7 +117,7 @@ var loadOptions = function() {
             }
             else
             {
-                optionsHTML += o.displayName + ' ' + getDropdownHTML(m, o.name, o.displayName, o.acceptedValues, o.defaultValue);
+                optionsHTML += o.displayName + ' ' + getDropdownHTML(m, o.name, o.acceptedValues, o.defaultValue);
             }
 
             optionsHTML += '<br>';
@@ -126,7 +126,7 @@ var loadOptions = function() {
     }
 }
 
-var getSliderHTML = function(id, optionName, optionDisplayName, checked) {
+var getSliderHTML = function(id, optionName, checked) {
     var html = '<input type="checkbox" id="' + id + '_' + optionName + '" class="' + id + '_' + 'option" name="' + optionName + '"';
     if (checked)
         html += ' checked';
@@ -134,7 +134,7 @@ var getSliderHTML = function(id, optionName, optionDisplayName, checked) {
     return html;
 }
 
-var getNumberHTML = function(id, optionName, optionDisplayName, isInteger, defaultValue) {
+var getNumberHTML = function(id, optionName, isInteger, defaultValue) {
     var html = '<input type="number" id="' + id + '_' + optionName + '" class="' + id + '_' + 'option" name="' + optionName + '"';
     if (isInteger)
         html += ' step="1"';
@@ -142,11 +142,11 @@ var getNumberHTML = function(id, optionName, optionDisplayName, isInteger, defau
     return html;
 }
 
-var getTextboxHTML = function(id, optionName, optionDisplayName, defaultValue) {
+var getTextboxHTML = function(id, optionName, defaultValue) {
     return '<input type="text" id="' + id + '_' + optionName + '" class="' + id + '_' + 'option" name="' + optionName + '" value="' + defaultValue + '">';
 }
 
-var getDropdownHTML = function(id, optionName, optionDisplayName, dropdownOptions, defaultValue) {
+var getDropdownHTML = function(id, optionName, dropdownOptions, defaultValue) {
     var html = '<select id="' + id + '_' + optionName + '" class="' + id + '_' + 'option" name="' + optionName + '">';
     for (var i = 0; i < dropdownOptions.size(); i++) {
         const option = dropdownOptions.get(i);

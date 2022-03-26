@@ -243,7 +243,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
                     continue;
                 }
 
-                modEffects = DMFConvertEffects(chanRow);
+                modEffects = DMFConvertEffects(chanRow, state.channel[chan].persistentEffects);
                 DMFUpdateStatePre(dmf, state, modEffects);
                 DMFGetAdditionalEffects(dmf, state, chanRow, modEffects);
 
@@ -268,7 +268,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
                             chanState.notePlaying = false;
                             modEffects.erase(iter); // Consume the effect
                         }
-                    }   
+                    }
                 }
 
                 // Convert note - Note OFF
@@ -507,8 +507,16 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
 {
     m_Patterns.assign(m_NumberOfRowsInPatternMatrix, {});
 
-    unsigned initialTempo, initialSpeed; // Together these will set the initial BPM
-    DMFConvertInitialBPM(dmf, initialTempo, initialSpeed);
+    unsigned initialTempo, initialSpeed = 5; // Together these will set the initial BPM
+    const bool usingMinEffects = GetOptions()->GetEffects() == MODConversionOptions::EffectsEnum::Min;
+    if (usingMinEffects)
+    {
+        DMFConvertInitialBPM(dmf, initialTempo, initialSpeed);
+    }
+    else
+    {
+        initialTempo = GetMODTempo(dmf.GetBPM());
+    }
 
     if (m_UsingSetupPattern)
     {
@@ -523,12 +531,15 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
         SetChannelRow(0, 0, 0, tempoRow);
 
         // Set initial speed
-        ChannelRow speedRow;
-        speedRow.SampleNumber = 0;
-        speedRow.SamplePeriod = 0;
-        speedRow.EffectCode = EffectCode::SetSpeed;
-        speedRow.EffectValue = initialSpeed;
-        SetChannelRow(0, 0, 1, speedRow);
+        if (usingMinEffects)
+        {
+            ChannelRow speedRow;
+            speedRow.SampleNumber = 0;
+            speedRow.SamplePeriod = 0;
+            speedRow.EffectCode = EffectCode::SetSpeed;
+            speedRow.EffectValue = initialSpeed;
+            SetChannelRow(0, 0, 1, speedRow);
+        }
 
         // Set Pattern Break to start of song
         ChannelRow posJumpRow;
@@ -593,7 +604,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
                 state.global.channel = chan;
 
                 dmf::ChannelRow chanRow = dmf.GetChannelRow(chan, patMatRow, patRow);
-                
+
                 // If just arrived at jump destination:
                 if (patMatRow == state.global.jumpDestination && patRow == 0 && state.global.suspended)
                 {
@@ -612,7 +623,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
                 }
                 else
                 {
-                    modEffects = DMFConvertEffects(chanRow);
+                    modEffects = DMFConvertEffects(chanRow, state.channel[chan].persistentEffects);
                     DMFUpdateStatePre(dmf, state, modEffects);
                     DMFGetAdditionalEffects(dmf, state, chanRow, modEffects);
                     DMFConvertNote(state, chanRow, sampleMap, modEffects, modSampleId, period);
@@ -644,7 +655,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
     }
 }
 
-MOD::PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat)
+PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, PriorityEffectsMap& persistentEffects)
 {
     /*
      * Higher in list = higher priority effect:
@@ -659,7 +670,7 @@ MOD::PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat)
     const bool useMaxEffects = GetOptions()->GetEffects() == OptionsType::EffectsEnum::Max;
 
     using EffectPair = std::pair<EffectPriority, Effect>;
-    MOD::PriorityEffectsMap modEffects;
+    PriorityEffectsMap modEffects;
 
     // Convert DMF effects to MOD effects
     for (const auto& dmfEffect : pat.effect)
@@ -674,36 +685,54 @@ MOD::PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat)
         case dmf::EffectCode::Arp:
             {
                 if (!useMaxEffects) break;
-                effectPair.first = EffectPriorityUnsupportedEffect;
+                persistentEffects.erase(EffectPriorityArp);
+                if (dmfEffect.value <= 0)
+                    break;
+                effectPair.first = EffectPriorityArp;
                 effectPair.second = {EffectCode::Arp, (uint16_t)dmfEffect.value};
+                persistentEffects.insert(effectPair);
                 break;
             }
         case dmf::EffectCode::PortUp:
             {
                 if (!useMaxEffects) break;
-                effectPair.first = EffectPriorityOtherEffect;
+                persistentEffects.erase(EffectPriorityPortUp);
+                persistentEffects.erase(EffectPriorityPortDown);
+                if (dmfEffect.value <= 0)
+                    break;
+                effectPair.first = EffectPriorityPortUp;
                 effectPair.second = {EffectCode::PortUp, (uint16_t)dmfEffect.value};
+                persistentEffects.insert(effectPair);
                 break;
             }
         case dmf::EffectCode::PortDown:
             {
                 if (!useMaxEffects) break;
-                effectPair.first = EffectPriorityOtherEffect;
+                persistentEffects.erase(EffectPriorityPortDown);
+                persistentEffects.erase(EffectPriorityPortUp);
+                if (dmfEffect.value <= 0)
+                    break;
+                effectPair.first = EffectPriorityPortDown;
                 effectPair.second = {EffectCode::PortDown, (uint16_t)dmfEffect.value};
+                persistentEffects.insert(effectPair);
                 break;
             }
         case dmf::EffectCode::Port2Note:
             {
                 if (!useMaxEffects) break;
-                effectPair.first = EffectPriorityUnsupportedEffect;
+                effectPair.first = EffectPriorityPort2Note;
                 effectPair.second = {EffectCode::Port2Note, (uint16_t)dmfEffect.value};
                 break;
             }
         case dmf::EffectCode::Vibrato:
             {
                 if (!useMaxEffects) break;
-                effectPair.first = EffectPriorityOtherEffect;
+                persistentEffects.erase(EffectPriorityVibrato);
+                if (dmfEffect.value <= 0)
+                    break;
+                effectPair.first = EffectPriorityVibrato;
                 effectPair.second = {EffectCode::Vibrato, (uint16_t)dmfEffect.value};
+                persistentEffects.insert(effectPair);
                 break;
             }
         case dmf::EffectCode::NoteCut:
@@ -749,10 +778,15 @@ MOD::PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat)
         modEffects.insert(effectPair);
     }
 
+    for (auto& mapPair : persistentEffects)
+    {
+        modEffects.insert(mapPair);
+    }
+
     return modEffects;
 }
 
-MOD::PriorityEffectsMap MOD::DMFConvertEffects_NoiseChannel(const dmf::ChannelRow& pat)
+PriorityEffectsMap MOD::DMFConvertEffects_NoiseChannel(const dmf::ChannelRow& pat)
 {
     // Temporary method until the Noise channel is supported.
     // Only Pattern Break and Jump effects on the noise channel are converted for now.
@@ -777,7 +811,7 @@ MOD::PriorityEffectsMap MOD::DMFConvertEffects_NoiseChannel(const dmf::ChannelRo
     return modEffects;
 }
 
-void MOD::DMFUpdateStatePre(const DMF& dmf, State& state, const MOD::PriorityEffectsMap& modEffects)
+void MOD::DMFUpdateStatePre(const DMF& dmf, State& state, const PriorityEffectsMap& modEffects)
 {
     // This method updates Structure and Sample Change state info.
 
@@ -893,7 +927,7 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const dmf::Chann
             chanState.volume = newChanVol; // Update the state
         }
     }
-    
+
     // The sample change case is handled in DMFConvertNote.
 
     // If we're at the very end of the song, in the 1st channel, and using the setup pattern
@@ -928,7 +962,7 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const dmf::Chann
 }
 
 /* 
-void MOD::UpdateStatePost(const DMF& dmf, MODState& state, const MOD::PriorityEffectsMap& modEffects)
+void MOD::DMFUpdateStatePost(const DMF& dmf, MODState& state, const MOD::PriorityEffectsMap& modEffects)
 {
     // Update volume-related state info?
     MODChannelState& chanState = state.channel[state.global.channel];
@@ -936,7 +970,7 @@ void MOD::UpdateStatePost(const DMF& dmf, MODState& state, const MOD::PriorityEf
 }
 */
 
-Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::SampleMap& sampleMap, MOD::PriorityEffectsMap& modEffects, mod_sample_id_t& sampleId, uint16_t& period)
+Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::SampleMap& sampleMap, PriorityEffectsMap& modEffects, mod_sample_id_t& sampleId, uint16_t& period)
 {
     Note modNote(0, 0);
 
@@ -1053,7 +1087,7 @@ Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::Sa
     return modNote;
 }
 
-ChannelRow MOD::DMFApplyNoteAndEffect(State& state, const MOD::PriorityEffectsMap& modEffects, mod_sample_id_t modSampleId, uint16_t period)
+ChannelRow MOD::DMFApplyNoteAndEffect(State& state, const PriorityEffectsMap& modEffects, mod_sample_id_t modSampleId, uint16_t period)
 {
     ChannelRow modChannelRow;
 

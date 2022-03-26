@@ -56,6 +56,11 @@ enum EffectPriority
     EffectPrioritySampleChange, /* Can always be performed */
     EffectPriorityTempoChange,
     EffectPriorityVolumeChange,
+    EffectPriorityArp,
+    EffectPriorityPortUp,
+    EffectPriorityPortDown,
+    EffectPriorityPort2Note,
+    EffectPriorityVibrato,
     EffectPriorityOtherEffect,
     EffectPriorityUnsupportedEffect /* Must be the last enum value */
 };
@@ -185,6 +190,7 @@ struct Sample
     std::vector<int8_t> data;
 };
 
+using PriorityEffectsMap = std::multimap<mod::EffectPriority, mod::Effect>;
 
 // The current square wave duty cycle, note volume, and other information that the 
 //      tracker stores for each channel while playing a tracker file.
@@ -197,6 +203,7 @@ struct ChannelState
     int16_t volume;
     bool notePlaying;
     DMFSampleMapper::NoteRange noteRange;
+    PriorityEffectsMap persistentEffects;
 };
 
 struct State
@@ -240,6 +247,7 @@ struct State
             channel[i].volume = dmf::DMFVolumeMax; // The max volume for a channel (in DMF units)
             channel[i].notePlaying = false; // Whether a note is currently playing on a channel
             channel[i].noteRange = DMFSampleMapper::NoteRange::First; // Which MOD sample note range is currently being used
+            channel[i].persistentEffects = {};
 
             channelCopy[i] = channel[i];
             channelRows[i] = {};
@@ -346,7 +354,6 @@ public:
 
 private:
     using SampleMap = std::map<mod::dmf_sample_id_t, mod::DMFSampleMapper>;
-    using PriorityEffectsMap = std::multimap<mod::EffectPriority, mod::Effect>;
     using DMFSampleNoteRangeMap = std::map<mod::dmf_sample_id_t, std::pair<dmf::Note, dmf::Note>>;
 
     void ImportRaw(const std::string& filename) override;
@@ -359,18 +366,18 @@ private:
     void DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSampleNoteRangeMap& sampleIdLowestHighestNotesMap);
     void DMFSampleSplittingAndAssignment(SampleMap& sampleMap, const DMFSampleNoteRangeMap& sampleIdLowestHighestNotesMap);
     void DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap);
-    
+
     void DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap);
-    PriorityEffectsMap DMFConvertEffects(const dmf::ChannelRow& pat);
-    PriorityEffectsMap DMFConvertEffects_NoiseChannel(const dmf::ChannelRow& pat);
-    void DMFUpdateStatePre(const DMF& dmf, mod::State& state, const PriorityEffectsMap& modEffects);
-    void DMFGetAdditionalEffects(const DMF& dmf, mod::State& state, const dmf::ChannelRow& pat, PriorityEffectsMap& modEffects);
-    //void UpdateStatePost(const DMF& dmf, mod::State& state, const PriorityEffectsMap& modEffects);
-    mod::Note DMFConvertNote(mod::State& state, const dmf::ChannelRow& pat, const SampleMap& sampleMap, PriorityEffectsMap& modEffects, mod::mod_sample_id_t& sampleId, uint16_t& period);
-    mod::ChannelRow DMFApplyNoteAndEffect(mod::State& state, const PriorityEffectsMap& modEffects, mod::mod_sample_id_t modSampleId, uint16_t period);
-    
+    mod::PriorityEffectsMap DMFConvertEffects(const dmf::ChannelRow& pat, mod::PriorityEffectsMap& persistentEffects);
+    mod::PriorityEffectsMap DMFConvertEffects_NoiseChannel(const dmf::ChannelRow& pat);
+    void DMFUpdateStatePre(const DMF& dmf, mod::State& state, const mod::PriorityEffectsMap& modEffects);
+    void DMFGetAdditionalEffects(const DMF& dmf, mod::State& state, const dmf::ChannelRow& pat, mod::PriorityEffectsMap& modEffects);
+    //void DMFUpdateStatePost(const DMF& dmf, mod::State& state, const mod::PriorityEffectsMap& modEffects);
+    mod::Note DMFConvertNote(mod::State& state, const dmf::ChannelRow& pat, const SampleMap& sampleMap, mod::PriorityEffectsMap& modEffects, mod::mod_sample_id_t& sampleId, uint16_t& period);
+    mod::ChannelRow DMFApplyNoteAndEffect(mod::State& state, const mod::PriorityEffectsMap& modEffects, mod::mod_sample_id_t modSampleId, uint16_t period);
+
     void DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed);
-    
+
     // Export:
     void ExportModuleName(std::ofstream& fout) const;
     void ExportSampleInfo(std::ofstream& fout) const;

@@ -153,8 +153,8 @@ public:
     mod_sample_id_t InitSilence();
 
     Note GetMODNote(const dmf::Note& dmfNote, NoteRange& modNoteRange) const;
-    NoteRange GetMODNoteRange(dmf::Note dmfNote) const;
-    mod_sample_id_t GetMODSampleId(dmf::Note dmfNote) const;
+    NoteRange GetMODNoteRange(const dmf::Note& dmfNote) const;
+    mod_sample_id_t GetMODSampleId(const dmf::Note& dmfNote) const;
     mod_sample_id_t GetMODSampleId(NoteRange modNoteRange) const;
     unsigned GetMODSampleLength(NoteRange modNoteRange) const;
     NoteRange GetMODNoteRange(mod_sample_id_t modSampleId) const;

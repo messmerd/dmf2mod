@@ -930,6 +930,7 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const dmf::Chann
 
     // The sample change case is handled in DMFConvertNote.
 
+    // TODO: Handle this outside of main loop in DMFConvertPatterns() for better performance
     // If we're at the very end of the song, in the 1st channel, and using the setup pattern
     if (state.global.patternRow + 1 == dmf.GetModuleInfo().totalRowsPerPattern
         && state.global.order + 1 == dmf.GetModuleInfo().totalRowsInPatternMatrix
@@ -938,7 +939,7 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const dmf::Chann
     {
         // Check whether DMF pattern row has any Pos Jump effects that loop back to earlier in the song
         bool hasLoopback = false;
-        for (int chan = 0; chan < (int)dmf::GameBoyChannel::WAVE; chan++)
+        for (int chan = 0; chan <= (int)dmf::GameBoyChannel::NOISE; chan++)
         {
             dmf::ChannelRow tempChanRow = dmf.GetChannelRow(chan, state.global.order, state.global.patternRow);
             for (const auto& effect : tempChanRow.effect)
@@ -1472,11 +1473,11 @@ mod_sample_id_t DMFSampleMapper::Init(dmf_sample_id_t dmfSampleId, mod_sample_id
 
     assert(currentHighEnd > highestNote);
 
-    const int highEndSlack = dmf::GetNoteRange(highestNote, currentHighEnd);
-    if (highEndSlack > 12 && lowestNoteNearestC.octave >= 1) // 1 octave or more of slack at upper end, plus room to shift at bottom
-        possibleShiftAmount = 1; // Can shift MOD notes down 1 octave
-    if (highEndSlack > 24 && lowestNoteNearestC.octave >= 1) // 2 octaves of slack at upper end, plus room to shift at bottom
+    const int highEndSlack = dmf::GetNoteRange(highestNote, currentHighEnd) - 1;
+    if (highEndSlack > 24 && lowestNoteNearestC.octave >= 2) // 2 octaves of slack at upper end, plus room to shift at bottom
         possibleShiftAmount = 2; // Can shift MOD notes down 2 octaves
+    else if (highEndSlack > 12 && lowestNoteNearestC.octave >= 1) // 1 octave of slack at upper end, plus room to shift at bottom
+        possibleShiftAmount = 1; // Can shift MOD notes down 1 octave
 
     // Apply octave shift
     lowestPossibleRangeStart.octave -= possibleShiftAmount;
@@ -1537,7 +1538,7 @@ mod_sample_id_t DMFSampleMapper::Init(dmf_sample_id_t dmfSampleId, mod_sample_id
         m_ModIds[1] = startingId + 1;
         return startingId + 2; // Two MOD samples were needed
     }
-    
+
     return startingId + 1; // Only 1 MOD sample was needed
 }
 
@@ -1561,7 +1562,7 @@ Note DMFSampleMapper::GetMODNote(const dmf::Note& dmfNote, NoteRange& modNoteRan
     //      MOD sample the MOD note needs to use. The MOD note's octave
     //      and pitch should always be exactly what gets displayed in ProTracker.
 
-    Note modNote(dmf::NotePitch::C, 0);
+    Note modNote(dmf::NotePitch::C, 1);
     modNoteRange = NoteRange::First;
 
     if (m_SampleType == SampleType::Silence)
@@ -1581,7 +1582,7 @@ Note DMFSampleMapper::GetMODNote(const dmf::Note& dmfNote, NoteRange& modNoteRan
     return modNote;
 }
 
-DMFSampleMapper::NoteRange DMFSampleMapper::GetMODNoteRange(dmf::Note dmfNote) const
+DMFSampleMapper::NoteRange DMFSampleMapper::GetMODNoteRange(const dmf::Note& dmfNote) const
 {
     // Returns which MOD sample in the collection (1st, 2nd, or 3rd) should be used for the given DMF note
     // Assumes dmfNote is a valid note for this MOD sample collection
@@ -1613,7 +1614,7 @@ DMFSampleMapper::NoteRange DMFSampleMapper::GetMODNoteRange(dmf::Note dmfNote) c
     }
 }
 
-mod_sample_id_t DMFSampleMapper::GetMODSampleId(dmf::Note dmfNote) const
+mod_sample_id_t DMFSampleMapper::GetMODSampleId(const dmf::Note& dmfNote) const
 {
     // Returns the MOD sample id that would be used for the given DMF note
     // Assumes dmfNote is a valid note for this MOD sample collection

@@ -9,10 +9,10 @@ const app = document.getElementById('dmf2mod_app');
 const appFieldset = document.getElementById('dmf2mod_app_fieldset');
 const statusArea = document.getElementById('status_area');
 
-var appInitialised = false;
-var errorMessage = '';
-var warningMessage = '';
-var statusMessageIsError = true;
+let appInitialised = false;
+let errorMessage = '';
+let warningMessage = '';
+let statusMessageIsError = true;
 
 Module['onRuntimeInitialized'] = function () {
     console.log("Loaded dmf2mod");
@@ -26,7 +26,7 @@ Module['postRun'] =  function () {
     appInitialised = true;
 }
 
-var setStatusMessage = function() {
+function setStatusMessage() {
     statusArea.innerHTML = '';
     if (errorMessage.length > 0) {
         errorMessage = errorMessage.replace('\n', '<br>');
@@ -40,7 +40,7 @@ var setStatusMessage = function() {
     }
 }
 
-var disableControls = function(disable) {
+function disableControls(disable) {
     // TODO: This makes everything appear disabled/enabled, but clicking the Convert button
     //  multiple times before the convertFile function returns will still make it convert the
     //  file multiple times. It's as if the button is never disabled. I've tried for hours to 
@@ -48,23 +48,23 @@ var disableControls = function(disable) {
     appFieldset.disabled = disable;
 }
 
-var loadOptions = function() {
-    var optionsElement = document.getElementById('options');
+function loadOptions() {
+    let optionsElement = document.getElementById('options');
     optionsElement.innerHTML = '<label><b>Output type:</b></label>';
 
-    var availMods = Module.getAvailableModules();
+    const availMods = Module.getAvailableModules();
     if (availMods.size() == 0) {
         optionsElement.innerHTML += '<br>ERROR: No supported modules';
         return;
     }
 
     // Add available modules to convert to
-    for (var i = 0; i < availMods.size(); i++) {
+    for (let i = 0; i < availMods.size(); i++) {
         const mtype = availMods.get(i);
         const m = Module.getExtensionFromType(mtype);
 
         // Add radio button
-        var typesHTML = '<input type="radio" id="' + m + '" name="output_type" value="' + m + '"';
+        let typesHTML = '<input type="radio" id="' + m + '" name="output_type" value="' + m + '"';
         if (i == availMods.size() - 1)
             typesHTML += ' checked'; // Last radio button is checked
         typesHTML += ' onchange="onOutputTypeChange(this)"><label for="' + m + '">' + m + '</label>';
@@ -73,16 +73,16 @@ var loadOptions = function() {
     }
 
     // Add module-specific command-line options
-    for (var i = 0; i < availMods.size(); i++) {
+    for (let i = 0; i < availMods.size(); i++) {
         const mtype = availMods.get(i);
         const m = Module.getExtensionFromType(mtype);
-        var optionsHTML = '<div id="div_' + m + '" class="module_options" style="display:';
+        let optionsHTML = '<div id="div_' + m + '" class="module_options" style="display:';
         if (i == availMods.size() - 1)
             optionsHTML += ' block;">';
         else
             optionsHTML += ' none;">';
 
-        var optionDefs = Module.getOptionDefinitions(mtype);
+        const optionDefs = Module.getOptionDefinitions(mtype);
         if (optionDefs.size() == 0) {
             optionsElement.innerHTML += optionsHTML + '<br>(No options)</div>';
             continue;
@@ -90,7 +90,7 @@ var loadOptions = function() {
 
         optionsHTML += '<br><label><b>Options:</b></label><br>';
 
-        for (var j = 0; j < optionDefs.size(); j++) {
+        for (let j = 0; j < optionDefs.size(); j++) {
             const o = optionDefs.get(j);
 
             if (o.acceptedValues.size() == 0)
@@ -126,29 +126,29 @@ var loadOptions = function() {
     }
 }
 
-var getSliderHTML = function(id, optionName, checked) {
-    var html = '<input type="checkbox" id="' + id + '_' + optionName + '" class="' + id + '_' + 'option" name="' + optionName + '"';
+function getSliderHTML(id, optionName, checked) {
+    let html = '<input type="checkbox" id="' + id + '_' + optionName + '" class="' + id + '_' + 'option" name="' + optionName + '"';
     if (checked)
         html += ' checked';
     html += '>';
     return html;
 }
 
-var getNumberHTML = function(id, optionName, isInteger, defaultValue) {
-    var html = '<input type="number" id="' + id + '_' + optionName + '" class="' + id + '_' + 'option" name="' + optionName + '"';
+function getNumberHTML(id, optionName, isInteger, defaultValue) {
+    let html = '<input type="number" id="' + id + '_' + optionName + '" class="' + id + '_' + 'option" name="' + optionName + '"';
     if (isInteger)
         html += ' step="1"';
     html += ' value="' + defaultValue + '">';
     return html;
 }
 
-var getTextboxHTML = function(id, optionName, defaultValue) {
+function getTextboxHTML(id, optionName, defaultValue) {
     return '<input type="text" id="' + id + '_' + optionName + '" class="' + id + '_' + 'option" name="' + optionName + '" value="' + defaultValue + '">';
 }
 
-var getDropdownHTML = function(id, optionName, dropdownOptions, defaultValue) {
-    var html = '<select id="' + id + '_' + optionName + '" class="' + id + '_' + 'option" name="' + optionName + '">';
-    for (var i = 0; i < dropdownOptions.size(); i++) {
+function getDropdownHTML(id, optionName, dropdownOptions, defaultValue) {
+    let html = '<select id="' + id + '_' + optionName + '" class="' + id + '_' + 'option" name="' + optionName + '">';
+    for (let i = 0; i < dropdownOptions.size(); i++) {
         const option = dropdownOptions.get(i);
         html += '<option value="' + option + '"';
         if (option === defaultValue)
@@ -159,9 +159,9 @@ var getDropdownHTML = function(id, optionName, dropdownOptions, defaultValue) {
     return html;
 }
 
-var onOutputTypeChange = function(elem) {
+function onOutputTypeChange(elem) {
     // Hide command-line options for all modules
-    var elements = document.getElementsByClassName('module_options');
+    let elements = document.getElementsByClassName('module_options');
     for (const element of elements) {
         element.style.display = 'none';
     }
@@ -171,15 +171,15 @@ var onOutputTypeChange = function(elem) {
     document.getElementById(optionsId).style.display = 'block';
 }
 
-var getOutputType = function() {
+function getOutputType() {
     return document.querySelector('input[name="output_type"]:checked').value;
 }
 
-var getOptions = function() {
+function getOptions() {
     const currentOutputModule = getOutputType();
     const optionsForCurrentModule = document.getElementsByClassName(currentOutputModule  + '_option');
 
-    var vo = new Module.VectorOption();
+    let vo = new Module.VectorOption();
 
     const len = optionsForCurrentModule.length;
     for (let i = 0; i < len; i++) {
@@ -193,7 +193,7 @@ var getOptions = function() {
     return vo;
 }
 
-var importFileLocal = async function(externalFile, internalFilename) {
+async function importFileLocal(externalFile, internalFilename) {
     if (!appInitialised)
         return true;
 
@@ -209,7 +209,7 @@ var importFileLocal = async function(externalFile, internalFilename) {
 }
 
 // From: https://stackoverflow.com/questions/63959571/how-do-i-pass-a-file-blob-from-javascript-to-emscripten-webassembly-c
-var importFileOnline = async function(url, internalFilename) {
+async function importFileOnline(url, internalFilename) {
     if (!appInitialised)
         return true;
 
@@ -243,7 +243,7 @@ var importFileOnline = async function(url, internalFilename) {
     return false;
 }
 
-var convertFile = async function(event) {
+async function convertFile(event) {
     disableControls(true);
 
     errorMessage = '';
@@ -264,7 +264,7 @@ var convertFile = async function(event) {
     // Change file extension to get internal filename for output from dmf2mod
     const outputType = getOutputType();
     const options = getOptions();
-    var internalFilenameOutput = internalFilenameInput;
+    let internalFilenameOutput = internalFilenameInput;
     internalFilenameOutput = internalFilenameOutput.replace(/\.[^/.]+$/, '') + '.' + outputType;
     
     if (internalFilenameInput == internalFilenameOutput) {
@@ -275,7 +275,7 @@ var convertFile = async function(event) {
         return true;
     }
 
-    var resp = await importFileLocal(externalFile, internalFilenameInput);
+    let resp = await importFileLocal(externalFile, internalFilenameInput);
     if (resp) {
         disableControls(false);
         return true;
@@ -301,7 +301,7 @@ var convertFile = async function(event) {
     const byteArray = FS.readFile(internalFilenameOutput);
     const blob = new Blob([byteArray]);
 
-    var a = document.createElement('a');
+    let a = document.createElement('a');
     a.download = internalFilenameOutput;
     a.href = window.URL.createObjectURL(blob);
     a.click();

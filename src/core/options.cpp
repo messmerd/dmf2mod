@@ -429,7 +429,7 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
     bool argMightBeValue = false;
 
     // Main loop
-    for (unsigned i = 0; i < args.size(); i++)
+    for (int i = 0; i < static_cast<int>(args.size()); i++)
     {
         auto& arg = args[i];
         ModuleUtils::StringTrimBothEnds(arg);

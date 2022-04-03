@@ -855,12 +855,10 @@ double DMF::GetBPM() const
 
 int dmf::GetNoteRange(const Note& low, const Note& high)
 {
-    // Returns range in semitones. -1 if an error occurred
-    
-    if (!low.HasPitch() || !high.HasPitch())
-        return -1;
-    
-    return high.octave * 12 + high.pitch - low.octave * 12 - low.pitch;
+    // Returns range in semitones. Assumes notes have octave and pitch.
+    // Range is inclusive on both ends.
+
+    return (high.octave - low.octave) * 12 + (high.pitch - low.pitch) + 1;
 }
 
 bool Note::operator==(const Note& rhs) const

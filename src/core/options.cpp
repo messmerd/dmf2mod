@@ -59,8 +59,8 @@ void OptionDefinition::PrintHelp() const
         str1 += preferredSeparator + "[";
 
         unsigned i = 0;
-        const size_t total = GetAcceptedValues().size();
-        for (auto& [val, discard] : GetAcceptedValues())
+        const size_t total = GetAcceptedValuesOrdered().size();
+        for (const auto& val : GetAcceptedValuesOrdered())
         {
             switch (optionType)
             {

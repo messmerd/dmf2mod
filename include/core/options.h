@@ -54,7 +54,7 @@ public:
     // OptionDefinition without accepted values; The value can be anything allowed by the variant
     template<typename T, typename = std::enable_if_t<std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{})>>
     OptionDefinition(OptionType type, T id, const std::string& name, char shortName, const value_t& defaultValue, const std::string& description)
-        : m_OptionType(type), m_Id(static_cast<int>(id)), m_Name(name), m_ShortName(shortName), m_DefaultValue(defaultValue), m_AcceptedValues({}), m_Description(description)
+        : m_OptionType(type), m_Id(static_cast<int>(id)), m_Name(name), m_ShortName(shortName), m_DefaultValue(defaultValue), m_AcceptedValues({}), m_AcceptedValuesOrdered({}), m_Description(description)
     {
         for (char c : name)
         {
@@ -81,6 +81,7 @@ public:
         for (const U& val : acceptedValues)
         {
             const auto& insertedVal = m_AcceptedValues.emplace(value_t(val), i++).first->first;
+            m_AcceptedValuesOrdered.push_back(value_t(val));
 
             // Check for spaces (used when printing help)
             if (insertedVal.index() == OptionDefinition::STRING)
@@ -132,6 +133,7 @@ public:
     std::string GetDisplayName() const;
     value_t GetDefaultValue() const { return m_DefaultValue; }
     std::map<value_t, int> GetAcceptedValues() const { return m_AcceptedValues; }
+    std::vector<value_t> GetAcceptedValuesOrdered() const { return m_AcceptedValuesOrdered; }
     std::string GetDescription() const { return m_Description; }
 
     bool HasName() const { return !m_Name.empty(); }
@@ -158,6 +160,7 @@ protected:
     value_t m_DefaultValue;
 
     std::map<value_t, int> m_AcceptedValues;
+    std::vector<value_t> m_AcceptedValuesOrdered; // Stored in the order they were provided
     bool m_AcceptedValuesContainSpaces; // Whether double quotes are needed when printing
 
     std::string m_Description;

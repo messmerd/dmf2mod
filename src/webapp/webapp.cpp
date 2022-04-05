@@ -218,9 +218,8 @@ static OptionDefinitionWrapper WrapOptionDefinition(const OptionDefinition& defi
     ret.defaultValue = ModuleOptionUtils::ConvertToString(definition.GetDefaultValue());
 
     ret.acceptedValues.clear();
-    for (const auto& mapPair : definition.GetAcceptedValues())
+    for (const auto& val : definition.GetAcceptedValuesOrdered())
     {
-        const auto& val = mapPair.first;
         ret.acceptedValues.push_back(ModuleOptionUtils::ConvertToString(val));
     }
 

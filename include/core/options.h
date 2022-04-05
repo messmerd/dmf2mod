@@ -58,8 +58,8 @@ public:
     {
         for (char c : name)
         {
-            if (!std::isalpha(c))
-                assert(false && "In OptionDefinition constructor: name must only contain alphabetic characters or be empty.");
+            if (!std::isalnum(c))
+                assert(false && "In OptionDefinition constructor: name must only contain alphanumeric characters or be empty.");
         }
 
         assert((shortName == '\0' || std::isalpha(shortName)) && "In OptionDefinition constructor: shortName must be an alphabetic character or '\\0'.");
@@ -99,8 +99,8 @@ public:
 
         for (char c : name)
         {
-            if (!std::isalpha(c))
-                assert(false && "In OptionDefinition constructor: name must only contain alphabetic characters or be empty.");
+            if (!std::isalnum(c))
+                assert(false && "In OptionDefinition constructor: name must only contain alphanumeric characters or be empty.");
         }
 
         assert((shortName == '\0' || std::isalpha(shortName)) && "In OptionDefinition constructor: shortName must be an alphabetic character or '\\0'.");

@@ -21,6 +21,7 @@
 #include <string>
 #include <fstream>
 #include <map>
+#include <cmath>
 
 using namespace d2m;
 using namespace d2m::dmf;
@@ -319,7 +320,7 @@ void DMF::LoadVisualInfo(zstr::ifstream& fin)
 
 void DMF::LoadModuleInfo(zstr::ifstream& fin)
 {
-    m_ModuleInfo.timeBase = fin.get();
+    m_ModuleInfo.timeBase = fin.get() + 1;
     m_ModuleInfo.tickTime1 = fin.get();
     m_ModuleInfo.tickTime2 = fin.get();
     m_ModuleInfo.framesMode = fin.get();
@@ -839,7 +840,7 @@ void DMF::GetBPM(unsigned& numerator, unsigned& denominator) const
     
     // Experimentally determined equation for BPM:
     numerator = 15 * globalTick;
-    denominator = (m_ModuleInfo.timeBase + 1) * (m_ModuleInfo.tickTime1 + m_ModuleInfo.tickTime2);
+    denominator = GetTicksPerRowPair();
 
     if (denominator == 0)
         throw std::runtime_error("Tried to divide by zero when calculating BPM.\n");
@@ -851,6 +852,48 @@ double DMF::GetBPM() const
     unsigned numerator, denominator;
     GetBPM(numerator, denominator);
     return numerator * 1.0 / denominator;
+}
+
+int DMF::GetRowsUntilPortUpAutoOff(const dmf::Note& note, int portDownParam) const
+{
+    // TODO: Not implemented yet. Placeholder.
+
+    const unsigned ticksPerRowPair = GetTicksPerRowPair();
+    return GetRowsUntilPortUpAutoOff(ticksPerRowPair, note, portDownParam);
+}
+
+int DMF::GetRowsUntilPortUpAutoOff(unsigned ticksPerRowPair, const dmf::Note& note, int portDownParam)
+{
+    // TODO: Not implemented yet. Placeholder.
+
+    if (!note.HasPitch())
+        return 0;
+    return 20; // Temporary!
+}
+
+int DMF::GetRowsUntilPortDownAutoOff(const dmf::Note& note, int portDownParam) const
+{
+    // Experimentally determined. Not entirely accurate, but close enough.
+
+    const unsigned ticksPerRowPair = GetTicksPerRowPair();
+    return GetRowsUntilPortDownAutoOff(ticksPerRowPair, note, portDownParam);
+}
+
+int DMF::GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const dmf::Note& note, int portDownParam)
+{
+    // Experimentally determined. Not entirely accurate, but close enough.
+
+    if (!note.HasPitch())
+        return 0;
+
+    const unsigned semitones = std::max(0, (note.octave * 12) + note.pitch - 24);
+    const double val = std::pow(semitones, 1.59499); // Calculate this here so it doesn't need to be done twice
+
+    const double num = (45.3734 * 6 * 16) * (val + 4.05575);
+    const double den = (val + 63.8059) * (double)ticksPerRowPair * portDownParam;
+    assert(den != 0.0);
+
+    return num / den;
 }
 
 int dmf::GetNoteRange(const Note& low, const Note& high)

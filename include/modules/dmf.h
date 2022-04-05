@@ -322,6 +322,20 @@ public:
     void GetBPM(unsigned& numerator, unsigned& denominator) const;
     double GetBPM() const;
 
+    /*
+     * In spite of what the Deflemask manual says, portamento effects are automatically turned off if they
+     * stay on long enough without a new note being played. These methods help handle those edge cases.
+     */
+    int GetRowsUntilPortUpAutoOff(const dmf::Note& note, int portUpParam) const;
+    static int GetRowsUntilPortUpAutoOff(unsigned ticksPerRowPair, const dmf::Note& note, int portUpParam);
+    int GetRowsUntilPortDownAutoOff(const dmf::Note& note, int portDownParam) const;
+    static int GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const dmf::Note& note, int portDownParam);
+
+    inline unsigned GetTicksPerRowPair() const
+    {
+        return m_ModuleInfo.timeBase * (m_ModuleInfo.tickTime1 + m_ModuleInfo.tickTime2);
+    }
+
     const dmf::System& GetSystem() const { return m_System; }
     const dmf::VisualInfo& GetVisualInfo() const { return m_VisualInfo; }
     const dmf::ModuleInfo& GetModuleInfo() const { return m_ModuleInfo; }

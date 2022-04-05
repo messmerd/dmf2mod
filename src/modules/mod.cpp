@@ -36,9 +36,10 @@ using namespace d2m::mod;
 using MODOptionEnum = MODConversionOptions::OptionEnum;
 auto MODOptions = CreateOptionDefinitions(
 {
-    /* Type / Option id             / Full name / Short / Default / Possib. vals  / Description */
-    {OPTION, MODOptionEnum::Effects, "effects",  '\0',   "min",    {"min", "max"}, "The number of ProTracker effects to use"},
-    {OPTION, MODOptionEnum::AmigaFilter, "amiga",  '\0',   false, "Enables Amiga filter"}
+    /* Type / Option id                  / Full name / Short / Default / Possib. vals  / Description */
+    {OPTION, MODOptionEnum::Effects,     "effects",  '\0',   "min",    {"min", "max"}, "The number of ProTracker effects to use"},
+    {OPTION, MODOptionEnum::AmigaFilter, "amiga",    '\0',   false,                    "Enables the Amiga filter"},
+    {OPTION, MODOptionEnum::Port2Note,   "p2n",      '\0',   false,                    "Allow the usage of the portamento to note effect. May misbehave."}
 });
 
 // Register module info
@@ -69,12 +70,20 @@ static uint16_t proTrackerPeriodTable[5][12] = {
     {107,101, 95, 90, 85, 80, 76, 71, 67, 64, 60, 57}               /* C-4 to B-4 */
 };
 
-MODConversionOptions::MODConversionOptions() {}
+MODConversionOptions::MODConversionOptions()
+{
+
+}
 
 MODConversionOptions::EffectsEnum MODConversionOptions::GetEffects() const
 {
     // Warning: This is fast, but requires the EffectsEnum values to match the order that accepted values are given to the OptionDefinition
     return static_cast<EffectsEnum>(GetOption(OptionEnum::Effects).GetValueAsIndex());
+}
+
+bool MODConversionOptions::AllowPort2Note() const
+{
+    return GetOption(OptionEnum::Port2Note).GetValue<bool>();
 }
 
 MOD::MOD() {}
@@ -194,8 +203,8 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
 
     // The current square wave duty cycle, note volume, and other information that the 
     //      tracker stores for each channel while playing a tracker file.
-    State state;
-    state.Init();
+
+    State state{dmf.GetTicksPerRowPair()};
 
     // The main MODChannelState structs should NOT update during patterns or parts of 
     //   patterns that the Position Jump (Bxx) effect skips over. (Ignore loops)
@@ -243,7 +252,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
                     continue;
                 }
 
-                modEffects = DMFConvertEffects(chanRow, state.channel[chan].persistentEffects);
+                modEffects = DMFConvertEffects(chanRow, state);
                 DMFUpdateStatePre(dmf, state, modEffects);
                 DMFGetAdditionalEffects(dmf, state, chanRow, modEffects);
 
@@ -266,6 +275,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
                                 sampleMap[-1] = {};
 
                             chanState.notePlaying = false;
+                            chanState.currentNote = {};
                             modEffects.erase(iter); // Consume the effect
                         }
                     }
@@ -279,14 +289,15 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
                         sampleMap[-1] = {};
                     
                     chanState.notePlaying = false;
+                    chanState.currentNote = {};
                 }
 
                 // A note on the SQ1, SQ2, or WAVE channels:
                 if (chanRow.note.HasPitch() && chan != dmf::GameBoyChannel::NOISE)
                 {
-                    chanState.notePlaying = true;
-
                     const dmf::Note& dmfNote = chanRow.note;
+                    chanState.notePlaying = true;
+                    chanState.currentNote = dmfNote;
 
                     mod_sample_id_t sampleId = chan == dmf::GameBoyChannel::WAVE ? chanState.wavetable + 4 : chanState.dutyCycle;
 
@@ -563,8 +574,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
     // The current square wave duty cycle, note volume, and other information that the 
     //      tracker stores for each channel while playing a tracker file.
 
-    State state;
-    state.Init();
+    State state{dmf.GetTicksPerRowPair()};
 
     // The main MODChannelState structs should NOT update during patterns or parts of 
     //   patterns that the Position Jump (Bxx) effect skips over. (Ignore loops)
@@ -623,7 +633,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
                 }
                 else
                 {
-                    modEffects = DMFConvertEffects(chanRow, state.channel[chan].persistentEffects);
+                    modEffects = DMFConvertEffects(chanRow, state);
                     DMFUpdateStatePre(dmf, state, modEffects);
                     DMFGetAdditionalEffects(dmf, state, chanRow, modEffects);
                     DMFConvertNote(state, chanRow, sampleMap, modEffects, modSampleId, period);
@@ -655,127 +665,177 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
     }
 }
 
-PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, PriorityEffectsMap& persistentEffects)
+PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& state)
 {
-    /*
-     * Higher in list = higher priority effect:
-     * - Important song structure related effect such as Pattern break or Jump (Can always be performed)
-     * - Sample change (Can always be performed; Doesn't need MOD effect)
-     * - Tempo change (Not always usable)
-     * - Volume change (Not always usable)
-     * - Other effects
-     * - Unsupported effect
-     */
-
     const bool useMaxEffects = GetOptions()->GetEffects() == OptionsType::EffectsEnum::Max;
+    auto& channelState = state.channel[state.global.channel];
+    auto& persistentEffects = channelState.persistentEffects;
 
-    using EffectPair = std::pair<EffectPriority, Effect>;
     PriorityEffectsMap modEffects;
+
+    if (useMaxEffects)
+    {
+        if (!pat.note.IsEmpty())
+        {
+            // Portamento to note stops when next note is reached or on Note OFF
+            persistentEffects.erase(EffectPriorityPort2Note);
+        }
+
+        /*
+        * In spite of what the Deflemask manual says, portamento effects are automatically turned off if they
+        *  stay on long enough without a new note being played. I believe it's until C-2 is reached for port down.
+        * See order 0x14 in the "i wanna eat my ice cream alone (reprise)" demo song for an example of this behavior.
+        * In that order, for the F-2 note on SQ2, the port down effect turns off automatically if the next note
+        *   comes 21 or more rows later. The number of rows it takes depends on the note pitch, port effect parameter,
+        * and the tempo denominator (Speed A/B and the base time).
+        * See DMF::GetRowsUntilPortDownAutoOff(...) for an experimentally determined approximation for port down.
+        * TODO: Create approximation for port up.
+        */
+        if (channelState.rowsUntilPortAutoOff >= 0)
+        {
+            if (channelState.rowsUntilPortAutoOff == 0)
+            {
+                // Automatically turn port effects off
+                persistentEffects.erase(EffectPriorityPortUp);
+                persistentEffects.erase(EffectPriorityPortDown);
+                channelState.rowsUntilPortAutoOff = -1;
+            }
+            else if (pat.note.HasPitch())
+            {
+                // Reset the time until port effects automatically turn off
+                if (channelState.portDirection == ChannelState::PORT_UP)
+                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortUpAutoOff(state.global.ticksPerRowPair, pat.note, channelState.portParam);
+                else
+                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortDownAutoOff(state.global.ticksPerRowPair, pat.note, channelState.portParam);
+            }
+            else
+            {
+                channelState.rowsUntilPortAutoOff--;
+            }
+        }
+    }
 
     // Convert DMF effects to MOD effects
     for (const auto& dmfEffect : pat.effect)
     {
-        EffectPair effectPair {EffectPriorityUnsupportedEffect, {EffectCode::NoEffectCode, EffectCode::NoEffectVal}};
-
         if (dmfEffect.code == dmf::EffectCode::NoEffect)
             continue;
 
         switch (dmf::EffectCode(dmfEffect.code))
         {
-        case dmf::EffectCode::Arp:
+            case dmf::EffectCode::Arp:
             {
                 if (!useMaxEffects) break;
                 persistentEffects.erase(EffectPriorityArp);
                 if (dmfEffect.value <= 0)
                     break;
-                effectPair.first = EffectPriorityArp;
-                effectPair.second = {EffectCode::Arp, (uint16_t)dmfEffect.value};
-                persistentEffects.insert(effectPair);
+                persistentEffects.emplace(EffectPriorityArp, Effect{EffectCode::Arp, (uint16_t)dmfEffect.value});
                 break;
             }
-        case dmf::EffectCode::PortUp:
+            case dmf::EffectCode::PortUp:
             {
                 if (!useMaxEffects) break;
                 persistentEffects.erase(EffectPriorityPortUp);
                 persistentEffects.erase(EffectPriorityPortDown);
+                persistentEffects.erase(EffectPriorityPort2Note);
                 if (dmfEffect.value <= 0)
+                {
+                    channelState.rowsUntilPortAutoOff = -1;
                     break;
-                effectPair.first = EffectPriorityPortUp;
-                effectPair.second = {EffectCode::PortUp, (uint16_t)dmfEffect.value};
-                persistentEffects.insert(effectPair);
+                }
+                persistentEffects.emplace(EffectPriorityPortUp, Effect{EffectCode::PortUp, (uint16_t)dmfEffect.value});
+                if (channelState.rowsUntilPortAutoOff == -1)
+                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortUpAutoOff(state.global.ticksPerRowPair, pat.note.HasPitch() ? pat.note : channelState.currentNote, dmfEffect.value);
+                channelState.portDirection = ChannelState::PORT_UP;
+                channelState.portParam = dmfEffect.value;
                 break;
             }
-        case dmf::EffectCode::PortDown:
+            case dmf::EffectCode::PortDown:
             {
                 if (!useMaxEffects) break;
-                persistentEffects.erase(EffectPriorityPortDown);
                 persistentEffects.erase(EffectPriorityPortUp);
-                if (dmfEffect.value <= 0)
+                persistentEffects.erase(EffectPriorityPortDown);
+                persistentEffects.erase(EffectPriorityPort2Note);
+                if (dmfEffect.value <= 0) // TODO: What is the behavior if there are two DMF port effects - one up and the other down?
+                {
+                    channelState.rowsUntilPortAutoOff = -1;
                     break;
-                effectPair.first = EffectPriorityPortDown;
-                effectPair.second = {EffectCode::PortDown, (uint16_t)dmfEffect.value};
-                persistentEffects.insert(effectPair);
+                }
+                persistentEffects.emplace(EffectPriorityPortDown, Effect{EffectCode::PortDown, (uint16_t)dmfEffect.value});
+                if (channelState.rowsUntilPortAutoOff == -1)
+                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortDownAutoOff(state.global.ticksPerRowPair, pat.note.HasPitch() ? pat.note : channelState.currentNote, dmfEffect.value);
+                channelState.portDirection = ChannelState::PORT_DOWN;
+                channelState.portParam = dmfEffect.value;
                 break;
             }
-        case dmf::EffectCode::Port2Note:
+            case dmf::EffectCode::Port2Note:
             {
-                if (!useMaxEffects) break;
-                effectPair.first = EffectPriorityPort2Note;
-                effectPair.second = {EffectCode::Port2Note, (uint16_t)dmfEffect.value};
+                if (!useMaxEffects || !GetOptions()->AllowPort2Note()) break;
+                persistentEffects.erase(EffectPriorityPortUp);
+                persistentEffects.erase(EffectPriorityPortDown);
+                persistentEffects.erase(EffectPriorityPort2Note);
+                if (dmfEffect.value <= 0)
+                {
+                    channelState.rowsUntilPortAutoOff = -1;
+                    break;
+                }
+                persistentEffects.emplace(EffectPriorityPort2Note, Effect{EffectCode::Port2Note, (uint16_t)dmfEffect.value});
                 break;
             }
-        case dmf::EffectCode::Vibrato:
+            case dmf::EffectCode::Vibrato:
             {
                 if (!useMaxEffects) break;
                 persistentEffects.erase(EffectPriorityVibrato);
                 if (dmfEffect.value <= 0)
                     break;
-                effectPair.first = EffectPriorityVibrato;
-                effectPair.second = {EffectCode::Vibrato, (uint16_t)dmfEffect.value};
-                persistentEffects.insert(effectPair);
+                persistentEffects.emplace(EffectPriorityVibrato, Effect{EffectCode::Vibrato, (uint16_t)dmfEffect.value});
                 break;
             }
-        case dmf::EffectCode::NoteCut:
+            case dmf::EffectCode::Tremolo:
+            {
+                if (!useMaxEffects) break;
+                persistentEffects.erase(EffectPriorityTremolo);
+                if (dmfEffect.value <= 0)
+                    break;
+                persistentEffects.emplace(EffectPriorityTremolo, Effect{EffectCode::Tremolo, (uint16_t)dmfEffect.value});
+                break;
+            }
+            case dmf::EffectCode::NoteCut:
             if (dmfEffect.value == 0)
             {
-                effectPair.first = EffectPrioritySampleChange; // Can be implemented as silent sample
-                effectPair.second = {EffectCode::CutSample, 0};
+                // Can be implemented as silent sample
+                modEffects.emplace(EffectPrioritySampleChange, Effect{EffectCode::CutSample, 0});
             }
             break;
-        case dmf::EffectCode::PatBreak:
+            case dmf::EffectCode::PatBreak:
             if (dmfEffect.value == 0)
             {
-                effectPair.first = EffectPriorityStructureRelated; // Only D00 is supported at the moment
-                effectPair.second = {EffectCode::PatBreak, 0};
+                // Only D00 is supported at the moment
+                modEffects.emplace(EffectPriorityStructureRelated, Effect{EffectCode::PatBreak, 0});
             }
             break;
-        case dmf::EffectCode::PosJump:
-        {
-            effectPair.first = EffectPriorityStructureRelated;
-            const int dest = dmfEffect.value + (int)m_UsingSetupPattern; // Into MOD order value, not DMF
-            effectPair.second = {EffectCode::PosJump, (uint16_t)dest};
-            break;
-        }
+            case dmf::EffectCode::PosJump:
+            {
+                const int dest = dmfEffect.value + (int)m_UsingSetupPattern; // Into MOD order value, not DMF
+                modEffects.emplace(EffectPriorityStructureRelated, Effect{EffectCode::PosJump, (uint16_t)dest});
+                break;
+            }
 
-        default:
-            break; // Unsupported. priority remains UnsupportedEffect
+            default:
+                break; // Unsupported effect
         }
 
         switch (dmf::GameBoyEffectCode(dmfEffect.code))
         {
-        case dmf::GameBoyEffectCode::SetDutyCycle:
-            effectPair.first = EffectPrioritySampleChange;
-            effectPair.second = {EffectCode::DutyCycleChange, (uint16_t)dmfEffect.value};
-            break;
-        case dmf::GameBoyEffectCode::SetWave:
-            effectPair.first = EffectPrioritySampleChange;
-            effectPair.second = {EffectCode::WavetableChange, (uint16_t)(dmfEffect.value)};
-            break;
-        default:
-            break; // Unsupported. priority remains UnsupportedEffect
+            case dmf::GameBoyEffectCode::SetDutyCycle:
+                modEffects.emplace(EffectPrioritySampleChange, Effect{EffectCode::DutyCycleChange, (uint16_t)dmfEffect.value});
+                break;
+            case dmf::GameBoyEffectCode::SetWave:
+                modEffects.emplace(EffectPrioritySampleChange, Effect{EffectCode::WavetableChange, (uint16_t)(dmfEffect.value)});
+                break;
+            default:
+                break; // Unsupported effect
         }
-
-        modEffects.insert(effectPair);
     }
 
     for (auto& mapPair : persistentEffects)
@@ -996,6 +1056,7 @@ Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::Sa
                 sampleId = sampleMap.at(-1).GetFirstMODSampleId(); // Use silent sample
                 period = 0; // Don't need a note for the silent sample to work
                 chanState.notePlaying = false;
+                chanState.currentNote = {};
                 modEffects.erase(iter); // Consume the effect
                 return modNote;
             }
@@ -1018,6 +1079,7 @@ Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::Sa
         sampleId = sampleMap.at(-1).GetFirstMODSampleId(); // Use silent sample
         period = 0; // Don't need a note for the silent sample to work
         chanState.notePlaying = false;
+        chanState.currentNote = {};
         return modNote;
     }
 
@@ -1085,6 +1147,7 @@ Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::Sa
     }
 
     chanState.notePlaying = true;
+    chanState.currentNote = pat.note;
     return modNote;
 }
 

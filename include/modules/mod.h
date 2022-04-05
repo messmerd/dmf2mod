@@ -55,12 +55,16 @@ enum EffectPriority
     EffectPriorityStructureRelated, /* Can always be performed */
     EffectPrioritySampleChange, /* Can always be performed */
     EffectPriorityTempoChange,
-    EffectPriorityVolumeChange,
-    EffectPriorityArp,
     EffectPriorityPortUp,
     EffectPriorityPortDown,
+    //EffectPriorityPort2NoteVolSlide,
     EffectPriorityPort2Note,
+    EffectPriorityVolumeChange,
+    //EffectPriorityVolSlide,
+    EffectPriorityArp,
+    //EffectPriorityVibratoVolSlide,
     EffectPriorityVibrato,
+    EffectPriorityTremolo,
     EffectPriorityOtherEffect,
     EffectPriorityUnsupportedEffect /* Must be the last enum value */
 };
@@ -196,6 +200,11 @@ using PriorityEffectsMap = std::multimap<mod::EffectPriority, mod::Effect>;
 //      tracker stores for each channel while playing a tracker file.
 struct ChannelState
 {
+    enum PORTDIR
+    {
+        PORT_UP, PORT_DOWN
+    };
+
     int channel;
     uint16_t dutyCycle;
     uint16_t wavetable;
@@ -204,6 +213,10 @@ struct ChannelState
     bool notePlaying;
     DMFSampleMapper::NoteRange noteRange;
     PriorityEffectsMap persistentEffects;
+    int rowsUntilPortAutoOff;
+    PORTDIR portDirection;
+    uint16_t portParam;
+    dmf::Note currentNote;
 };
 
 struct State
@@ -213,6 +226,7 @@ struct State
         bool suspended;      // true == currently in part that a Position Jump skips over
         int jumpDestination; // DMF pattern matrix row where you are jumping to. Not a loop.
         Effect channelIndependentEffect;
+        unsigned ticksPerRowPair; // DMF's time_base * (speed_a + speed_b)
         unsigned channel;    // The current channel in DMF or MOD
         unsigned order;      // The current pattern matrix row in DMF
         unsigned patternRow; // The current pattern row in DMF?
@@ -225,16 +239,22 @@ struct State
 
     State()
     {
-        Init();
+        Init(6);
     }
 
-    void Init()
+    State(unsigned ticksPerRowPair)
+    {
+        Init(ticksPerRowPair);
+    }
+
+    void Init(unsigned ticksPerRowPair)
     {
         global.suspended = false;
-        global.jumpDestination = -1; 
+        global.jumpDestination = -1;
         global.channelIndependentEffect = {EffectCode::NoEffectCode, EffectCode::NoEffectVal};
-        
-        global.channel = 0;         
+        global.ticksPerRowPair = ticksPerRowPair;
+
+        global.channel = 0;
         global.order = 0;
         global.patternRow = 0;
 
@@ -248,6 +268,10 @@ struct State
             channel[i].notePlaying = false; // Whether a note is currently playing on a channel
             channel[i].noteRange = DMFSampleMapper::NoteRange::First; // Which MOD sample note range is currently being used
             channel[i].persistentEffects = {};
+            channel[i].rowsUntilPortAutoOff = -1; // -1 = port not on; 0 = need to turn port off; >0 = rows until port auto off
+            channel[i].portDirection = ChannelState::PORT_UP;
+            channel[i].portParam = 0;
+            channel[i].currentNote = {};
 
             channelCopy[i] = channel[i];
             channelRows[i] = {};
@@ -275,7 +299,6 @@ struct State
         global.suspended = false;
         global.jumpDestination = -1;
     }
-
 };
 
 } // namespace mod
@@ -300,7 +323,7 @@ public:
 
     enum class OptionEnum
     {
-        Effects, AmigaFilter
+        Effects, AmigaFilter, Port2Note
     };
 
     enum class EffectsEnum
@@ -309,6 +332,7 @@ public:
     };
 
     inline EffectsEnum GetEffects() const;
+    inline bool AllowPort2Note() const;
 
 private:
 
@@ -368,7 +392,7 @@ private:
     void DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap);
 
     void DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap);
-    mod::PriorityEffectsMap DMFConvertEffects(const dmf::ChannelRow& pat, mod::PriorityEffectsMap& persistentEffects);
+    mod::PriorityEffectsMap DMFConvertEffects(const dmf::ChannelRow& pat, mod::State& state);
     mod::PriorityEffectsMap DMFConvertEffects_NoiseChannel(const dmf::ChannelRow& pat);
     void DMFUpdateStatePre(const DMF& dmf, mod::State& state, const mod::PriorityEffectsMap& modEffects);
     void DMFGetAdditionalEffects(const DMF& dmf, mod::State& state, const dmf::ChannelRow& pat, mod::PriorityEffectsMap& modEffects);

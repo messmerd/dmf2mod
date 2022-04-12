@@ -126,6 +126,7 @@ target_include_directories(dmf2mod PRIVATE
         ${PROJECT_SOURCE_DIR}/extern
         ${PROJECT_SOURCE_DIR}/extern/zstr
         ${PROJECT_SOURCE_DIR}/extern/zlib
+        ${PROJECT_SOURCE_DIR}/extern/gcem/include
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/include/core
         ${PROJECT_SOURCE_DIR}/include/modules

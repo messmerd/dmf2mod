@@ -16,6 +16,9 @@
 #include <zlib.h>
 #include <zconf.h>
 
+// Compile time math
+#include <gcem.hpp>
+
 #include <iostream>
 #include <iomanip>
 #include <string>
@@ -54,6 +57,22 @@ static const std::map<DMF::SystemType, System> DMFSystems =
 };
 
 const System& DMF::Systems(DMF::SystemType systemType) { return DMFSystems.at(systemType); }
+
+static constexpr auto G_PeriodTable = []() constexpr
+{
+    std::array<double, 12 * 9> ret{};
+    for (int i = 0; i < 12 * 9; ++i)
+    {
+        ret[i] = 262144.0 / (27.5 * gcem::pow(2, (i + 3) / 12.0));
+    }
+    return ret;
+}();
+
+static constexpr double GetPeriod(unsigned note, unsigned octave)
+{
+    assert(note < 12 && octave < 9);
+    return G_PeriodTable[note + 12*octave];
+}
 
 DMF::DMF()
 {
@@ -856,54 +875,38 @@ double DMF::GetBPM() const
 
 int DMF::GetRowsUntilPortUpAutoOff(const dmf::Note& note, int portUpParam) const
 {
-    // Experimentally determined. Not entirely accurate, but close enough.
-
     const unsigned ticksPerRowPair = GetTicksPerRowPair();
     return GetRowsUntilPortUpAutoOff(ticksPerRowPair, note, portUpParam);
 }
 
 int DMF::GetRowsUntilPortUpAutoOff(unsigned ticksPerRowPair, const dmf::Note& note, int portUpParam)
 {
-    // Experimentally determined. Not entirely accurate, but close enough.
-    // See: https://www.desmos.com/calculator/ze6o8dx0n9
-
+    // Note: This is not always 100% accurate, probably due to differences in rounding/truncating at intermediate steps of the calculation, but it's very close.
+    // TODO: Need to take into account odd/even rows rather than using the average ticks per row
     if (!note.HasPitch())
         return 0;
 
-    const unsigned semitones = std::max(0, (note.octave * 12) + note.pitch - 24);
-    const double val = std::pow(semitones, 1.20893); // Calculate this here so it doesn't need to be done twice
+    constexpr double highestPeriod = GetPeriod(0, 8); // C-8
 
-    const double num = (-6.59578 * 6 * 16) * (val - 139.635);
-    const double den = (val + 30.4295) * (double)ticksPerRowPair * portUpParam;
-    assert(den != 0.0);
-
-    return std::max(static_cast<int>(num / den), 1);
+    // Not sure why the 0.75 is needed
+    return static_cast<int>(std::max(std::ceil(0.75 * (highestPeriod - GetPeriod(note.pitch, note.octave)) / ((ticksPerRowPair / 2.0) * portUpParam * -1.0)), 1.0));
 }
 
 int DMF::GetRowsUntilPortDownAutoOff(const dmf::Note& note, int portDownParam) const
 {
-    // Experimentally determined. Not entirely accurate, but close enough.
-
     const unsigned ticksPerRowPair = GetTicksPerRowPair();
     return GetRowsUntilPortDownAutoOff(ticksPerRowPair, note, portDownParam);
 }
 
 int DMF::GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const dmf::Note& note, int portDownParam)
 {
-    // Experimentally determined. Not entirely accurate, but close enough.
-    // See: https://www.desmos.com/calculator/v1btyyyabr
-
+    // Note: This is not always 100% accurate, probably due to differences in rounding/truncating at intermediate steps of the calculation, but it's very close.
+    // TODO: Need to take into account odd/even rows rather than using the average ticks per row
     if (!note.HasPitch())
         return 0;
 
-    const unsigned semitones = std::max(0, (note.octave * 12) + note.pitch - 24);
-    const double val = std::pow(semitones, 1.59499); // Calculate this here so it doesn't need to be done twice
-
-    const double num = (45.3734 * 6 * 16) * (val + 4.05575);
-    const double den = (val + 63.8059) * (double)ticksPerRowPair * portDownParam;
-    assert(den != 0.0);
-
-    return std::max(static_cast<int>(num / den), 1);
+    constexpr double lowestPeriod = GetPeriod(0, 2); // C-2
+    return static_cast<int>(std::max(std::ceil((lowestPeriod - GetPeriod(note.pitch, note.octave)) / ((ticksPerRowPair / 2.0) * portDownParam)), 1.0));
 }
 
 int dmf::GetNoteRange(const Note& low, const Note& high)

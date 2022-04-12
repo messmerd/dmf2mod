@@ -854,21 +854,30 @@ double DMF::GetBPM() const
     return numerator * 1.0 / denominator;
 }
 
-int DMF::GetRowsUntilPortUpAutoOff(const dmf::Note& note, int portDownParam) const
+int DMF::GetRowsUntilPortUpAutoOff(const dmf::Note& note, int portUpParam) const
 {
-    // TODO: Not implemented yet. Placeholder.
+    // Experimentally determined. Not entirely accurate, but close enough.
 
     const unsigned ticksPerRowPair = GetTicksPerRowPair();
-    return GetRowsUntilPortUpAutoOff(ticksPerRowPair, note, portDownParam);
+    return GetRowsUntilPortUpAutoOff(ticksPerRowPair, note, portUpParam);
 }
 
-int DMF::GetRowsUntilPortUpAutoOff(unsigned ticksPerRowPair, const dmf::Note& note, int portDownParam)
+int DMF::GetRowsUntilPortUpAutoOff(unsigned ticksPerRowPair, const dmf::Note& note, int portUpParam)
 {
-    // TODO: Not implemented yet. Placeholder.
+    // Experimentally determined. Not entirely accurate, but close enough.
+    // See: https://www.desmos.com/calculator/ze6o8dx0n9
 
     if (!note.HasPitch())
         return 0;
-    return 20; // Temporary!
+
+    const unsigned semitones = std::max(0, (note.octave * 12) + note.pitch - 24);
+    const double val = std::pow(semitones, 1.20893); // Calculate this here so it doesn't need to be done twice
+
+    const double num = (-6.59578 * 6 * 16) * (val - 139.635);
+    const double den = (val + 30.4295) * (double)ticksPerRowPair * portUpParam;
+    assert(den != 0.0);
+
+    return std::max(static_cast<int>(num / den), 1);
 }
 
 int DMF::GetRowsUntilPortDownAutoOff(const dmf::Note& note, int portDownParam) const
@@ -882,6 +891,7 @@ int DMF::GetRowsUntilPortDownAutoOff(const dmf::Note& note, int portDownParam) c
 int DMF::GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const dmf::Note& note, int portDownParam)
 {
     // Experimentally determined. Not entirely accurate, but close enough.
+    // See: https://www.desmos.com/calculator/v1btyyyabr
 
     if (!note.HasPitch())
         return 0;
@@ -893,7 +903,7 @@ int DMF::GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const dmf::Note& 
     const double den = (val + 63.8059) * (double)ticksPerRowPair * portDownParam;
     assert(den != 0.0);
 
-    return num / den;
+    return std::max(static_cast<int>(num / den), 1);
 }
 
 int dmf::GetNoteRange(const Note& low, const Note& high)

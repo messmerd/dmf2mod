@@ -25,6 +25,7 @@
 #include <fstream>
 #include <map>
 #include <cmath>
+#include <array>
 
 using namespace d2m;
 using namespace d2m::dmf;

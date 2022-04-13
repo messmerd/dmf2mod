@@ -137,7 +137,7 @@ struct System
     {
         Error=0, YMU759, Genesis, Genesis_CH3, SMS, GameBoy,
         PCEngine, NES, C64_SID_8580, C64_SID_6581, Arcade,
-        NeoGeo, NeoGeo_CH2, SMS_OPLL, NES_VRC7
+        NeoGeo, NeoGeo_CH2, SMS_OPLL, NES_VRC7, NES_FDS
     };
 
     Type type;
@@ -172,7 +172,7 @@ struct FMOps
     // TODO: Use unions depending on DMF version?
     uint8_t am;
     uint8_t ar;     // Attack
-    uint8_t dr;     // Delay?
+    uint8_t dr;     // Decay?
     uint8_t mult;
     uint8_t rr;     // Release
     uint8_t sl;     // Sustain

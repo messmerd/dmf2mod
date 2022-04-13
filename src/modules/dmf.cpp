@@ -35,7 +35,7 @@ using namespace d2m::dmf;
 MODULE_DEFINE(DMF, DMFConversionOptions, ModuleType::DMF, "Deflemask", "dmf", {})
 
 #define DMF_FILE_VERSION_MIN 17 // DMF files as old as version 17 (0x11) are supported
-#define DMF_FILE_VERSION_MAX 25 // DMF files as new as version 25 (0x19) are supported
+#define DMF_FILE_VERSION_MAX 26 // DMF files as new as version 26 (0x1a) are supported
 
 // Information about all the systems Deflemask supports
 static const std::map<DMF::SystemType, System> DMFSystems =
@@ -54,7 +54,8 @@ static const std::map<DMF::SystemType, System> DMFSystems =
     {DMF::SystemType::C64_SID_6581, System(DMF::SystemType::C64_SID_6581, 0x47, "C64 (SID 6581)", 3)},
     {DMF::SystemType::Arcade, System(DMF::SystemType::Arcade, 0x08, "Arcade", 13)},
     {DMF::SystemType::NeoGeo, System(DMF::SystemType::NeoGeo, 0x09, "Neo Geo", 13)},
-    {DMF::SystemType::NeoGeo_CH2, System(DMF::SystemType::NeoGeo_CH2, 0x49, "Neo Geo (Ext. CH2)", 16)}
+    {DMF::SystemType::NeoGeo_CH2, System(DMF::SystemType::NeoGeo_CH2, 0x49, "Neo Geo (Ext. CH2)", 16)},
+    {DMF::SystemType::NES_FDS, System(DMF::SystemType::NES_FDS, 0x86, "NES + FDS", 6)}
 };
 
 const System& DMF::Systems(DMF::SystemType systemType) { return DMFSystems.at(systemType); }
@@ -263,7 +264,7 @@ void DMF::ImportRaw(const std::string& filename)
     ///////////////// MODULE INFORMATION
     LoadModuleInfo(fin);
     if (verbose)
-        std::cout << "Loaded module.\n";
+        std::cout << "Loaded module information.\n";
 
     ///////////////// PATTERN MATRIX VALUES
     LoadPatternMatrixValues(fin);
@@ -288,7 +289,7 @@ void DMF::ImportRaw(const std::string& filename)
     ///////////////// PCM SAMPLES DATA
     LoadPCMSamplesData(fin);
     if (verbose)
-        std::cout << "Loaded PCM Samples.\n";
+        std::cout << "Loaded PCM samples.\n";
 
     if (verbose)
         std::cout << "Done importing DMF file.\n\n";
@@ -675,6 +676,16 @@ void DMF::LoadWavetablesData(zstr::ifstream& fin)
     m_WavetableSizes = new uint32_t[m_TotalWavetables];
     m_WavetableValues = new uint32_t*[m_TotalWavetables];
 
+    uint32_t dataMask = 0xFFFFFFFF;
+    if (GetSystem().type == DMF::SystemType::GameBoy)
+    {
+        dataMask = 0xF;
+    }
+    else if (GetSystem().type == DMF::SystemType::NES_FDS)
+    {
+        dataMask = 0x3F;
+    }
+
     for (int i = 0; i < m_TotalWavetables; i++)
     {
         m_WavetableSizes[i] = fin.get();
@@ -690,6 +701,14 @@ void DMF::LoadWavetablesData(zstr::ifstream& fin)
             m_WavetableValues[i][j] |= fin.get() << 8;
             m_WavetableValues[i][j] |= fin.get() << 16;
             m_WavetableValues[i][j] |= fin.get() << 24;
+
+            m_WavetableValues[i][j] &= dataMask;
+
+            // Bug fix for DMF version 25 (0x19): Transform 4-bit FDS wavetables into 6-bit
+            if (GetSystem().type == DMF::SystemType::NES_FDS && m_DMFFileVersion <= 25)
+            {
+                m_WavetableValues[i][j] <<= 2; // x4
+            }
         }
     }
 }

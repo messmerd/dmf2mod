@@ -106,7 +106,7 @@ void DMF::CleanUp()
         {
             for (int i = 0; i < m_PatternMatrixMaxValues[channel] + 1; i++)
             {
-                delete m_PatternValues[channel][i];
+                delete[] m_PatternValues[channel][i];
                 m_PatternValues[channel][i] = nullptr;
             }
             delete[] m_PatternValues[channel];

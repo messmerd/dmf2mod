@@ -2,7 +2,7 @@
     mod.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Declares a ModuleInterface-derived class for ProTracker's 
+    Declares a ModuleInterface-derived class for ProTracker's
     MOD files.
 */
 
@@ -318,12 +318,12 @@ private:
 class MODConversionOptions : public ConversionOptionsInterface<MODConversionOptions>
 {
 public:
-    MODConversionOptions();
+    MODConversionOptions() = default;
     ~MODConversionOptions() = default;
 
     enum class OptionEnum
     {
-        Effects, AmigaFilter, Port2Note
+        AmigaFilter, Arpeggio, Portamento, Port2Note, Tremolo, Vibrato
     };
 
     enum class EffectsEnum
@@ -331,8 +331,14 @@ public:
         Min, Max
     };
 
-    inline EffectsEnum GetEffects() const;
-    inline bool AllowPort2Note() const;
+    inline bool UseAmigaFilter() const { return GetOption(OptionEnum::AmigaFilter).GetValue<bool>(); }
+    inline bool AllowArpeggio() const { return GetOption(OptionEnum::Arpeggio).GetValue<bool>(); }
+    inline bool AllowPortamento() const { return GetOption(OptionEnum::Portamento).GetValue<bool>(); }
+    inline bool AllowPort2Note() const { return GetOption(OptionEnum::Port2Note).GetValue<bool>(); }
+    inline bool AllowTremolo() const { return GetOption(OptionEnum::Tremolo).GetValue<bool>(); }
+    inline bool AllowVibrato() const { return GetOption(OptionEnum::Vibrato).GetValue<bool>(); }
+
+    inline bool AllowEffects() const { return AllowArpeggio() || AllowPortamento() || AllowPort2Note() || AllowTremolo() || AllowVibrato(); }
 
 private:
 

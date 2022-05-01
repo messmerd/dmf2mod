@@ -2,18 +2,13 @@
     mod.cpp
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Implements a ModuleInterface-derived class for ProTracker's 
+    Implements a ModuleInterface-derived class for ProTracker's
     MOD files.
 
-    Several limitations apply in order to export. For example, 
-    for DMF --> MOD, the DMF file must use the Game Boy system, 
-    patterns must have 64 or fewer rows, only one effect column is
-    allowed per channel, etc.
+    Several limitations apply in order to export. For example,
+    for DMF-->MOD, the DMF file must use the Game Boy system,
+    patterns must have 64 or fewer rows, etc.
 */
-
-// TODO: Add '--effects=none' option, which does not use any ProTracker effects. 
-
-// TODO: Delete output file if an error occurred while creating it?
 
 #include "mod.h"
 #include "utils/utils.h"
@@ -36,10 +31,13 @@ using namespace d2m::mod;
 using MODOptionEnum = MODConversionOptions::OptionEnum;
 auto MODOptions = CreateOptionDefinitions(
 {
-    /* Type / Option id                  / Full name / Short / Default / Possib. vals  / Description */
-    {OPTION, MODOptionEnum::Effects,     "effects",  '\0',   "min",    {"min", "max"}, "The number of ProTracker effects to use"},
-    {OPTION, MODOptionEnum::AmigaFilter, "amiga",    '\0',   false,                    "Enables the Amiga filter"},
-    {OPTION, MODOptionEnum::Port2Note,   "p2n",      '\0',   false,                    "Allow the usage of the portamento to note effect. May misbehave."}
+    /* Type  / Option id                    / Full name    / Short / Default / Possib. vals    / Description */
+    {OPTION, MODOptionEnum::AmigaFilter,    "amiga",       '\0',   false,                      "Enables the Amiga filter"},
+    {OPTION, MODOptionEnum::Arpeggio,       "arp",         '\0',   false,                      "Allow arpeggio effects"},
+    {OPTION, MODOptionEnum::Portamento,     "port",        '\0',   false,                      "Allow portamento up/down effects"},
+    {OPTION, MODOptionEnum::Port2Note,      "port2note",   '\0',   false,                      "Allow portamento to note effects (may misbehave)"},
+    {OPTION, MODOptionEnum::Tremolo,        "trem",        '\0',   true,                       "Allow tremolo effects"},
+    {OPTION, MODOptionEnum::Vibrato,        "vib",         '\0',   true,                       "Allow vibrato effects"},
 });
 
 // Register module info
@@ -69,22 +67,6 @@ static uint16_t proTrackerPeriodTable[5][12] = {
     {214,202,190,180,170,160,151,143,135,127,120,113},              /* C-3 to B-3 */
     {107,101, 95, 90, 85, 80, 76, 71, 67, 64, 60, 57}               /* C-4 to B-4 */
 };
-
-MODConversionOptions::MODConversionOptions()
-{
-
-}
-
-MODConversionOptions::EffectsEnum MODConversionOptions::GetEffects() const
-{
-    // Warning: This is fast, but requires the EffectsEnum values to match the order that accepted values are given to the OptionDefinition
-    return static_cast<EffectsEnum>(GetOption(OptionEnum::Effects).GetValueAsIndex());
-}
-
-bool MODConversionOptions::AllowPort2Note() const
-{
-    return GetOption(OptionEnum::Port2Note).GetValue<bool>();
-}
 
 MOD::MOD() {}
 
@@ -519,14 +501,16 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
     m_Patterns.assign(m_NumberOfRowsInPatternMatrix, {});
 
     unsigned initialTempo, initialSpeed = 5; // Together these will set the initial BPM
-    const bool usingMinEffects = GetOptions()->GetEffects() == MODConversionOptions::EffectsEnum::Min;
-    if (usingMinEffects)
+
+    const bool needEffectCompatibleSpeed = GetOptions()->AllowEffects();
+
+    if (needEffectCompatibleSpeed)
     {
-        DMFConvertInitialBPM(dmf, initialTempo, initialSpeed);
+        initialTempo = GetMODTempo(dmf.GetBPM());
     }
     else
     {
-        initialTempo = GetMODTempo(dmf.GetBPM());
+        DMFConvertInitialBPM(dmf, initialTempo, initialSpeed);
     }
 
     if (m_UsingSetupPattern)
@@ -542,7 +526,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
         SetChannelRow(0, 0, 0, tempoRow);
 
         // Set initial speed
-        if (usingMinEffects)
+        if (!needEffectCompatibleSpeed)
         {
             ChannelRow speedRow;
             speedRow.SampleNumber = 0;
@@ -667,13 +651,13 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
 
 PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& state)
 {
-    const bool useMaxEffects = GetOptions()->GetEffects() == OptionsType::EffectsEnum::Max;
+    const auto& options = GetOptions();
     auto& channelState = state.channel[state.global.channel];
     auto& persistentEffects = channelState.persistentEffects;
 
     PriorityEffectsMap modEffects;
 
-    if (useMaxEffects)
+    if (options->AllowEffects())
     {
         if (!pat.note.IsEmpty())
         {
@@ -725,7 +709,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
         {
             case dmf::EffectCode::Arp:
             {
-                if (!useMaxEffects) break;
+                if (!options->AllowArpeggio()) break;
                 persistentEffects.erase(EffectPriorityArp);
                 if (dmfEffect.value <= 0)
                     break;
@@ -734,7 +718,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
             }
             case dmf::EffectCode::PortUp:
             {
-                if (!useMaxEffects) break;
+                if (!options->AllowPortamento()) break;
                 persistentEffects.erase(EffectPriorityPortUp);
                 persistentEffects.erase(EffectPriorityPortDown);
                 persistentEffects.erase(EffectPriorityPort2Note);
@@ -752,7 +736,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
             }
             case dmf::EffectCode::PortDown:
             {
-                if (!useMaxEffects) break;
+                if (!options->AllowPortamento()) break;
                 persistentEffects.erase(EffectPriorityPortUp);
                 persistentEffects.erase(EffectPriorityPortDown);
                 persistentEffects.erase(EffectPriorityPort2Note);
@@ -770,7 +754,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
             }
             case dmf::EffectCode::Port2Note:
             {
-                if (!useMaxEffects || !GetOptions()->AllowPort2Note()) break;
+                if (!options->AllowPort2Note()) break;
                 persistentEffects.erase(EffectPriorityPortUp);
                 persistentEffects.erase(EffectPriorityPortDown);
                 persistentEffects.erase(EffectPriorityPort2Note);
@@ -784,7 +768,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
             }
             case dmf::EffectCode::Vibrato:
             {
-                if (!useMaxEffects) break;
+                if (!options->AllowVibrato()) break;
                 persistentEffects.erase(EffectPriorityVibrato);
                 if (dmfEffect.value <= 0)
                     break;
@@ -793,7 +777,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
             }
             case dmf::EffectCode::Tremolo:
             {
-                if (!useMaxEffects) break;
+                if (!options->AllowTremolo()) break;
                 persistentEffects.erase(EffectPriorityTremolo);
                 if (dmfEffect.value <= 0)
                     break;

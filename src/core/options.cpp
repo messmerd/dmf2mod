@@ -110,16 +110,30 @@ void OptionDefinition::PrintHelp() const
     std::string str2 = GetDescription() + " ";
     switch (optionType)
     {
+        case OptionDefinition::BOOL:
+        {
+            const bool defaultValue = std::get<OptionDefinition::BOOL>(GetDefaultValue());
+            if (defaultValue)
+            {
+                //  Only print the default value if it is true
+                str2 += "(Default: true)";
+            }
+            break;
+        }
         case OptionDefinition::INT:
+        {
             str2 += "(Default: ";
             str2 += std::to_string(std::get<OptionDefinition::INT>(GetDefaultValue()));
             str2 += ")";
             break;
+        }
         case OptionDefinition::DOUBLE:
+        {
             str2 += "(Default: ";
             str2 += std::to_string(std::get<OptionDefinition::DOUBLE>(GetDefaultValue()));
             str2 += ")";
             break;
+        }
         case OptionDefinition::STRING:
         {
             const std::string defaultValue = std::get<OptionDefinition::STRING>(GetDefaultValue());
@@ -559,7 +573,7 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
                         
                         if (tempDef->GetValueType() != OptionDefinition::BOOL)
                         {
-                            // Error: When multiple short flags are strung together, all of them must be bool-typed options
+                            // Error: When multiple short flags are strung together, all of them must be boolean-typed options
                             return true;
                         }
 
@@ -711,8 +725,8 @@ bool ModuleOptionUtils::ConvertToValue(const std::string& valueStr, OptionDefini
                 returnVal = true;
             else
             {
-                // Error: Invalid value for bool-typed option
-                std::cerr << "ERROR: Invalid value \"" << valueStr << "\" for bool-typed option.\n";
+                // Error: Invalid value for boolean-typed option
+                std::cerr << "ERROR: Invalid value \"" << valueStr << "\" for boolean-typed option.\n";
                 return true;
             }
         } break;

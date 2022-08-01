@@ -36,14 +36,11 @@ auto MODOptions = CreateOptionDefinitions(
     {OPTION, MODOptionEnum::Arpeggio,       "arp",         '\0',   false,                      "Allow arpeggio effects"},
     {OPTION, MODOptionEnum::Portamento,     "port",        '\0',   false,                      "Allow portamento up/down effects"},
     {OPTION, MODOptionEnum::Port2Note,      "port2note",   '\0',   false,                      "Allow portamento to note effects (may misbehave)"},
-    {OPTION, MODOptionEnum::Tremolo,        "trem",        '\0',   true,                       "Allow tremolo effects"},
     {OPTION, MODOptionEnum::Vibrato,        "vib",         '\0',   true,                       "Allow vibrato effects"},
 });
 
 // Register module info
 MODULE_DEFINE(MOD, MODConversionOptions, ModuleType::MOD, "ProTracker", "mod", MODOptions)
-
-#define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 
 static std::vector<int8_t> GenerateSquareWaveSample(unsigned dutyCycle, unsigned length);
 static std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned length);
@@ -775,29 +772,24 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
                 persistentEffects.emplace(EffectPriorityVibrato, Effect{EffectCode::Vibrato, (uint16_t)dmfEffect.value});
                 break;
             }
-            case dmf::EffectCode::Tremolo:
+            case dmf::EffectCode::NoteCut:
             {
-                if (!options->AllowTremolo()) break;
-                persistentEffects.erase(EffectPriorityTremolo);
-                if (dmfEffect.value <= 0)
-                    break;
-                persistentEffects.emplace(EffectPriorityTremolo, Effect{EffectCode::Tremolo, (uint16_t)dmfEffect.value});
+                if (dmfEffect.value == 0)
+                {
+                    // Can be implemented as silent sample
+                    modEffects.emplace(EffectPrioritySampleChange, Effect{EffectCode::CutSample, 0});
+                }
                 break;
             }
-            case dmf::EffectCode::NoteCut:
-            if (dmfEffect.value == 0)
-            {
-                // Can be implemented as silent sample
-                modEffects.emplace(EffectPrioritySampleChange, Effect{EffectCode::CutSample, 0});
-            }
-            break;
             case dmf::EffectCode::PatBreak:
-            if (dmfEffect.value == 0)
             {
-                // Only D00 is supported at the moment
-                modEffects.emplace(EffectPriorityStructureRelated, Effect{EffectCode::PatBreak, 0});
+                if (dmfEffect.value == 0)
+                {
+                    // Only D00 is supported at the moment
+                    modEffects.emplace(EffectPriorityStructureRelated, Effect{EffectCode::PatBreak, 0});
+                }
+                break;
             }
-            break;
             case dmf::EffectCode::PosJump:
             {
                 const int dest = dmfEffect.value + (int)m_UsingSetupPattern; // Into MOD order value, not DMF

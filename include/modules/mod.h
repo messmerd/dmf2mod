@@ -64,7 +64,6 @@ enum EffectPriority
     EffectPriorityArp,
     //EffectPriorityVibratoVolSlide,
     EffectPriorityVibrato,
-    EffectPriorityTremolo,
     EffectPriorityOtherEffect,
     EffectPriorityUnsupportedEffect /* Must be the last enum value */
 };
@@ -323,7 +322,7 @@ public:
 
     enum class OptionEnum
     {
-        AmigaFilter, Arpeggio, Portamento, Port2Note, Tremolo, Vibrato
+        AmigaFilter, Arpeggio, Portamento, Port2Note, Vibrato
     };
 
     enum class EffectsEnum
@@ -335,10 +334,9 @@ public:
     inline bool AllowArpeggio() const { return GetOption(OptionEnum::Arpeggio).GetValue<bool>(); }
     inline bool AllowPortamento() const { return GetOption(OptionEnum::Portamento).GetValue<bool>(); }
     inline bool AllowPort2Note() const { return GetOption(OptionEnum::Port2Note).GetValue<bool>(); }
-    inline bool AllowTremolo() const { return GetOption(OptionEnum::Tremolo).GetValue<bool>(); }
     inline bool AllowVibrato() const { return GetOption(OptionEnum::Vibrato).GetValue<bool>(); }
 
-    inline bool AllowEffects() const { return AllowArpeggio() || AllowPortamento() || AllowPort2Note() || AllowTremolo() || AllowVibrato(); }
+    inline bool AllowEffects() const { return AllowArpeggio() || AllowPortamento() || AllowPort2Note() || AllowVibrato(); }
 
 private:
 

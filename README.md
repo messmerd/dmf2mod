@@ -5,26 +5,26 @@ A cross-platform command-line utility for converting Deflemask's DMF files to ot
 
 &#8680; *Check it out [in your browser](https://messmerd.github.io/dmf2mod)!*
 
-### Currently supported conversions:
-- DMF (Game Boy only) &#8680; MOD
+### Currently supported conversions
+  - DMF (Game Boy only) &#8680; MOD
 
 Conversion to XM and other module formats may be added in the future.
 
 ## Build
-#### Command-line application:
+#### Command-line application
 
 ```
-cmake -S . -B ./bin/Release
+cmake -S. -Bbin/Release
 cmake --build ./bin/Release
 ```
 
 On Windows:
 ```
-cmake -S . -B .\bin
+cmake -S. -Bbin
 cmake --build .\bin --config Release
 ```
 
-#### Web application:
+#### Web application
 
 ```
 emcmake cmake -S . -B ./bin/webapp
@@ -60,24 +60,24 @@ Unlike Deflemask, the MOD format implements volume changes as effects, and since
 Deflemask instruments are unsupported, so if you want to change the volume of a channel or the WAVE channel's wavetable for example, your module will need to use only the built-in commands in Deflemask's pattern editor.
 
 Currently, dmf2mod converts notes, volume changes, initial tempo, and the following Deflemask effects:
-- **Bxx**  - Position Jump
-- **D00**  - Pattern Break (partial support)
-- **EC00** - Note Cut (partial support)
-- **10xx** - Set WAVE
-- **12xx** - Set Duty Cycle
+  - **Bxx**  - Position Jump
+  - **D00**  - Pattern Break (partial support)
+  - **EC00** - Note Cut (partial support)
+  - **10xx** - Set WAVE
+  - **12xx** - Set Duty Cycle
 
 Effects 10xx, 12xx, and EC00 are implemented by changing the sample in MOD rather than as a MOD effect. As such, they do not count towards the 1 effect per channel limit.
 
 SQ1, SQ2, and WAVE channels are supported.
- 
+
 In later updates, I may add:
-- Full pattern break support (Dxx)
-- Tempo changes
-- More effects
-- Support for patterns greater than 64
-- Channel master volume?
-- Noise channel?
-- Systems besides Game Boy?
+  - Full pattern break support (Dxx)
+  - Tempo changes
+  - More effects
+  - Support for patterns greater than 64
+  - Channel master volume?
+  - Noise channel?
+  - Systems besides Game Boy?
 
 Instruments will not receive support due to MOD limitations.
 The noise channel may receive support in the future if it is feasible.

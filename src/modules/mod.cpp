@@ -46,7 +46,7 @@ static std::vector<int8_t> GenerateSquareWaveSample(unsigned dutyCycle, unsigned
 static std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned length);
 static int16_t GetNewDMFVolume(int16_t dmfRowVol, const ChannelState& state);
 
-static std::string GetWarningMessage(MOD::ConvertWarning warning, std::string info = "");
+static std::string GetWarningMessage(MOD::ConvertWarning warning, const std::string& info = "");
 
 static bool GetTempoAndSpeedFromBPM(double desiredBPM, unsigned& tempo, unsigned& speed);
 static unsigned GCD(unsigned u, unsigned v);
@@ -488,6 +488,7 @@ std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned le
                 // Take average of every four sample values to make new sample value
                 const unsigned sum = wavetableData[i * 4] + wavetableData[(i * 4) + 1] + wavetableData[(i * 4) + 2] + wavetableData[(i * 4) + 3];
                 sample[i] = (int8_t)(((sum / (15.f * 4) * 255.f) - 128.f) * maxVolCap);
+                break;
             }
             default:
                 // ERROR: Invalid length
@@ -1223,7 +1224,7 @@ ChannelRow MOD::DMFApplyNoteAndEffect(State& state, const PriorityEffectsMap& mo
                 modChannelRow.EffectCode = iter->second.effect;
                 modChannelRow.EffectValue = iter->second.value;
                 effectUsed = true;
-                ++iter;
+                ++iter; // Go to next effect
             }
             else
             {
@@ -1897,7 +1898,7 @@ void MOD::ExportSampleData(std::ofstream& fout) const
 
 ///////// OTHER /////////
 
-static std::string GetWarningMessage(MOD::ConvertWarning warning, std::string info)
+static std::string GetWarningMessage(MOD::ConvertWarning warning, const std::string& info)
 {
     switch (warning)
     {

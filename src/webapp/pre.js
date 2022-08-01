@@ -7,21 +7,21 @@
 
 // Set up IDBFS file system
 // From: https://badlydrawnrod.github.io/posts/2020/06/07/emscripten-indexeddb/
-Module['preRun'] =  function (e) {
-    FS.mkdir('/working');
-    FS.mount(IDBFS, {}, '/working');
+Module["preRun"] =  function (e) {
+    FS.mkdir("/working");
+    FS.mount(IDBFS, {}, "/working");
 }
 
-Module['print'] = function (e) {
+Module["print"] = function (e) {
     //std::cout redirects to here
     console.log(e);
 }
 
-Module['printErr'] = function (e) {
+Module["printErr"] = function (e) {
     //std::cerr redirects to here
     //console.log(e);
     if (statusMessageIsError)
-        errorMessage += e + '\n';
+        errorMessage += e + "\n";
     else
-        warningMessage += e + '\n';
+        warningMessage += e + "\n";
 }

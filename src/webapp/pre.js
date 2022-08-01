@@ -5,9 +5,11 @@
     Input to emscripten compiler.
 */
 
+/*global Module, FS, errorMessage, warningMessage, statusMessageIsError*/
+
 // Set up IDBFS file system
 // From: https://badlydrawnrod.github.io/posts/2020/06/07/emscripten-indexeddb/
-Module["preRun"] =  function (e) {
+Module["preRun"] =  function () {
     FS.mkdir("/working");
     FS.mount(IDBFS, {}, "/working");
 }

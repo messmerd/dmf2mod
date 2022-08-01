@@ -5,6 +5,7 @@
     Event handlers and helper functions used by the dmf2mod web application
 */
 
+/*global Module, FS*/
 const app = document.getElementById("dmf2mod_app");
 const appFieldset = document.getElementById("dmf2mod_app_fieldset");
 const statusArea = document.getElementById("status_area");
@@ -18,7 +19,7 @@ Module["onRuntimeInitialized"] = function () {
     console.log("Loaded dmf2mod");
 }
 
-Module["postRun"] =  function () {
+Module["postRun"] = function () {
     console.log("Initialized dmf2mod");
     loadOptions();
     app.style.display = "block";
@@ -65,8 +66,9 @@ function loadOptions() {
 
         // Add radio button
         let typesHTML = "<input type='radio' id='" + m + "' name='output_type' value='" + m + "'";
-        if (i == availMods.size() - 1)
+        if (i == availMods.size() - 1) {
             typesHTML += " checked"; // Last radio button is checked
+        }
         typesHTML += " onchange='onOutputTypeChange(this)'><label for='" + m + "'>" + m + "</label>";
 
         optionsElement.innerHTML += typesHTML;
@@ -77,10 +79,11 @@ function loadOptions() {
         const mtype = availMods.get(i);
         const m = Module.getExtensionFromType(mtype);
         let optionsHTML = "<div id='div_" + m + "' class='module_options' style='display:";
-        if (i == availMods.size() - 1)
+        if (i == availMods.size() - 1) {
             optionsHTML += " block;'>";
-        else
+        } else {
             optionsHTML += " none;'>";
+        }
 
         const optionDefs = Module.getOptionDefinitions(mtype);
         if (optionDefs.size() === 0) {
@@ -124,16 +127,18 @@ function loadOptions() {
 
 function getSliderHTML(id, optionName, checked) {
     let html = "<input type='checkbox' id='" + id + "_" + optionName + "' class='" + id + "_" + "option' name='" + optionName + "'";
-    if (checked)
+    if (checked) {
         html += " checked";
+    }
     html += ">";
     return html;
 }
 
 function getNumberHTML(id, optionName, isInteger, defaultValue) {
     let html = "<input type='number' id='" + id + "_" + optionName + "' class='" + id + "_" + "option' name='" + optionName + "'";
-    if (isInteger)
+    if (isInteger) {
         html += " step='1'";
+    }
     html += " value='" + defaultValue + "'>";
     return html;
 }
@@ -147,8 +152,9 @@ function getDropdownHTML(id, optionName, dropdownOptions, defaultValue) {
     for (let i = 0; i < dropdownOptions.size(); i++) {
         const option = dropdownOptions.get(i);
         html += "<option value='" + option + "'";
-        if (option === defaultValue)
+        if (option === defaultValue) {
             html += " selected";
+        }
         html += ">" + option + "</option>";
     }
     html += "</select>";
@@ -181,21 +187,23 @@ function getOptions() {
     for (let i = 0; i < len; i++) {
         const option = optionsForCurrentModule[i];
 
-        if (option.nodeName.toLowerCase() == "input" && option.type == "checkbox")
+        if (option.nodeName.toLowerCase() == "input" && option.type == "checkbox") {
             vo.push_back([option.name, option.checked ? "true" : "false"]);
-        else
+        } else {
             vo.push_back([option.name, option.value]);
+        }
     }
     return vo;
 }
 
 async function importFileLocal(externalFile, internalFilename) {
-    if (!appInitialised)
+    if (!appInitialised) {
         return true;
+    }
 
     // Convert blob to Uint8Array (more abstract: ArrayBufferView)
     let data = new Uint8Array(await externalFile.arrayBuffer());
-    
+
     // Store the file
     let stream = FS.open(internalFilename, "w+");
     FS.write(stream, data, 0, data.length, 0);
@@ -206,8 +214,9 @@ async function importFileLocal(externalFile, internalFilename) {
 
 // From: https://stackoverflow.com/questions/63959571/how-do-i-pass-a-file-blob-from-javascript-to-emscripten-webassembly-c
 async function importFileOnline(url, internalFilename) {
-    if (!appInitialised)
+    if (!appInitialised) {
         return true;
+    }
 
     // Download a file
     let blob;
@@ -239,7 +248,7 @@ async function importFileOnline(url, internalFilename) {
     return false;
 }
 
-async function convertFile(event) {
+async function convertFile() {
     disableControls(true);
 
     errorMessage = "";
@@ -260,9 +269,8 @@ async function convertFile(event) {
     // Change file extension to get internal filename for output from dmf2mod
     const outputType = getOutputType();
     const options = getOptions();
-    let internalFilenameOutput = internalFilenameInput;
-    internalFilenameOutput = internalFilenameOutput.replace(/\.[^/.]+$/, "") + "." + outputType;
-    
+    let internalFilenameOutput = internalFilenameInput.replace(/\.[^/.]+$/, "") + "." + outputType;
+
     if (internalFilenameInput == internalFilenameOutput) {
         // No conversion needed: Converting to same type
         warningMessage = "Same module type; No conversion needed";
@@ -305,6 +313,6 @@ async function convertFile(event) {
     disableControls(false);
 }
 
-app.addEventListener("submit", function (e) {
-    convertFile(e);
+app.addEventListener("submit", function () {
+    convertFile();
 }, false);

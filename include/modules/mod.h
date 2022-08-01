@@ -416,9 +416,9 @@ private:
     // Other:
     uint8_t GetMODTempo(double bpm);
 
-    inline const mod::ChannelRow& GetChannelRow(unsigned pattern, unsigned row, unsigned channel)
+    inline mod::ChannelRow& GetChannelRow(unsigned pattern, unsigned row, unsigned channel)
     {
-        return m_Patterns.at(pattern).at((row << m_NumberOfChannelsPowOfTwo) + channel);
+        return m_Patterns[pattern][(row << m_NumberOfChannelsPowOfTwo) + channel];
     }
 
     inline void SetChannelRow(unsigned pattern, unsigned row, unsigned channel, mod::ChannelRow& channelRow)

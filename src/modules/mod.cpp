@@ -191,7 +191,16 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
     //   jump destination, overwrite the current state with the copied state.
 
     const dmf::ModuleInfo& moduleInfo = dmf.GetModuleInfo();
-    
+
+    // Assume that the Silent sample is always needed
+    //  This is the easiest way to do things at the moment because a Note OFF may need to
+    //  be inserted into the MOD file at the loopback point once the end of the song is
+    //  reached to prevent notes from carrying over, but whether this is needed is not known
+    //  until later.
+    //  TODO: After a generated data system is added, it will be easier to check whether a silent sample is actually needed.
+
+    sampleMap[-1] = {};
+
     // Most of the following nested for loop is copied from the export pattern data loop in DMFConvertPatterns.
     // I didn't want to do this, but I think having two of the same loop is the only simple way.
     // Loop through SQ1, SQ2, and WAVE channels:
@@ -263,10 +272,6 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
                 // Convert note - Note OFF
                 if (chanRow.note.IsOff()) // Note OFF. Use silent sample and handle effects.
                 {
-                    // Silent sample is needed
-                    if (sampleMap.count(-1) == 0)
-                        sampleMap[-1] = {};
-                    
                     chanState.notePlaying = false;
                     chanState.currentNote = {};
                 }
@@ -970,19 +975,20 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const dmf::Chann
     // If we're at the very end of the song, in the 1st channel, and using the setup pattern
     if (state.global.patternRow + 1 == dmf.GetModuleInfo().totalRowsPerPattern
         && state.global.order + 1 == dmf.GetModuleInfo().totalRowsInPatternMatrix
-        && state.global.channel == dmf::GameBoyChannel::SQW1
-        && m_UsingSetupPattern)
+        && state.global.channel == dmf::GameBoyChannel::SQW1)
     {
         // Check whether DMF pattern row has any Pos Jump effects that loop back to earlier in the song
         bool hasLoopback = false;
+        unsigned loopbackToPattern = 0; // DMF pattern matrix row
         for (int chan = 0; chan <= (int)dmf::GameBoyChannel::NOISE; chan++)
         {
             dmf::ChannelRow tempChanRow = dmf.GetChannelRow(chan, state.global.order, state.global.patternRow);
             for (const auto& effect : tempChanRow.effect)
             {
-                if (effect.code == dmf::EffectCode::PosJump && effect.value < (int)state.global.patternRow)
+                if (effect.code == dmf::EffectCode::PosJump && effect.value >= 0 && effect.value < (int)state.global.patternRow)
                 {
                     hasLoopback = true;
+                    loopbackToPattern = effect.value;
                     break;
                 }
             }
@@ -990,7 +996,26 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const dmf::Chann
                 break;
         }
 
-        if (!hasLoopback)
+        // Make sure this function isn't being called from DMFCreateSampleMapping (this is a cludgy solution, but all this code will be refactored later)
+        if (!m_Patterns.empty())
+        {
+            // Add Note OFF to the loopback point for any channels where the sound would carry over
+            for (int chan = 0; chan <= (int)dmf::GameBoyChannel::NOISE; chan++)
+            {
+                // If a note is playing on the last row before it loops, and the loopback point does not have a note playing:
+                if (chanState.notePlaying && !dmf.GetChannelRow(chan, loopbackToPattern, 0).note.HasPitch())
+                {
+                    // TODO: A note could already be playing at the loopback point (a note which carried over from the previous pattern), but I am ignoring that case for now
+                    // TODO: Would this mess up the MOD state in any way?
+                    // Get 1st row of the pattern we're looping back to and modify the note to use Note OFF (NOTE: This assumes silent sample exists)
+                    auto& modChanRow = GetChannelRow(loopbackToPattern + (m_UsingSetupPattern ? 1 : 0), 0, chan);
+                    modChanRow.SampleNumber = 1; // Use silent sample
+                    modChanRow.SamplePeriod = 0; // Don't need a note for the silent sample to work
+                }
+            }
+        }
+
+        if (!hasLoopback && m_UsingSetupPattern)
         {
             // Add loopback so that song doesn't restart on the setup pattern
             modEffects.insert({EffectPriorityStructureRelated, {EffectCode::PosJump, (uint16_t)1}});
@@ -1009,7 +1034,7 @@ void MOD::DMFUpdateStatePost(const DMF& dmf, MODState& state, const MOD::Priorit
 
 Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::SampleMap& sampleMap, PriorityEffectsMap& modEffects, mod_sample_id_t& sampleId, uint16_t& period)
 {
-    Note modNote(0, 0);
+    Note modNote{0, 0};
 
     sampleId = 0;
     period = 0;

@@ -32,12 +32,12 @@ struct InputOutput
 enum class OperationType
 {
     Error,
-    Help,
+    Info,
     Conversion
 };
 
 static OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutputInfo);
-static bool PrintHelp(const std::string& executable, ModuleType moduleType);
+static void PrintHelp(const std::string& executable, ModuleType moduleType);
 
 int main(int argc, char *argv[])
 {
@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
         return 1;
 
     // A help message was printed or some other action that doesn't require conversion
-    if (operationType == OperationType::Help)
+    if (operationType == OperationType::Info)
         return 0;
 
     ConversionOptionsPtr options = ConversionOptions::Create(io.OutputType);
@@ -118,8 +118,6 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-
-// TODO: Move to console.cpp
 OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutputInfo)
 {
     inputOutputInfo.InputFile = "";
@@ -131,13 +129,20 @@ OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutput
 
     if (argCount == 1)
     {
-        return PrintHelp(args[0], ModuleType::NONE) ? OperationType::Error : OperationType::Help;
+        PrintHelp(args[0], ModuleType::NONE);
+        return OperationType::Info;
     }
     else if (argCount == 2)
     {
         if (args[1] == "--help")
         {
-            return PrintHelp(args[0], ModuleType::NONE) ? OperationType::Error : OperationType::Help;
+            PrintHelp(args[0], ModuleType::NONE);
+            return OperationType::Info;
+        }
+        else if (args[1] == "-v" || args[1] == "--version")
+        {
+            std::cout << DMF2MOD_VERSION << "\n";
+            return OperationType::Info;
         }
         else
         {
@@ -149,7 +154,8 @@ OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutput
     {
         if (args[1] == "--help")
         {
-            return PrintHelp(args[0], Registrar::GetTypeFromFileExtension(args[2])) ? OperationType::Error : OperationType::Help;
+            PrintHelp(args[0], Registrar::GetTypeFromFileExtension(args[2]));
+            return OperationType::Info;
         }
 
         std::vector<std::string> argsOnlyFlags(args.begin() + 3, args.end());
@@ -247,19 +253,16 @@ OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutput
     return OperationType::Error;
 }
 
-bool PrintHelp(const std::string& executable, ModuleType moduleType)
+void PrintHelp(const std::string& executable, ModuleType moduleType)
 {
     // If module-specific help was requested
     if (moduleType != ModuleType::NONE)
     {
         ConversionOptions::PrintHelp(moduleType);
-        return false;
+        return;
     }
 
     // Else, print generic help
-
-    std::cout << "dmf2mod v" << DMF2MOD_VERSION << "\n";
-    std::cout << "Created by Dalton Messmer <messmer.dalton@gmail.com>\n\n";
 
     std::cout.setf(std::ios_base::left);
     std::cout << "Usage: dmf2mod output.[ext] input.dmf [options]\n";
@@ -268,6 +271,4 @@ bool PrintHelp(const std::string& executable, ModuleType moduleType)
     std::cout << "Options:\n";
 
     GlobalOptions::Get().GetDefinitions()->PrintHelp();
-
-    return false;
 }

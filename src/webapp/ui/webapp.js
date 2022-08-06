@@ -95,31 +95,28 @@ function loadOptions() {
 
         for (let j = 0; j < optionDefs.size(); j++) {
             const o = optionDefs.get(j);
+            const nameHTML = "<span title='" + o.description + "'>" + o.displayName + " ";
 
             if (o.acceptedValues.size() === 0) {
                 switch (o.valueType) {
                     case Module.OptionValueType.BOOL:
                         const defaultIsChecked = o.defaultValue === "true" ? true : false;
-                        optionsHTML += o.displayName + " " + getSliderHTML(m, o.name, defaultIsChecked);
+                        optionsHTML += nameHTML + getSliderHTML(m, o.name, defaultIsChecked);
                         break;
                     case Module.OptionValueType.INT:
-                        optionsHTML += o.displayName + " " + getNumberHTML(m, o.name, true, o.defaultValue);
+                        optionsHTML += nameHTML + getNumberHTML(m, o.name, true, o.defaultValue);
                         break;
                     case Module.OptionValueType.DOUBLE:
-                        optionsHTML += o.displayName + " " + getNumberHTML(m, o.name, false, o.defaultValue);
+                        optionsHTML += nameHTML + getNumberHTML(m, o.name, false, o.defaultValue);
                         break;
                     case Module.OptionValueType.STRING:
-                        optionsHTML += o.displayName + " " + getTextboxHTML(m, o.name, o.defaultValue);
+                        optionsHTML += nameHTML + getTextboxHTML(m, o.name, o.defaultValue);
                         break;
-                    default:
-                        optionsElement.innerHTML += optionsHTML + "Error loading options</div>";
-                        continue;
                 }
             } else {
-                optionsHTML += o.displayName + " " + getDropdownHTML(m, o.name, o.acceptedValues, o.defaultValue);
+                optionsHTML += nameHTML + getDropdownHTML(m, o.name, o.acceptedValues, o.defaultValue);
             }
-
-            optionsHTML += "<br>";
+            optionsHTML += "</span><br>";
         }
         optionsElement.innerHTML += optionsHTML + "</div>";
     }

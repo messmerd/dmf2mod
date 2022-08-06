@@ -28,6 +28,7 @@ struct OptionDefinitionWrapper
     std::string displayName;
     std::string defaultValue;
     std::vector<std::string> acceptedValues;
+    std::string description;
 };
 
 struct OptionWrapper
@@ -216,6 +217,7 @@ static OptionDefinitionWrapper WrapOptionDefinition(const OptionDefinition& defi
     ret.name = definition.HasName() ? definition.GetName() : std::string(1, definition.GetShortName());
     ret.displayName = definition.GetDisplayName();
     ret.defaultValue = ModuleOptionUtils::ConvertToString(definition.GetDefaultValue());
+    ret.description = definition.GetDescription();
 
     ret.acceptedValues.clear();
     for (const auto& val : definition.GetAcceptedValuesOrdered())
@@ -286,7 +288,8 @@ EMSCRIPTEN_BINDINGS(my_value_example) {
         .field("name", &OptionDefinitionWrapper::name)
         .field("displayName", &OptionDefinitionWrapper::displayName)
         .field("defaultValue", &OptionDefinitionWrapper::defaultValue)
-        .field("acceptedValues", &OptionDefinitionWrapper::acceptedValues);
+        .field("acceptedValues", &OptionDefinitionWrapper::acceptedValues)
+        .field("description", &OptionDefinitionWrapper::description);
 
     emscripten::value_array<OptionWrapper>("Option")
         .element(&OptionWrapper::name)

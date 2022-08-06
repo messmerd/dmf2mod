@@ -322,7 +322,7 @@ public:
 
     enum class OptionEnum
     {
-        AmigaFilter, Arpeggio, Portamento, Port2Note, Vibrato
+        AmigaFilter, Arpeggio, Portamento, Port2Note, Vibrato, TempoType
     };
 
     enum class EffectsEnum
@@ -330,11 +330,17 @@ public:
         Min, Max
     };
 
+    enum class TempoType
+    {
+        Accuracy, EffectCompatibility
+    };
+
     inline bool UseAmigaFilter() const { return GetOption(OptionEnum::AmigaFilter).GetValue<bool>(); }
     inline bool AllowArpeggio() const { return GetOption(OptionEnum::Arpeggio).GetValue<bool>(); }
     inline bool AllowPortamento() const { return GetOption(OptionEnum::Portamento).GetValue<bool>(); }
     inline bool AllowPort2Note() const { return GetOption(OptionEnum::Port2Note).GetValue<bool>(); }
     inline bool AllowVibrato() const { return GetOption(OptionEnum::Vibrato).GetValue<bool>(); }
+    inline TempoType GetTempoType() const { return static_cast<TempoType>(GetOption(OptionEnum::TempoType).GetValueAsIndex()); }
 
     inline bool AllowEffects() const { return AllowArpeggio() || AllowPortamento() || AllowPort2Note() || AllowVibrato(); }
 
@@ -373,7 +379,9 @@ public:
         PitchHigh,
         TempoLow,
         TempoHigh,
-        TempoPrecision,
+        TempoLowCompat,
+        TempoHighCompat,
+        TempoAccuracy,
         EffectIgnored,
         WaveDownsample
     };
@@ -414,8 +422,6 @@ private:
     void ExportSampleData(std::ofstream& fout) const;
 
     // Other:
-    uint8_t GetMODTempo(double bpm);
-
     inline mod::ChannelRow& GetChannelRow(unsigned pattern, unsigned row, unsigned channel)
     {
         return m_Patterns[pattern][(row << m_NumberOfChannelsPowOfTwo) + channel];

@@ -20,7 +20,6 @@
 #include <cmath>
 #include <cstdio>
 #include <set>
-
 #include <cassert>
 
 using namespace d2m;
@@ -31,12 +30,13 @@ using namespace d2m::mod;
 using MODOptionEnum = MODConversionOptions::OptionEnum;
 auto MODOptions = CreateOptionDefinitions(
 {
-    /* Type  / Option id                    / Full name    / Short / Default / Possib. vals    / Description */
-    {OPTION, MODOptionEnum::AmigaFilter,    "amiga",       '\0',   false,                      "Enables the Amiga filter"},
-    {OPTION, MODOptionEnum::Arpeggio,       "arp",         '\0',   false,                      "Allow arpeggio effects"},
-    {OPTION, MODOptionEnum::Portamento,     "port",        '\0',   false,                      "Allow portamento up/down effects"},
-    {OPTION, MODOptionEnum::Port2Note,      "port2note",   '\0',   false,                      "Allow portamento to note effects (may misbehave)"},
-    {OPTION, MODOptionEnum::Vibrato,        "vib",         '\0',   true,                       "Allow vibrato effects"},
+    /* Type  / Option id                    / Full name    / Short / Default  / Possib. vals           / Description */
+    {OPTION, MODOptionEnum::AmigaFilter,    "amiga",       '\0',   false,                              "Enables the Amiga filter"},
+    {OPTION, MODOptionEnum::Arpeggio,       "arp",         '\0',   false,                              "Allow arpeggio effects"},
+    {OPTION, MODOptionEnum::Portamento,     "port",        '\0',   false,                              "Allow portamento up/down effects"},
+    {OPTION, MODOptionEnum::Port2Note,      "port2note",   '\0',   false,                              "Allow portamento to note effects (may misbehave)"},
+    {OPTION, MODOptionEnum::Vibrato,        "vib",         '\0',   true,                               "Allow vibrato effects"},
+    {OPTION, MODOptionEnum::TempoType,      "tempo",       '\0',   "compat",  {"accuracy", "compat"},  "Prioritize tempo accuracy or compatibility with effects"},
 });
 
 // Register module info
@@ -47,9 +47,6 @@ static std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsi
 static int16_t GetNewDMFVolume(int16_t dmfRowVol, const ChannelState& state);
 
 static std::string GetWarningMessage(MOD::ConvertWarning warning, const std::string& info = "");
-
-static bool GetTempoAndSpeedFromBPM(double desiredBPM, unsigned& tempo, unsigned& speed);
-static unsigned GCD(unsigned u, unsigned v);
 
 /*
     Game Boy's range is:  C-0 -> C-8 (though notes lower than C-2 just play as C-2)
@@ -503,18 +500,8 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
 {
     m_Patterns.assign(m_NumberOfRowsInPatternMatrix, {});
 
-    unsigned initialTempo, initialSpeed = 5; // Together these will set the initial BPM
-
-    const bool needEffectCompatibleSpeed = GetOptions()->AllowEffects();
-
-    if (needEffectCompatibleSpeed)
-    {
-        initialTempo = GetMODTempo(dmf.GetBPM());
-    }
-    else
-    {
-        DMFConvertInitialBPM(dmf, initialTempo, initialSpeed);
-    }
+    unsigned initialTempo, initialSpeed; // Together these will set the initial BPM
+    DMFConvertInitialBPM(dmf, initialTempo, initialSpeed);
 
     if (m_UsingSetupPattern)
     {
@@ -529,7 +516,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
         SetChannelRow(0, 0, 0, tempoRow);
 
         // Set initial speed
-        if (!needEffectCompatibleSpeed)
+        if (GetOptions()->GetTempoType() != MODConversionOptions::TempoType::EffectCompatibility)
         {
             ChannelRow speedRow;
             speedRow.SampleNumber = 0;
@@ -1255,201 +1242,77 @@ ChannelRow MOD::DMFApplyNoteAndEffect(State& state, const PriorityEffectsMap& mo
 
 void MOD::DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed)
 {
-    // Gets MOD tempo and speed values needed to set initial BPM to the DMF's BPM, or as close as possible.
+    // Brute force function to get the Tempo/Speed pair which produces a BPM as close as possible to the desired BPM (if accuracy is desired),
+    //      or a Tempo/Speed pair which is as close to the desired BPM without breaking the behavior of effects
+
+    static constexpr double highestBPM = 3.0 * 255.0 / 1.0; // 3 * tempo * speed
+    static constexpr double lowestBPM = 3.0 * 32.0 / 31.0;  // 3 * tempo * speed
+
+    const double desiredBPM = dmf.GetBPM();
+
+    if (GetOptions()->GetTempoType() == MODConversionOptions::TempoType::EffectCompatibility)
+    {
+        tempo = desiredBPM * 2;
+        speed = 6;
+
+        if (tempo > 255)
+        {
+            tempo = 255;
+            m_Status.AddWarning(GetWarningMessage(ConvertWarning::TempoHighCompat));
+        }
+        else if (tempo < 32)
+        {
+            tempo = 32;
+            m_Status.AddWarning(GetWarningMessage(ConvertWarning::TempoLowCompat));
+        }
+        else if ((desiredBPM * 2.0) - static_cast<double>(tempo) > 1e-3)
+        {
+            m_Status.AddWarning(GetWarningMessage(ConvertWarning::TempoAccuracy));
+        }
+        return;
+    }
+
+    if (desiredBPM > highestBPM)
+    {
+        tempo = 255;
+        speed = 1;
+        m_Status.AddWarning(GetWarningMessage(ConvertWarning::TempoHigh));
+        return;
+    }
+
+    if (desiredBPM < lowestBPM)
+    {
+        tempo = 32;
+        speed = 31;
+        m_Status.AddWarning(GetWarningMessage(ConvertWarning::TempoLow));
+        return;
+    }
 
     tempo = 0;
     speed = 0;
+    double bestBPMDiff = 9999999.0;
 
-    unsigned bpmNumerator, bpmDenominator;
-    dmf.GetBPM(bpmNumerator, bpmDenominator);
-
-    unsigned n = bpmNumerator / 3; // Should always divide cleanly for DMF tempos. See DMF::GetBPM(...)
-    unsigned d = bpmDenominator;
-
-    // Simplify the fraction
-    unsigned div;
-    do
+    for (unsigned d = 1; d <= 31; d++)
     {
-        div = GCD(n, d);
-        n /= div;
-        d /= div;
-    } while (div != 1 && n != 0 && d != 0);
-
-    enum NUMDENSTATUS {OK=0, NUM_LOW=1, NUM_HIGH=2, DEN_LOW=4, DEN_HIGH=8};
-    unsigned status = OK;
-
-    if (n < 33)
-        status |= NUM_LOW;
-    if (n > 255)
-        status |= NUM_HIGH;
-    // Denominator cannot be too low (0 is lowest value)
-    if (d > 32)
-        status |= DEN_HIGH;
-
-    // Adjust the numerator and denominator to get valid tempo and speed values which
-    //  will produce a BPM in MOD as close to the BPM in Deflemask as possible.
-    switch (status)
-    {
-        case OK:
+        if (3 * 32.0 / d > desiredBPM || desiredBPM > 3 * 255.0 / d)
+            continue; // Not even possible with this speed value
+        
+        for (unsigned n = 32; n <= 255; n++)
         {
-            // OK! BPM can exactly match the BPM in Deflemask.
-            tempo = n;
-            speed = d;
-            break;
-        }
-
-        case NUM_LOW:
-        {
-            unsigned multiplier = 255 / n; // Integer division.
-            
-            // n * multiplier will be <= 255; If the multiplier lowers, n will still be good.
-            // So now we must multiply d by multiplier and check that it will work too:
-            while (multiplier > 1)
+            const double bpm = 3.0 * (double)n / d;
+            const double thisBPMDiff = std::abs(desiredBPM - bpm);
+            if (thisBPMDiff < bestBPMDiff
+                || (thisBPMDiff == bestBPMDiff && d <= 6)) // Choose speed values more compatible with effects w/o sacrificing accuracy
             {
-                if (d * multiplier <= 32)
-                    break;
-                multiplier--;
-            }
-
-            if (multiplier == 1)
-            {
-                // Numerator is too low but cannot raise it without making denominator too high.
-                // Set MOD BPM to lowest value possible, but even that will not be enough to match DMF BPM:
-                tempo = 33;
-                speed = 32;
-                
-                m_Status.AddWarning(GetWarningMessage(MOD::ConvertWarning::TempoLow));
-                break;
-            }
-            
-            // Adjustment was possible!
-            tempo = n * multiplier;
-            speed = d * multiplier;
-            break;
-        }
-
-        case NUM_HIGH:
-        {
-            // Matching the DMF BPM exactly will be impossible.
-            // n and d were already divided by their GCD.
-
-            // This might be temporary until I get a better, faster solution:
-            if (GetTempoAndSpeedFromBPM(bpmNumerator * 1.0 / bpmDenominator, tempo, speed))
-            {
-                // If it failed, use highest possible BPM:
-                tempo = 255;
-                speed = 1;
-                m_Status.AddWarning(GetWarningMessage(MOD::ConvertWarning::TempoHigh));
-                break;
-            }
-
-            m_Status.AddWarning(GetWarningMessage(MOD::ConvertWarning::TempoPrecision));
-            break;
-            
-            /*
-            // TODO: This case is very poor at making the BPM match up closely.
-            //          Small changes to the denominator cause large changes to BPM.
-
-            // Make n the highest valid value. d will still 
-            // be valid after adjustment because d has no minimum value.
-            double divisor = n / 255.0;
-            
-            tempo = 255;
-            speed = d / divisor;
-
-            // TODO: Set warning here
-            break;
-            */
-        }
-
-        case DEN_HIGH:
-        {
-            // Matching the DMF BPM exactly will be impossible.
-            // n and d were already divided by their GCD.
-            
-            // Make d the highest valid value.
-            double divisor = d / 32.0;
-            
-            unsigned newN = static_cast<unsigned>(n / divisor);
-            if (newN < 33)
-            {
-                // n can't handle the adjustment.
-                // Will have to use lowest possible BPM, which is closest approx. to DMF's BPM:
-                tempo = 33;
-                speed = 32;
-                m_Status.AddWarning(GetWarningMessage(MOD::ConvertWarning::TempoLow));
-                break;
-            }
-            else
-            {
-                tempo = newN;
-                speed = 32;
-                m_Status.AddWarning(GetWarningMessage(MOD::ConvertWarning::TempoPrecision));
-                break;
+                tempo = n;
+                speed = d;
+                bestBPMDiff = thisBPMDiff;
             }
         }
-
-        case (NUM_LOW | DEN_HIGH):
-        {
-            // Numerator is too low but cannot raise it without making denominator too high.
-            // Set MOD BPM to lowest value possible, but even that will not be enough to 
-            // match DMF BPM exactly:
-            tempo = 33;
-            speed = 32;
-            
-            m_Status.AddWarning(GetWarningMessage(MOD::ConvertWarning::TempoLow));
-            break;
-        }
-
-        case (NUM_HIGH | DEN_HIGH):
-        {
-            // DMF BPM is probably within the min and max values allowed by MOD, but it cannot 
-            //  be converted to MOD BPM without losing precision.
-
-            // Make d the highest valid value.
-            double divisorD = d / 32.0;
-            unsigned newN = static_cast<unsigned>(n / divisorD);
-
-            // Make n the highest valid value.
-            double divisorN = n / 255.0;
-            unsigned newD = static_cast<unsigned>(d / divisorN);
-
-            // Check which option loses the least precision?
-            if (32 <= newN && newN <= 255)
-            {
-                tempo = newN;
-                speed = 32;
-            }
-            else if (newD <= 32)
-            {
-                tempo = 255;
-                speed = newD;
-            }
-            else
-            {
-                // If d is big enough compared to n, this condition is possible.
-                // Specifically, when: n * 1.0 / d < 33.0 / 32.0
-                // The d value cannot be made small enough without making the n value too small.
-                // Will have to use lowest possible BPM, which is closest approx. to DMF's BPM:
-                tempo = 33;
-                speed = 32;
-                m_Status.AddWarning(GetWarningMessage(MOD::ConvertWarning::TempoLow));
-                break;
-            }
-            // TODO: Is there also a possibility for the tempo to be too high?
-
-            m_Status.AddWarning(GetWarningMessage(MOD::ConvertWarning::TempoPrecision));
-            break;
-        }
-
-        default:
-            // Error!
-            throw std::runtime_error("Unknown error while converting Deflemask tempo to MOD.\n");
-            break;
     }
 
-    if (speed == 0)
-        speed = 1; // Speed 0 and 1 are identical in ProTracker, but I prefer using 1.
+    if (bestBPMDiff > 1e-3)
+        m_Status.AddWarning(GetWarningMessage(ConvertWarning::TempoAccuracy));
 }
 
 ///// DMF --> MOD Sample Mapper
@@ -1905,13 +1768,19 @@ static std::string GetWarningMessage(MOD::ConvertWarning warning, const std::str
         case MOD::ConvertWarning::PitchHigh:
             return "Cannot use the highest Deflemask note (C-8) on some MOD players including ProTracker.";
         case MOD::ConvertWarning::TempoLow:
-            return std::string("Tempo is too low for ProTracker. Using 16 bpm instead.\n")
-                    + std::string("         ProTracker only supports tempos between 16 and 127.5 bpm.");
+            return std::string("Tempo is too low. Using ~3.1 BPM instead.\n")
+                    + std::string("         ProTracker only supports tempos between ~3.1 and 765 BPM.");
         case MOD::ConvertWarning::TempoHigh:
-            return std::string("Tempo is too high for ProTracker. Using 127.5 bpm instead.\n")
-                    + std::string("         ProTracker only supports tempos between 16 and 127.5 bpm.");
-        case MOD::ConvertWarning::TempoPrecision:
-            return std::string("Tempo does not exactly match, but the closest possible value was used.");
+            return std::string("Tempo is too high for ProTracker. Using 127.5 BPM instead.\n")
+                    + std::string("         ProTracker only supports tempos between ~3.1 and 765 BPM.");
+        case MOD::ConvertWarning::TempoLowCompat:
+            return std::string("Tempo is too low. Using 16 BPM to retain effect compatibility.\n")
+                    + std::string("         Use --tempo=accuracy for the full tempo range.");
+        case MOD::ConvertWarning::TempoHighCompat:
+            return std::string("Tempo is too high. Using 127.5 BPM to retain effect compatibility.\n")
+                    + std::string("         Use --tempo=accuracy for the full tempo range.");
+        case MOD::ConvertWarning::TempoAccuracy:
+            return std::string("Tempo does not exactly match, but a value close to it is being used.");
         case MOD::ConvertWarning::EffectIgnored:
             return "A Deflemask effect was ignored due to limitations of the MOD format.";
         case MOD::ConvertWarning::WaveDownsample:
@@ -1954,65 +1823,6 @@ std::string MODException::CreateErrorMessage(Category category, int errorCode, c
             break;
     }
     return "";
-}
-
-uint8_t MOD::GetMODTempo(double bpm)
-{
-    // Get ProTracker tempo from Deflemask bpm.
-    if (bpm * 2.0 > 255.0) // If tempo is too high (over 127.5 bpm)
-    {
-        m_Status.AddWarning(GetWarningMessage(MOD::ConvertWarning::TempoHigh));
-        return 255;
-    }
-    else if (bpm * 2.0 < 32.0) // If tempo is too low (under 16 bpm)
-    {
-        m_Status.AddWarning(GetWarningMessage(MOD::ConvertWarning::TempoLow));
-        return 32;
-    }
-    else // Tempo is okay for ProTracker
-    {
-        // ProTracker tempo is twice the Deflemask bpm.
-        return static_cast<uint8_t>(bpm * 2);
-    }
-}
-
-bool GetTempoAndSpeedFromBPM(double desiredBPM, unsigned& tempo, unsigned& speed)
-{
-    // Brute force function to get the Tempo/Speed pair which produces a BPM as close as possible to the desired BPM
-    // Returns true if the desired BPM is outside the range of tempos playable by ProTracker.
-
-    tempo = 0;
-    speed = 0;
-    double bestBPMDiff = 9999999.0;
-
-    for (unsigned d = 1; d <= 32; d++)
-    {
-        if (3 * 33.0 / d > desiredBPM || desiredBPM > 3 * 255.0 / d)
-            continue; // Not even possible with this speed value
-        
-        for (unsigned n = 33; n <= 255; n++)
-        {
-            const double bpm = 3.0 * (double)n / d;
-            if (std::abs(desiredBPM - bpm) < bestBPMDiff)
-            {
-                tempo = n;
-                speed = d;
-                bestBPMDiff = desiredBPM - bpm;
-            }
-        }
-    }
-
-    if (tempo == 0) // Never found a tempo/speed pair that approximates the BPM
-        return true;
-
-    return false;
-}
-
-unsigned GCD(unsigned u, unsigned v)
-{
-    if (v == 0)
-        return u;
-    return GCD(v, u % v);
 }
 
 Note::Note(const dmf::Note& dmfNote)

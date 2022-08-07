@@ -14,12 +14,14 @@ Conversion to XM and other module formats may be added in the future.
 
 ### Command-line application
 
+Linux and macOS:
+
 ```bash
 cmake -S. -Bbin/Release
 cmake --build ./bin/Release
 ```
 
-On Windows:
+Windows:
 
 ```bash
 cmake -S. -Bbin
@@ -69,11 +71,11 @@ Because of the severe limitations of the MOD format compared to DMF, there are s
 
 The range of notes that ProTracker can play is less than half that of Deflemask, and because of this, dmf2mod must occasionally downsample wavetables to play higher frequency notes in MOD. Sometimes a square wave or wavetable will use two or more samples in MOD - each of which covers a separate note range. While this allows the limited ProTracker to play any note that can be played by Deflemask, it unfortunately can cause issues with portamento effects around the boundaries of these note ranges.
 
-The MOD format is severely limited by only one effects column per channel, and this problem is exacerbated considering that the MOD format implements volume changes as effects. So to make the most of the situation, dmf2mod uses a priority system to determine which effect is used for any given effects slot. Each type of nonessential effect (besides volume) has its own command-line option to enable its usage and provide the user with more control over the conversion process. By default, all these effects options are disabled.
+The MOD format is severely limited by only one effects column per channel, and this problem is exacerbated considering that the MOD format implements volume changes as effects. So to make the most of the situation, dmf2mod uses a priority system to determine which effect should be used for each MOD effects slot. Each type of nonessential effect (besides volume) has its own command-line option to enable its usage and provide the user with more control over the conversion process. By default, all these effects are disabled.
 
-The behavior of portamento and vibrato effects depends on the speed of the MOD file. When the speed is at the default value of 6, these effects play at the correct rate. Otherwise they may play at the wrong rate or not at all. To ensure the proper initial speed value is used, use the `--tempo=compat` command-line option. This has the downside of limiting the tempo of a MOD file to 16-127.5 BPM. By default, the `--tempo=accuracy` option is used, which enables the full tempo range of ~3.1 BPM to 765 BPM but cannot guarantee the correct behavior of effects - especially portamentos.
+The behavior of portamento and vibrato effects depends on the speed of the MOD module. When the speed is at the default value of 6, these effects play at the correct rate. Otherwise they may play at the wrong rate or not at all. To ensure the proper initial speed value is used, use the `--tempo=compat` command-line option. This has the downside of limiting the tempo of the module to 16-127.5 BPM. By default, the `--tempo=accuracy` option is used, which enables the full tempo range of ~3.1 BPM to 765 BPM but cannot guarantee the correct behavior of effects - especially portamentos.
 
-Deflemask instruments are unsupported, so if you want to change the volume of a channel or the WAVE channel's wavetable for example, your module will need to use only the built-in commands in Deflemask's pattern editor.
+Deflemask instruments are unsupported, so if you want to change the volume of a channel or the WAVE channel's wavetable for example, your DMF module will need to use only the built-in commands in Deflemask's pattern editor.
 
 Currently, dmf2mod converts notes, volume changes, initial tempo, and the following Deflemask effects:
 
@@ -94,16 +96,16 @@ SQ1, SQ2, and WAVE channels are supported.
 
 In later updates, I may add:
 
+- Systems besides Game Boy
+- Support for patterns with over 64 rows
 - Full pattern break support (Dxx)
-- Tempo changes
 - More effects
-- Support for patterns greater than 64
+- Tempo changes?
 - Channel master volume?
 - Noise channel?
-- Systems besides Game Boy?
+- ...
 
-Instruments will not receive support due to MOD limitations.
-The noise channel may receive support in the future if it is feasible and can be made to sound decent.
+Instruments will not receive support due to MOD limitations. The noise channel may receive support in the future if it is feasible and can be made to sound decent.
 
 ______
 Created by Dalton Messmer <messmer.dalton(at)gmail(dot)com>.

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.11)
 
-project(dmf2mod VERSION "0.1")
+project(dmf2mod VERSION "0.1.0")
 
 enable_language(CXX)
 set(CMAKE_CXX_STANDARD 17)

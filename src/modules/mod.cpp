@@ -30,13 +30,13 @@ using namespace d2m::mod;
 using MODOptionEnum = MODConversionOptions::OptionEnum;
 auto MODOptions = CreateOptionDefinitions(
 {
-    /* Type  / Option id                    / Full name    / Short / Default  / Possib. vals           / Description */
+    /* Type  / Option id                    / Full name    / Short / Default   / Possib. vals          / Description */
     {OPTION, MODOptionEnum::AmigaFilter,    "amiga",       '\0',   false,                              "Enables the Amiga filter"},
     {OPTION, MODOptionEnum::Arpeggio,       "arp",         '\0',   false,                              "Allow arpeggio effects"},
     {OPTION, MODOptionEnum::Portamento,     "port",        '\0',   false,                              "Allow portamento up/down effects"},
-    {OPTION, MODOptionEnum::Port2Note,      "port2note",   '\0',   false,                              "Allow portamento to note effects (may misbehave)"},
-    {OPTION, MODOptionEnum::Vibrato,        "vib",         '\0',   true,                               "Allow vibrato effects"},
-    {OPTION, MODOptionEnum::TempoType,      "tempo",       '\0',   "compat",  {"accuracy", "compat"},  "Prioritize tempo accuracy or compatibility with effects"},
+    {OPTION, MODOptionEnum::Port2Note,      "port2note",   '\0',   false,                              "Allow portamento to note effects"},
+    {OPTION, MODOptionEnum::Vibrato,        "vib",         '\0',   false,                              "Allow vibrato effects"},
+    {OPTION, MODOptionEnum::TempoType,      "tempo",       '\0',   "accuracy", {"accuracy", "compat"}, "Prioritize tempo accuracy or compatibility with effects"},
 });
 
 // Register module info
@@ -253,7 +253,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
                     for (auto& iter = sampleChangeEffects.first; iter != sampleChangeEffects.second; ++iter)
                     {
                         Effect& modEffect = iter->second;
-                        if (modEffect.effect == EffectCode::CutSample) // Note cut
+                        if (modEffect.effect == EffectCode::CutSample && modEffect.value == 0) // Note cut
                         {
                             // Silent sample is needed
                             if (sampleMap.count(-1) == 0)
@@ -1040,7 +1040,7 @@ Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::Sa
         for (auto& iter = sampleChangeEffects.first; iter != sampleChangeEffects.second; ++iter)
         {
             Effect& modEffect = iter->second;
-            if (modEffect.effect == EffectCode::CutSample) // Note cut
+            if (modEffect.effect == EffectCode::CutSample && modEffect.value == 0) // Note cut
             {
                 sampleId = sampleMap.at(-1).GetFirstMODSampleId(); // Use silent sample
                 period = 0; // Don't need a note for the silent sample to work
@@ -1780,11 +1780,13 @@ static std::string GetWarningMessage(MOD::ConvertWarning warning, const std::str
             return std::string("Tempo is too high. Using 127.5 BPM to retain effect compatibility.\n")
                     + std::string("         Use --tempo=accuracy for the full tempo range.");
         case MOD::ConvertWarning::TempoAccuracy:
-            return std::string("Tempo does not exactly match, but a value close to it is being used.");
+            return "Tempo does not exactly match, but a value close to it is being used.";
         case MOD::ConvertWarning::EffectIgnored:
             return "A Deflemask effect was ignored due to limitations of the MOD format.";
         case MOD::ConvertWarning::WaveDownsample:
-            return std::string("Wavetable instrument #") + info + std::string(" was downsampled in MOD to allow higher notes to be played.");
+            return "Wavetable instrument #" + info + " was downsampled in MOD to allow higher notes to be played.";
+        case MOD::ConvertWarning::MultipleEffects:
+            return "No more than one volume change or effect can appear in the same row of the same channel. Important effects will be prioritized.";
         default:
             return "";
     }
@@ -1812,11 +1814,6 @@ std::string MODException::CreateErrorMessage(Category category, int errorCode, c
                 case (int)MOD::ConvertError::Over64RowPattern:
                     return std::string("Patterns must have 64 or fewer rows.\n")
                             + std::string("       A workaround for this issue is planned for a future update to dmf2mod.");
-                case (int)MOD::ConvertError::EffectVolume:
-                    return std::string("An effect and a volume change cannot both appear in the same row of the same channel.\n")
-                            + std::string("       Try fixing this issue in Deflemask or use the '--effects=min' option.");
-                case (int)MOD::ConvertError::MultipleEffects:
-                    return "No more than one Note OFF, Volume Change, or Position Jump can appear in the same row of the same channel.";
                 default:
                     return "";
             }

@@ -368,9 +368,7 @@ public:
         Success=0,
         NotGameBoy,
         TooManyPatternMatrixRows,
-        Over64RowPattern,
-        EffectVolume,
-        MultipleEffects
+        Over64RowPattern
     };
 
     enum class ConvertWarning
@@ -383,7 +381,8 @@ public:
         TempoHighCompat,
         TempoAccuracy,
         EffectIgnored,
-        WaveDownsample
+        WaveDownsample,
+        MultipleEffects
     };
     
     static constexpr unsigned VolumeMax = 64u; // Yes, there are 65 different values for the volume

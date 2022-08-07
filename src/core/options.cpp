@@ -385,7 +385,7 @@ void OptionCollection::SetValuesToDefault()
     }
 }
 
-bool OptionCollection::ParseArgs(std::vector<std::string>& args)
+bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnknownArgs)
 {
     /* 
      * Examples of command-line arguments that can be parsed:
@@ -482,7 +482,7 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
             }
 
             // Error: Invalid argument
-            std::cerr << "ERROR: Invalid flag: \"" << arg << "\"\n";
+            std::cerr << "ERROR: Invalid option: \"" << arg << "\"\n";
             return true;
         }
 
@@ -585,7 +585,7 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
 
                     argMightBeValue = false; // Impossible for next arg to be a value
 
-                    if (arg.empty())
+                    if (arg == "-")
                     {
                         // Erase argument since it has been consumed
                         args.erase(args.begin() + i);
@@ -675,6 +675,19 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args)
     {
         const std::string optionTypeStr = handlingOption->GetOptionType() == OPTION ? "option" : "command";
         std::cerr << "ERROR: The " << optionTypeStr << " \"" << handlingOption->GetDisplayName() << "\" did not provide a value.\n";
+        return true;
+    }
+
+    if (!ignoreUnknownArgs && !args.empty())
+    {
+        std::string errorStr = "ERROR: Unknown option(s): ";
+        for (unsigned i = 0; i < args.size(); i++)
+        {
+            errorStr += args[i];
+            if (i != args.size() - 1)
+                errorStr += ", ";
+        }
+        std::cerr << errorStr << "\n";
         return true;
     }
 

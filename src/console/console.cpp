@@ -7,6 +7,7 @@
     Usage:
         dmf2mod output.[ext] input.[ext] [options]
         dmf2mod [ext] input.[ext] [options]
+        dmf2mod [option]
 */
 
 #include "dmf2mod.h"
@@ -160,18 +161,24 @@ OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutput
 
         std::vector<std::string> argsOnlyFlags(args.begin() + 3, args.end());
 
-        if (GlobalOptions::Get().ParseArgs(argsOnlyFlags))
+        if (GlobalOptions::Get().ParseArgs(argsOnlyFlags, true))
             return OperationType::Error;
 
-        const bool helpProvided = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Help).GetExplicitlyProvided();
-        if (helpProvided)
-            std::cout << "Ignoring the \"--help\" command.\n";
+        if (GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Verbose).GetValue<bool>()) // If --verbose=true
+        {
+            const bool helpProvided = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Help).GetExplicitlyProvided();
+            if (helpProvided)
+                std::cout << "Ignoring the \"--help\" command.\n";
+
+            const bool versionProvided = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Version).GetExplicitlyProvided();
+            if (versionProvided)
+                std::cout << "Ignoring the \"--version\" command.\n";
+        }
 
         const bool force = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Force).GetValue<bool>();
-        //const bool silent = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Silence).GetValue<bool>();
 
         std::string outputFile, inputFile;
-        
+
         // Get input file
         if (ModuleUtils::FileExists(args[2]))
         {
@@ -190,7 +197,7 @@ OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutput
             std::cerr << "ERROR: The input file '" << args[2] << "' could not be found.\n";
             return OperationType::Error;
         }
-        
+
         // Get output file
         if (ModuleUtils::GetFileExtension(args[1]).empty())
         {
@@ -267,6 +274,7 @@ void PrintHelp(const std::string& executable, ModuleType moduleType)
     std::cout.setf(std::ios_base::left);
     std::cout << "Usage: dmf2mod output.[ext] input.dmf [options]\n";
     std::cout << std::setw(7) << "" << "dmf2mod" << " [ext] input.dmf [options]\n";
+    std::cout << std::setw(7) << "" << "dmf2mod" << " [option]\n";
 
     std::cout << "Options:\n";
 

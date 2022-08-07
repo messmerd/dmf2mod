@@ -306,7 +306,7 @@ public:
 
     // Other
 
-    bool ParseArgs(std::vector<std::string>& args);
+    bool ParseArgs(std::vector<std::string>& args, bool ignoreUnknownArgs = false);
     void SetValuesToDefault();
 
 private:

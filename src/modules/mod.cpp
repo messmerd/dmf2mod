@@ -250,7 +250,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
                 auto sampleChangeEffects = modEffects.equal_range(EffectPrioritySampleChange);
                 if (sampleChangeEffects.first != sampleChangeEffects.second) // If sample change occurred (duty cycle, wave, or note cut effect)
                 {
-                    for (auto& iter = sampleChangeEffects.first; iter != sampleChangeEffects.second; ++iter)
+                    for (auto& iter = sampleChangeEffects.first; iter != sampleChangeEffects.second; )
                     {
                         Effect& modEffect = iter->second;
                         if (modEffect.effect == EffectCode::CutSample && modEffect.value == 0) // Note cut
@@ -261,7 +261,12 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
 
                             chanState.notePlaying = false;
                             chanState.currentNote = {};
-                            modEffects.erase(iter); // Consume the effect
+                            iter = modEffects.erase(iter); // Consume the effect
+                        }
+                        else
+                        {
+                            // Only increment if an element wasn't erased
+                            ++iter;
                         }
                     }
                 }
@@ -1046,8 +1051,8 @@ Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::Sa
                 period = 0; // Don't need a note for the silent sample to work
                 chanState.notePlaying = false;
                 chanState.currentNote = {};
-                modEffects.erase(iter); // Consume the effect
-                return modNote;
+                iter = modEffects.erase(iter); // Consume the effect
+                return modNote; // NOTE: If this didn't return, would need to prevent iter from incrementing after erase
             }
         }
     }

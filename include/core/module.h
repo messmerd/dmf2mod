@@ -9,6 +9,7 @@
 #pragma once
 
 #include "module_base.h"
+#include "core/note.h"
 #include "conversion_options.h"
 #include "global_options.h"
 

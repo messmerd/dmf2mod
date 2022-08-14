@@ -24,112 +24,38 @@ namespace dmf {
 // Deflemask allows four effects columns per channel regardless of the system 
 #define DMF_MAX_EFFECTS_COLUMN_COUNT 4
 
-enum class NotePitch
-{
-    Empty=0,
-    C=0,
-    CS=1,
-    D=2,
-    DS=3,
-    E=4,
-    F=5,
-    FS=6,
-    G=7,
-    GS=8,
-    A=9,
-    AS=10,
-    B=11,
-    C_Alt=12,
-    Off=100
-};
-
 static const int DMFNoInstrument = -1;
 static const int DMFNoVolume = -1;
 static const int DMFVolumeMax = 15; /* ??? */
 
 // Deflemask effects shared by all systems:
-enum class EffectCode
+namespace EffectCode
 {
-    NoEffect=-1, NoEffectVal=-1,
-    Arp=0x0, PortUp=0x1, PortDown=0x2, Port2Note=0x3, Vibrato=0x4, Port2NoteVolSlide=0x5, VibratoVolSlide=0x6,
-    Tremolo=0x7, Panning=0x8, SetSpeedVal1=0x9, VolSlide=0xA, PosJump=0xB, Retrig=0xC, PatBreak=0xD,
-    ArpTickSpeed=0xE0, NoteSlideUp=0xE1, NoteSlideDown=0xE2, SetVibratoMode=0xE3, SetFineVibratoDepth=0xE4,
-    SetFinetune=0xE5, SetSamplesBank=0xEB, NoteCut=0xEC, NoteDelay=0xED, SyncSignal=0xEE, SetGlobalFinetune=0xEF,
-    SetSpeedVal2=0xF
-};
+    enum
+    {
+        NoEffect=-1, NoEffectVal=-1,
+        Arp=0x0, PortUp=0x1, PortDown=0x2, Port2Note=0x3, Vibrato=0x4, Port2NoteVolSlide=0x5, VibratoVolSlide=0x6,
+        Tremolo=0x7, Panning=0x8, SetSpeedVal1=0x9, VolSlide=0xA, PosJump=0xB, Retrig=0xC, PatBreak=0xD,
+        ArpTickSpeed=0xE0, NoteSlideUp=0xE1, NoteSlideDown=0xE2, SetVibratoMode=0xE3, SetFineVibratoDepth=0xE4,
+        SetFinetune=0xE5, SetSamplesBank=0xEB, NoteCut=0xEC, NoteDelay=0xED, SyncSignal=0xEE, SetGlobalFinetune=0xEF,
+        SetSpeedVal2=0xF
+    };
+}
 
 // Deflemask effects exclusive to the Game Boy system:
-enum class GameBoyEffectCode
+namespace GameBoyEffectCode
 {
-    SetWave=0x10,
-    SetNoisePolyCounterMode=0x11,
-    SetDutyCycle=0x12,
-    SetSweepTimeShift=0x13,
-    SetSweepDir=0x14
-};
+    enum
+    {
+        SetWave=0x10,
+        SetNoisePolyCounterMode=0x11,
+        SetDutyCycle=0x12,
+        SetSweepTimeShift=0x13,
+        SetSweepDir=0x14
+    };
+}
 
 // To do: Add enums for effects exclusive to the rest of Deflemask's systems.
-
-struct Note
-{
-    uint16_t pitch;
-    uint16_t octave;
-
-    Note() = default;
-    Note(uint16_t p, uint16_t o)
-        : pitch(p), octave(o)
-    {}
-
-    Note(NotePitch p, uint16_t o)
-        : pitch((uint16_t)p), octave(o)
-    {}
-
-    inline bool HasPitch() const
-    {
-        if (pitch == 0 && octave == 0)
-            return false; // Empty note
-        return pitch >= 0 && pitch <= 12;
-        // Contrary to specs, pitch == 0 means C-. I'm not sure if pitch == 12 is also used for C-.
-    }
-
-    inline bool IsOff() const
-    {
-        return pitch == (int)NotePitch::Off;
-    }
-
-    inline bool IsEmpty() const
-    {
-        return pitch == 0 && octave == 0;
-    }
-
-    bool operator==(const Note& rhs) const;
-    bool operator!=(const Note& rhs) const;
-    bool operator>(const Note& rhs) const;
-    bool operator<(const Note& rhs) const;
-    bool operator>=(const Note& rhs) const;
-    bool operator<=(const Note& rhs) const;
-};
-
-int GetNoteRange(const Note& low, const Note& high);
-
-// Comparison operators for enums
-template <typename T, typename U,
-    class = typename std::enable_if<std::is_enum<U>{} &&
-    std::is_same<std::underlying_type_t<U>, int>{} &&
-    std::is_integral<T>{}>>
-bool operator==(T lhs, const U& rhs)
-{
-    return lhs == static_cast<T>(rhs);
-}
-
-template <typename T, typename U,
-    class = typename std::enable_if<std::is_enum<U>{} &&
-    std::is_same<std::underlying_type_t<U>, int>{} &&
-    std::is_integral<T>{}>>
-bool operator!=(T lhs, const U& rhs)
-{
-    return lhs != static_cast<T>(rhs);
-}
 
 struct System
 {
@@ -268,18 +194,20 @@ struct Effect
 
 struct ChannelRow
 {
-    Note note;
+    NoteSlot note;
     int16_t volume;
     Effect effect[DMF_MAX_EFFECTS_COLUMN_COUNT];
     int16_t instrument;
 };
 
 // Deflemask Game Boy channels
-enum class GameBoyChannel
+namespace GameBoyChannel
 {
-    SQW1=0, SQW2=1, WAVE=2, NOISE=3
-};
-
+    enum
+    {
+        SQW1=0, SQW2=1, WAVE=2, NOISE=3
+    };
+}
 
 } // namespace dmf
 
@@ -326,10 +254,10 @@ public:
      * In spite of what the Deflemask manual says, portamento effects are automatically turned off if they
      * stay on long enough without a new note being played. These methods help handle those edge cases.
      */
-    int GetRowsUntilPortUpAutoOff(const dmf::Note& note, int portUpParam) const;
-    static int GetRowsUntilPortUpAutoOff(unsigned ticksPerRowPair, const dmf::Note& note, int portUpParam);
-    int GetRowsUntilPortDownAutoOff(const dmf::Note& note, int portDownParam) const;
-    static int GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const dmf::Note& note, int portDownParam);
+    int GetRowsUntilPortUpAutoOff(const NoteSlot& note, int portUpParam) const;
+    static int GetRowsUntilPortUpAutoOff(unsigned ticksPerRowPair, const NoteSlot& note, int portUpParam);
+    int GetRowsUntilPortDownAutoOff(const NoteSlot& note, int portDownParam) const;
+    static int GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const NoteSlot& note, int portDownParam);
 
     inline unsigned GetTicksPerRowPair() const
     {

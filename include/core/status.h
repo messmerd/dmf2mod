@@ -83,11 +83,11 @@ public: // Should this be private once DMF gets its own DMFException class?
 
     // Construct using an enum for an error code
     template <class T, class = std::enable_if_t<std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}>>
-    ModuleException(Category category, T errorCode, const std::string errorMessage = "")
+    ModuleException(Category category, T errorCode, const std::string& errorMessage = "")
         : ModuleException(category, static_cast<int>(errorCode), errorMessage) {}
 
     // Construct using an integer for an error code
-    ModuleException(Category category, int errorCode, const std::string errorMessage = "")
+    ModuleException(Category category, int errorCode, const std::string& errorMessage = "")
     {
         m_ErrorCode = errorCode;
 

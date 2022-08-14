@@ -70,10 +70,10 @@ static constexpr auto G_PeriodTable = []() constexpr
     return ret;
 }();
 
-static constexpr double GetPeriod(unsigned note, unsigned octave)
+static constexpr double GetPeriod(Note note)
 {
-    assert(note < 12 && octave < 9);
-    return G_PeriodTable[note + 12*octave];
+    assert(static_cast<uint16_t>(note.pitch) < 12 && note.octave < 9);
+    return G_PeriodTable[static_cast<uint16_t>(note.pitch) + 12*note.octave];
 }
 
 DMF::DMF()
@@ -756,19 +756,34 @@ void DMF::LoadPatternsData(zstr::ifstream& fin)
 ChannelRow DMF::LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount)
 {
     ChannelRow pat;
-    pat.note.pitch = fin.get();
-    pat.note.pitch |= fin.get() << 8; // Unused byte. Storing it anyway.
-    pat.note.octave = fin.get();
-    pat.note.octave |= fin.get() << 8; // Unused byte. Storing it anyway.
+
+    uint16_t tempPitch = fin.get();
+    tempPitch |= fin.get() << 8; // Unused byte. Storing it anyway.
+    uint16_t tempOctave = fin.get();
+    tempOctave |= fin.get() << 8; // Unused byte. Storing it anyway.
+
+    switch (tempPitch)
+    {
+        case 0:
+            if (tempOctave == 0)
+                pat.note = NoteTypes::Empty{};
+            else
+                pat.note = NoteTypes::Note{static_cast<NotePitch>(tempPitch), tempOctave};
+            break;
+        case 100:
+            pat.note = NoteTypes::Off{};
+            break;
+        default:
+            // Apparently, the note pitch for C- can be either 0 or 12. I'm setting it to 0 always.
+            if (tempPitch == 12)
+                pat.note = NoteTypes::Note{NotePitch::C, ++tempOctave};
+            else
+                pat.note = NoteTypes::Note{static_cast<NotePitch>(tempPitch), tempOctave};
+            break;
+    }
+
     pat.volume = fin.get();
     pat.volume |= fin.get() << 8;
-
-    // Apparently, the note pitch for C- can be either 0 or 12. I'm setting it to 0 always.
-    if (pat.note.pitch == NotePitch::C_Alt)
-    {
-        pat.note.pitch = (uint16_t)NotePitch::C;
-        pat.note.octave++;
-    }
 
     // NOTE: C# is considered the 1st note of an octave rather than C- like in the Deflemask program.
 
@@ -893,78 +908,38 @@ double DMF::GetBPM() const
     return numerator * 1.0 / denominator;
 }
 
-int DMF::GetRowsUntilPortUpAutoOff(const dmf::Note& note, int portUpParam) const
+int DMF::GetRowsUntilPortUpAutoOff(const NoteSlot& note, int portUpParam) const
 {
     const unsigned ticksPerRowPair = GetTicksPerRowPair();
     return GetRowsUntilPortUpAutoOff(ticksPerRowPair, note, portUpParam);
 }
 
-int DMF::GetRowsUntilPortUpAutoOff(unsigned ticksPerRowPair, const dmf::Note& note, int portUpParam)
+int DMF::GetRowsUntilPortUpAutoOff(unsigned ticksPerRowPair, const NoteSlot& note, int portUpParam)
 {
     // Note: This is not always 100% accurate, probably due to differences in rounding/truncating at intermediate steps of the calculation, but it's very close.
     // TODO: Need to take into account odd/even rows rather than using the average ticks per row
-    if (!note.HasPitch())
+    if (!NoteHasPitch(note))
         return 0;
 
-    constexpr double highestPeriod = GetPeriod(0, 8); // C-8
+    constexpr double highestPeriod = GetPeriod({NotePitch::C, 8}); // C-8
 
     // Not sure why the 0.75 is needed
-    return static_cast<int>(std::max(std::ceil(0.75 * (highestPeriod - GetPeriod(note.pitch, note.octave)) / ((ticksPerRowPair / 2.0) * portUpParam * -1.0)), 1.0));
+    return static_cast<int>(std::max(std::ceil(0.75 * (highestPeriod - GetPeriod(GetNote(note))) / ((ticksPerRowPair / 2.0) * portUpParam * -1.0)), 1.0));
 }
 
-int DMF::GetRowsUntilPortDownAutoOff(const dmf::Note& note, int portDownParam) const
+int DMF::GetRowsUntilPortDownAutoOff(const NoteSlot& note, int portDownParam) const
 {
     const unsigned ticksPerRowPair = GetTicksPerRowPair();
     return GetRowsUntilPortDownAutoOff(ticksPerRowPair, note, portDownParam);
 }
 
-int DMF::GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const dmf::Note& note, int portDownParam)
+int DMF::GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const NoteSlot& note, int portDownParam)
 {
     // Note: This is not always 100% accurate, probably due to differences in rounding/truncating at intermediate steps of the calculation, but it's very close.
     // TODO: Need to take into account odd/even rows rather than using the average ticks per row
-    if (!note.HasPitch())
+    if (!NoteHasPitch(note))
         return 0;
 
-    constexpr double lowestPeriod = GetPeriod(0, 2); // C-2
-    return static_cast<int>(std::max(std::ceil((lowestPeriod - GetPeriod(note.pitch, note.octave)) / ((ticksPerRowPair / 2.0) * portDownParam)), 1.0));
-}
-
-int dmf::GetNoteRange(const Note& low, const Note& high)
-{
-    // Returns range in semitones. Assumes notes have octave and pitch.
-    // Range is inclusive on both ends.
-
-    return (high.octave - low.octave) * 12 + (high.pitch - low.pitch) + 1;
-}
-
-bool Note::operator==(const Note& rhs) const
-{
-    return this->octave == rhs.octave && this->pitch == rhs.pitch;
-}
-
-bool Note::operator!=(const Note& rhs) const
-{
-    return this->octave != rhs.octave || this->pitch != rhs.pitch;
-}
-
-// The following operators assume notes aren't Note OFF or Empty note
-
-bool Note::operator>(const Note& rhs) const
-{
-    return (this->octave << 4) + this->pitch > (rhs.octave << 4) + rhs.pitch;
-}
-
-bool Note::operator<(const Note& rhs) const
-{
-    return (this->octave << 4) + this->pitch < (rhs.octave << 4) + rhs.pitch;
-}
-
-bool Note::operator>=(const Note& rhs) const
-{
-    return (this->octave << 4) + this->pitch >= (rhs.octave << 4) + rhs.pitch;
-}
-
-bool Note::operator<=(const Note& rhs) const
-{
-    return (this->octave << 4) + this->pitch <= (rhs.octave << 4) + rhs.pitch;
+    constexpr double lowestPeriod = GetPeriod({NotePitch::C, 2}); // C-2
+    return static_cast<int>(std::max(std::ceil((lowestPeriod - GetPeriod(GetNote(note))) / ((ticksPerRowPair / 2.0) * portDownParam)), 1.0));
 }

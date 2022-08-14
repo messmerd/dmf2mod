@@ -68,52 +68,6 @@ enum EffectPriority
     EffectPriorityUnsupportedEffect /* Must be the last enum value */
 };
 
-struct Note
-{
-    uint16_t pitch;
-    uint16_t octave;
-
-    Note() = default;
-    Note(uint16_t p, uint16_t o)
-        : pitch(p), octave(o)
-    {}
-
-    bool operator>(const Note& rhs) const
-    {
-        return (this->octave << 4) + this->pitch > (rhs.octave << 4) + rhs.pitch;
-    }
-
-    bool operator>=(const Note& rhs) const
-    {
-        return (this->octave << 4) + this->pitch >= (rhs.octave << 4) + rhs.pitch;
-    }
-
-    bool operator<(const Note& rhs) const
-    {
-        return (this->octave << 4) + this->pitch < (rhs.octave << 4) + rhs.pitch;
-    }
-
-    bool operator<=(const Note& rhs) const
-    {
-        return (this->octave << 4) + this->pitch <= (rhs.octave << 4) + rhs.pitch;
-    }
-
-    bool operator==(const Note& rhs) const
-    {
-        return this->octave == rhs.octave && this->pitch == rhs.pitch;
-    }
-
-    bool operator!=(const Note& rhs) const
-    {
-        return !(*this == rhs);
-    }
-
-    Note(const dmf::Note& dmfNote);
-    Note(dmf::NotePitch p, uint16_t o);
-    Note& operator=(const dmf::Note& dmfNote);
-    dmf::Note ToDMFNote() const;
-};
-
 struct ChannelRow
 {
     uint8_t SampleNumber;
@@ -152,12 +106,12 @@ public:
 
     DMFSampleMapper();
 
-    mod_sample_id_t Init(dmf_sample_id_t dmfSampleId, mod_sample_id_t startingId, const std::pair<dmf::Note, dmf::Note>& dmfNoteRange);
+    mod_sample_id_t Init(dmf_sample_id_t dmfSampleId, mod_sample_id_t startingId, const std::pair<Note, Note>& dmfNoteRange);
     mod_sample_id_t InitSilence();
 
-    Note GetMODNote(const dmf::Note& dmfNote, NoteRange& modNoteRange) const;
-    NoteRange GetMODNoteRange(const dmf::Note& dmfNote) const;
-    mod_sample_id_t GetMODSampleId(const dmf::Note& dmfNote) const;
+    Note GetMODNote(const Note& dmfNote, NoteRange& modNoteRange) const;
+    NoteRange GetMODNoteRange(const Note& dmfNote) const;
+    mod_sample_id_t GetMODSampleId(const Note& dmfNote) const;
     mod_sample_id_t GetMODSampleId(NoteRange modNoteRange) const;
     unsigned GetMODSampleLength(NoteRange modNoteRange) const;
     NoteRange GetMODNoteRange(mod_sample_id_t modSampleId) const;
@@ -172,7 +126,7 @@ private:
     dmf_sample_id_t m_DmfId;
     mod_sample_id_t m_ModIds[3]; // Up to 3 MOD samples from one DMF sample
     unsigned m_ModSampleLengths[3];
-    std::vector<dmf::Note> m_RangeStart;
+    std::vector<Note> m_RangeStart;
     int m_NumMODSamples;
     SampleType m_SampleType;
     bool m_DownsamplingNeeded;
@@ -215,7 +169,7 @@ struct ChannelState
     int rowsUntilPortAutoOff;
     PORTDIR portDirection;
     uint16_t portParam;
-    dmf::Note currentNote;
+    NoteSlot currentNote; // DMF Note
 };
 
 struct State
@@ -306,7 +260,7 @@ class MODException : public ModuleException
 {
 public:
     template <class T, class = std::enable_if_t<std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}>>
-    MODException(Category category, T errorCode, const std::string args = "")
+    MODException(Category category, T errorCode, const std::string& args = "")
         : ModuleException(category, static_cast<int>(errorCode), CreateErrorMessage(category, (int)errorCode, args)) {}
 
 private:
@@ -389,7 +343,7 @@ public:
 
 private:
     using SampleMap = std::map<mod::dmf_sample_id_t, mod::DMFSampleMapper>;
-    using DMFSampleNoteRangeMap = std::map<mod::dmf_sample_id_t, std::pair<dmf::Note, dmf::Note>>;
+    using DMFSampleNoteRangeMap = std::map<mod::dmf_sample_id_t, std::pair<Note, Note>>;
 
     void ImportRaw(const std::string& filename) override;
     void ExportRaw(const std::string& filename) override;
@@ -408,7 +362,7 @@ private:
     void DMFUpdateStatePre(const DMF& dmf, mod::State& state, const mod::PriorityEffectsMap& modEffects);
     void DMFGetAdditionalEffects(const DMF& dmf, mod::State& state, const dmf::ChannelRow& pat, mod::PriorityEffectsMap& modEffects);
     //void DMFUpdateStatePost(const DMF& dmf, mod::State& state, const mod::PriorityEffectsMap& modEffects);
-    mod::Note DMFConvertNote(mod::State& state, const dmf::ChannelRow& pat, const SampleMap& sampleMap, mod::PriorityEffectsMap& modEffects, mod::mod_sample_id_t& sampleId, uint16_t& period);
+    Note DMFConvertNote(mod::State& state, const dmf::ChannelRow& pat, const SampleMap& sampleMap, mod::PriorityEffectsMap& modEffects, mod::mod_sample_id_t& sampleId, uint16_t& period);
     mod::ChannelRow DMFApplyNoteAndEffect(mod::State& state, const mod::PriorityEffectsMap& modEffects, mod::mod_sample_id_t modSampleId, uint16_t period);
 
     void DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed);

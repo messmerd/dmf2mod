@@ -136,6 +136,8 @@ void DMF::CleanUp()
         delete[] m_PCMSamples;
         m_PCMSamples = nullptr;
     }
+
+    GetData().CleanUp();
 }
 
 void DMF::ImportRaw(const std::string& filename)
@@ -756,7 +758,7 @@ Row<DMF> DMF::LoadPatternRow(zstr::ifstream& fin, uint8_t effectsColumnsCount)
     }
 
     // Initialize the rest to zero
-    for (int col = effectsColumnsCount; col < DMF_MAX_EFFECTS_COLUMN_COUNT; ++col)
+    for (int col = effectsColumnsCount; col < 4; ++col) // Max total of 4 effects columns in Deflemask
     {
         row.effect[col] = {(int16_t)EffectCode::NoEffect, (int16_t)EffectCode::NoEffectVal};
     }

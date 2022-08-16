@@ -19,8 +19,7 @@ namespace d2m {
 // Declare module
 MODULE_DECLARE(DMF, DMFConversionOptions)
 
-namespace dmf
-{
+namespace dmf {
     struct Effect
     {
         int16_t code;
@@ -33,7 +32,7 @@ struct Row<DMF>
 {
     NoteSlot note;
     int16_t volume;
-    dmf::Effect effect[4];
+    dmf::Effect effect[4]; // Deflemask allows four effects columns per channel regardless of the system
     int16_t instrument;
 };
 
@@ -50,9 +49,6 @@ struct PatternMetadata<DMF>
 };
 
 namespace dmf {
-
-// Deflemask allows four effects columns per channel regardless of the system 
-#define DMF_MAX_EFFECTS_COLUMN_COUNT 4
 
 static const int DMFNoInstrument = -1;
 static const int DMFNoVolume = -1;
@@ -106,6 +102,7 @@ struct System
         : type(type), id(id), name(name), channels(channels)
     {}
 };
+
 struct VisualInfo
 {
     uint8_t songNameLength;

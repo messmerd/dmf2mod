@@ -1,8 +1,8 @@
 /*
-    pattern.h
+    data.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Defines a data structure for storing patterns + helper functions.
+    Defines a class for storing and accessing module data (orders, patterns, rows, etc.)
 */
 
 #pragma once
@@ -10,15 +10,16 @@
 #include "note.h"
 
 #include <vector>
-#include <tuple>
 #include <algorithm>
 #include <type_traits>
 
 namespace d2m {
 
-// Different modules have significantly different per-channel row contents, so 
-//  providing one single generic implementation for use by every module doesn't
-//  make much sense. Each module should provide their own Row implementation.
+/*
+    Different modules have significantly different per-channel row contents, so
+    providing one single generic implementation for use by every module doesn't
+    make much sense. Each module should provide their own Row implementation.
+*/
 
 template <class ModuleClass>
 struct Row
@@ -26,11 +27,22 @@ struct Row
     NoteSlot note;
 };
 
+/*
+    Some module formats contain additional data for each channel or row.
+    Specializations for ChannelMetadata and PatternMetadata can be created
+    for any module format which requires it.
+*/
+
 template <class ModuleClass>
 struct ChannelMetadata {};
 
 template <class ModuleClass>
 struct PatternMetadata {};
+
+/*
+    ModuleData stores and provides access to song data such as
+    orders, patterns, rows, and other information.
+*/
 
 template <class ModuleClass>
 class ModuleData
@@ -41,15 +53,16 @@ public:
     using PatternMetadataType = PatternMetadata<ModuleClass>;
     using PatternType = RowType*; // A pattern is an array of rows
 
-    ModuleData() : m_Initialized(false) {}
+    ModuleData() { CleanUp(); }
     ~ModuleData() { CleanUp(); }
 
+    // This is the 1st initialization method to call
     void InitializePatternMatrix(unsigned channels, unsigned orders, unsigned rows)
     {
-        //if (m_Initialized) CleanUp();
-
+        CleanUp();
         m_NumChannels = channels;
         m_NumOrders = orders;
+        m_NumRows = rows;
 
         // m_PatterMatrixValues[channel][pattern matrix row]
         m_PatternIds.resize(channels);
@@ -60,6 +73,7 @@ public:
         }
     }
 
+    // This is the 2nd initialization method to call
     void InitializePatterns()
     {
         // m_Patterns[channel][pattern id (not order!)][pattern row number]
@@ -87,6 +101,7 @@ public:
         }
     }
 
+    // This is the 3rd and final initialization method to call
     void InitializeChannels()
     {
         // Call this after all the pattern IDs are set
@@ -193,25 +208,28 @@ public:
         {
             for (unsigned channel = 0; channel < m_NumChannels; ++channel)
             {
-                for (unsigned i = 0; i < m_NumPatterns[channel]; ++i)
+                for (unsigned patternId = 0; patternId < m_NumPatterns[channel]; ++patternId)
                 {
-                    delete[] m_Patterns[channel][i];
-                    m_Patterns[channel][i] = nullptr;
+                    delete[] m_Patterns[channel][patternId];
+                    m_Patterns[channel][patternId] = nullptr;
                 }
                 delete[] m_Patterns[channel];
                 m_Patterns[channel] = nullptr;
             }
             m_Patterns.clear();
         }
-        m_NumPatterns.clear();
-        m_PatternIds.clear();
 
-        m_Initialized = false;
+        m_NumChannels = 0;
+        m_NumOrders = 0;
+        m_NumRows = 0;
+
+        m_PatternIds.clear();
+        m_NumPatterns.clear();
+        m_ChannelMetadata.clear();
+        m_PatternMetadata.clear();
     }
 
 private:
-
-    bool m_Initialized;
 
     unsigned        m_NumChannels;
     unsigned        m_NumOrders;    // Total orders (pattern matrix rows)

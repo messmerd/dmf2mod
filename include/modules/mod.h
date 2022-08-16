@@ -357,12 +357,12 @@ private:
     void DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap);
 
     void DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap);
-    mod::PriorityEffectsMap DMFConvertEffects(const dmf::ChannelRow& pat, mod::State& state);
-    mod::PriorityEffectsMap DMFConvertEffects_NoiseChannel(const dmf::ChannelRow& pat);
+    mod::PriorityEffectsMap DMFConvertEffects(const Row<DMF>& row, mod::State& state);
+    mod::PriorityEffectsMap DMFConvertEffects_NoiseChannel(const Row<DMF>& row);
     void DMFUpdateStatePre(const DMF& dmf, mod::State& state, const mod::PriorityEffectsMap& modEffects);
-    void DMFGetAdditionalEffects(const DMF& dmf, mod::State& state, const dmf::ChannelRow& pat, mod::PriorityEffectsMap& modEffects);
+    void DMFGetAdditionalEffects(const DMF& dmf, mod::State& state, const Row<DMF>& row, mod::PriorityEffectsMap& modEffects);
     //void DMFUpdateStatePost(const DMF& dmf, mod::State& state, const mod::PriorityEffectsMap& modEffects);
-    Note DMFConvertNote(mod::State& state, const dmf::ChannelRow& pat, const SampleMap& sampleMap, mod::PriorityEffectsMap& modEffects, mod::mod_sample_id_t& sampleId, uint16_t& period);
+    Note DMFConvertNote(mod::State& state, const Row<DMF>& row, const SampleMap& sampleMap, mod::PriorityEffectsMap& modEffects, mod::mod_sample_id_t& sampleId, uint16_t& period);
     mod::ChannelRow DMFApplyNoteAndEffect(mod::State& state, const mod::PriorityEffectsMap& modEffects, mod::mod_sample_id_t modSampleId, uint16_t period);
 
     void DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed);

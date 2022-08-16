@@ -11,6 +11,7 @@
 
 #include "dmf.h"
 #include "utils/utils.h"
+#include "utils/hash.h"
 
 // For inflating .dmf files so that they can be read
 #include <zlib.h>
@@ -26,6 +27,7 @@
 #include <map>
 #include <cmath>
 #include <array>
+#include <unordered_set>
 
 using namespace d2m;
 using namespace d2m::dmf;
@@ -81,15 +83,10 @@ DMF::DMF()
     // Initialize pointers to nullptr to prevent segfault when freeing memory if the import fails:
     m_VisualInfo.songName.clear();
     m_VisualInfo.songAuthor.clear();
-    m_PatternValues = nullptr;
-    m_ChannelEffectsColumnsCount = nullptr;
-    m_PatternMatrixValues = nullptr;
-    m_PatternMatrixMaxValues = nullptr;
     m_Instruments = nullptr;
     m_WavetableSizes = nullptr;
     m_WavetableValues = nullptr;
     m_PCMSamples = nullptr;
-    m_PatternNames.clear();
 }
 
 DMF::~DMF()
@@ -100,36 +97,6 @@ DMF::~DMF()
 void DMF::CleanUp()
 {
     // Free memory allocated for members
-    if (m_PatternMatrixMaxValues)
-    {
-        for (int channel = 0; channel < m_System.channels; channel++)
-        {
-            for (int i = 0; i < m_PatternMatrixMaxValues[channel] + 1; i++)
-            {
-                delete[] m_PatternValues[channel][i];
-                m_PatternValues[channel][i] = nullptr;
-            }
-            delete[] m_PatternValues[channel];
-            m_PatternValues[channel] = nullptr;
-        }
-        delete[] m_PatternValues;
-        m_PatternValues = nullptr;
-    }
-
-    if (m_PatternMatrixValues)
-    {
-        for (int i = 0; i < m_System.channels; i++)
-        {
-            delete[] m_PatternMatrixValues[i];
-            m_PatternMatrixValues[i] = nullptr;
-        }
-        delete[] m_PatternMatrixValues;
-        m_PatternMatrixValues = nullptr;
-    }
-    
-    delete[] m_PatternMatrixMaxValues;
-    m_PatternMatrixMaxValues = nullptr;
-
     if (m_Instruments)
     {
         for (int i = 0; i < m_TotalInstruments; i++) 
@@ -160,9 +127,6 @@ void DMF::CleanUp()
         m_WavetableValues = nullptr;
     }
     
-    delete[] m_ChannelEffectsColumnsCount;
-    m_ChannelEffectsColumnsCount = nullptr;
-
     if (m_PCMSamples)
     {
         for (int sample = 0; sample < m_TotalPCMSamples; sample++) 
@@ -172,8 +136,6 @@ void DMF::CleanUp()
         delete[] m_PCMSamples;
         m_PCMSamples = nullptr;
     }
-
-    m_PatternNames.clear();
 }
 
 void DMF::ImportRaw(const std::string& filename)
@@ -377,23 +339,18 @@ void DMF::LoadModuleInfo(zstr::ifstream& fin)
 
 void DMF::LoadPatternMatrixValues(zstr::ifstream& fin)
 {
-    // Format: patterMatrixValues[channel][pattern matrix row]
-    m_PatternMatrixValues = new uint8_t*[m_System.channels];
-    m_PatternMatrixMaxValues = new uint8_t[m_System.channels];
+    auto& moduleData = GetData();
+    moduleData.InitializePatternMatrix(
+        m_System.channels, 
+        m_ModuleInfo.totalRowsInPatternMatrix, 
+        m_ModuleInfo.totalRowsPerPattern);
 
-    for (int i = 0; i < m_System.channels; i++)
+    for (unsigned channel = 0; channel < moduleData.GetNumChannels(); ++channel)
     {
-        m_PatternMatrixMaxValues[i] = 0;
-        m_PatternMatrixValues[i] = new uint8_t[m_ModuleInfo.totalRowsInPatternMatrix];
-        
-        for (int j = 0; j < m_ModuleInfo.totalRowsInPatternMatrix; j++)
+        for (unsigned order = 0; order < moduleData.GetNumOrders(); ++order)
         {
-            m_PatternMatrixValues[i][j] = fin.get();
-            
-            if (m_PatternMatrixValues[i][j] > m_PatternMatrixMaxValues[i])
-            {
-                m_PatternMatrixMaxValues[i] = m_PatternMatrixValues[i][j];
-            }
+            const uint8_t patternId = fin.get();
+            moduleData.SetPatternId(channel, order, patternId);
 
             // Version 1.1 introduces pattern names
             if (m_DMFFileVersion >= 25) // DMF version 25 (0x19) and newer
@@ -402,11 +359,13 @@ void DMF::LoadPatternMatrixValues(zstr::ifstream& fin)
                 char* tempStr = new char[patternNameLength + 1];
                 fin.read(tempStr, patternNameLength);
                 tempStr[patternNameLength] = '\0';
-                m_PatternNames[(j * m_System.channels) + i] = tempStr;
+                moduleData.SetPatternMetadata(channel, order, PatternMetadata<DMF>{tempStr});
                 delete[] tempStr;
             }
         }
     }
+
+    moduleData.InitializeChannels();
 }
 
 void DMF::LoadInstrumentsData(zstr::ifstream& fin)
@@ -715,47 +674,48 @@ void DMF::LoadWavetablesData(zstr::ifstream& fin)
 
 void DMF::LoadPatternsData(zstr::ifstream& fin)
 {
-    // patternValues[channel][pattern number][pattern row number]
-    m_PatternValues = new ChannelRow**[m_System.channels];
-    m_ChannelEffectsColumnsCount = new uint8_t[m_System.channels];
-    
-    uint8_t patternMatrixNumber;
+    auto& moduleData = GetData();
+    moduleData.InitializePatterns();
+    auto& channelMetadata = moduleData.ChannelMetadataRef();
 
-    for (unsigned channel = 0; channel < m_System.channels; channel++)
+    std::unordered_set<std::pair<uint8_t, uint8_t>, PairHash> patternsVisited; // Storing channel/patternId pairs
+
+    for (unsigned channel = 0; channel < moduleData.GetNumChannels(); ++channel)
     {
-        m_ChannelEffectsColumnsCount[channel] = fin.get();
+        channelMetadata[channel].effectColumnsCount = fin.get();
 
-        m_PatternValues[channel] = new ChannelRow*[m_PatternMatrixMaxValues[channel] + 1]();
-
-        for (unsigned rowInPatternMatrix = 0; rowInPatternMatrix < m_ModuleInfo.totalRowsInPatternMatrix; rowInPatternMatrix++)
+        for (unsigned order = 0; order < moduleData.GetNumOrders(); ++order)
         {
-            patternMatrixNumber = m_PatternMatrixValues[channel][rowInPatternMatrix];
+            const uint8_t patternId = moduleData.GetPatternId(channel, order);
 
-            if (m_PatternValues[channel][patternMatrixNumber]) // If pattern has been loaded previously
+            if (patternsVisited.count({channel, patternId}) > 0) // If pattern has been loaded previously
             {
                 // Skip patterns that have already been loaded (unnecessary information)
                 // zstr's seekg method does not seem to work, so I will use this:
-                unsigned seekAmount = (8 + 4 * m_ChannelEffectsColumnsCount[channel]) * m_ModuleInfo.totalRowsPerPattern;
+                unsigned seekAmount = (8 + 4 * channelMetadata[channel].effectColumnsCount) * moduleData.GetNumRows();
                 while (0 < seekAmount--)
                 {
                     fin.get();
                 }
                 continue;
             }
-
-            m_PatternValues[channel][patternMatrixNumber] = new ChannelRow[m_ModuleInfo.totalRowsPerPattern];
-
-            for (uint32_t row = 0; row < m_ModuleInfo.totalRowsPerPattern; row++)
+            else
             {
-                m_PatternValues[channel][patternMatrixNumber][row] = LoadPatternRow(fin, m_ChannelEffectsColumnsCount[channel]);
+                // Mark this patternId for this channel as visited
+                patternsVisited.insert({channel, patternId});
+            }
+
+            for (unsigned row = 0; row < moduleData.GetNumRows(); ++row)
+            {
+                moduleData.SetRowById(channel, patternId, row, LoadPatternRow(fin, channelMetadata[channel].effectColumnsCount));
             }
         }
     }
 }
 
-ChannelRow DMF::LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount)
+Row<DMF> DMF::LoadPatternRow(zstr::ifstream& fin, uint8_t effectsColumnsCount)
 {
-    ChannelRow pat;
+    Row<DMF> row;
 
     uint16_t tempPitch = fin.get();
     tempPitch |= fin.get() << 8; // Unused byte. Storing it anyway.
@@ -766,45 +726,45 @@ ChannelRow DMF::LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount)
     {
         case 0:
             if (tempOctave == 0)
-                pat.note = NoteTypes::Empty{};
+                row.note = NoteTypes::Empty{};
             else
-                pat.note = NoteTypes::Note{static_cast<NotePitch>(tempPitch), tempOctave};
+                row.note = NoteTypes::Note{static_cast<NotePitch>(tempPitch), tempOctave};
             break;
         case 100:
-            pat.note = NoteTypes::Off{};
+            row.note = NoteTypes::Off{};
             break;
         default:
             // Apparently, the note pitch for C- can be either 0 or 12. I'm setting it to 0 always.
             if (tempPitch == 12)
-                pat.note = NoteTypes::Note{NotePitch::C, ++tempOctave};
+                row.note = NoteTypes::Note{NotePitch::C, ++tempOctave};
             else
-                pat.note = NoteTypes::Note{static_cast<NotePitch>(tempPitch), tempOctave};
+                row.note = NoteTypes::Note{static_cast<NotePitch>(tempPitch), tempOctave};
             break;
     }
 
-    pat.volume = fin.get();
-    pat.volume |= fin.get() << 8;
+    row.volume = fin.get();
+    row.volume |= fin.get() << 8;
 
     // NOTE: C# is considered the 1st note of an octave rather than C- like in the Deflemask program.
 
-    for (int col = 0; col < effectsColumnsCount; col++)
+    for (uint8_t col = 0; col < effectsColumnsCount; ++col)
     {
-        pat.effect[col].code = fin.get();
-        pat.effect[col].code |= fin.get() << 8;
-        pat.effect[col].value = fin.get();
-        pat.effect[col].value |= fin.get() << 8;
+        row.effect[col].code = fin.get();
+        row.effect[col].code |= fin.get() << 8;
+        row.effect[col].value = fin.get();
+        row.effect[col].value |= fin.get() << 8;
     }
 
     // Initialize the rest to zero
-    for (int col = effectsColumnsCount; col < DMF_MAX_EFFECTS_COLUMN_COUNT; col++)
+    for (int col = effectsColumnsCount; col < DMF_MAX_EFFECTS_COLUMN_COUNT; ++col)
     {
-        pat.effect[col] = {(int16_t)EffectCode::NoEffect, (int16_t)EffectCode::NoEffectVal};
+        row.effect[col] = {(int16_t)EffectCode::NoEffect, (int16_t)EffectCode::NoEffectVal};
     }
 
-    pat.instrument = fin.get();
-    pat.instrument |= fin.get() << 8;
+    row.instrument = fin.get();
+    row.instrument |= fin.get() << 8;
 
-    return pat;
+    return row;
 }
 
 void DMF::LoadPCMSamplesData(zstr::ifstream& fin)

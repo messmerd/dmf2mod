@@ -9,6 +9,7 @@
 
 #include <variant>
 #include <cstdint>
+#include <cassert>
 
 namespace d2m {
 

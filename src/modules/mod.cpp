@@ -217,7 +217,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
 
                 ChannelState& chanState = state.channel[chan];
 
-                dmf::ChannelRow chanRow = dmf.GetChannelRow(chan, patMatRow, patRow);
+                const auto& chanRow = dmf.GetData().GetRow(chan, patMatRow, patRow);
 
                 // If just arrived at jump destination:
                 if (patMatRow == state.global.jumpDestination && patRow == 0 && state.global.suspended)
@@ -592,7 +592,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
             {
                 state.global.channel = chan;
 
-                dmf::ChannelRow chanRow = dmf.GetChannelRow(chan, patMatRow, patRow);
+                const auto& chanRow = dmf.GetData().GetRow(chan, patMatRow, patRow);
 
                 // If just arrived at jump destination:
                 if (patMatRow == state.global.jumpDestination && patRow == 0 && state.global.suspended)
@@ -644,7 +644,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
     }
 }
 
-PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& state)
+PriorityEffectsMap MOD::DMFConvertEffects(const Row<DMF>& row, State& state)
 {
     const auto& options = GetOptions();
     auto& channelState = state.channel[state.global.channel];
@@ -654,7 +654,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
 
     if (options->AllowEffects())
     {
-        if (!NoteIsEmpty(pat.note))
+        if (!NoteIsEmpty(row.note))
         {
             // Portamento to note stops when next note is reached or on Note OFF
             persistentEffects.erase(EffectPriorityPort2Note);
@@ -679,13 +679,13 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
                 persistentEffects.erase(EffectPriorityPortDown);
                 channelState.rowsUntilPortAutoOff = -1;
             }
-            else if (NoteHasPitch(pat.note))
+            else if (NoteHasPitch(row.note))
             {
                 // Reset the time until port effects automatically turn off
                 if (channelState.portDirection == ChannelState::PORT_UP)
-                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortUpAutoOff(state.global.ticksPerRowPair, pat.note, channelState.portParam);
+                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortUpAutoOff(state.global.ticksPerRowPair, row.note, channelState.portParam);
                 else
-                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortDownAutoOff(state.global.ticksPerRowPair, pat.note, channelState.portParam);
+                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortDownAutoOff(state.global.ticksPerRowPair, row.note, channelState.portParam);
             }
             else
             {
@@ -695,7 +695,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
     }
 
     // Convert DMF effects to MOD effects
-    for (const auto& dmfEffect : pat.effect)
+    for (const auto& dmfEffect : row.effect)
     {
         if (dmfEffect.code == dmf::EffectCode::NoEffect)
             continue;
@@ -724,7 +724,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
                 }
                 persistentEffects.emplace(EffectPriorityPortUp, Effect{EffectCode::PortUp, (uint16_t)dmfEffect.value});
                 if (channelState.rowsUntilPortAutoOff == -1)
-                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortUpAutoOff(state.global.ticksPerRowPair, NoteHasPitch(pat.note) ? pat.note : channelState.currentNote, dmfEffect.value);
+                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortUpAutoOff(state.global.ticksPerRowPair, NoteHasPitch(row.note) ? row.note : channelState.currentNote, dmfEffect.value);
                 channelState.portDirection = ChannelState::PORT_UP;
                 channelState.portParam = dmfEffect.value;
                 break;
@@ -742,7 +742,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
                 }
                 persistentEffects.emplace(EffectPriorityPortDown, Effect{EffectCode::PortDown, (uint16_t)dmfEffect.value});
                 if (channelState.rowsUntilPortAutoOff == -1)
-                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortDownAutoOff(state.global.ticksPerRowPair, NoteHasPitch(pat.note) ? pat.note : channelState.currentNote, dmfEffect.value);
+                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortDownAutoOff(state.global.ticksPerRowPair, NoteHasPitch(row.note) ? row.note : channelState.currentNote, dmfEffect.value);
                 channelState.portDirection = ChannelState::PORT_DOWN;
                 channelState.portParam = dmfEffect.value;
                 break;
@@ -820,14 +820,14 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
     return modEffects;
 }
 
-PriorityEffectsMap MOD::DMFConvertEffects_NoiseChannel(const dmf::ChannelRow& pat)
+PriorityEffectsMap MOD::DMFConvertEffects_NoiseChannel(const Row<DMF>& row)
 {
     // Temporary method until the Noise channel is supported.
     // Only Pattern Break and Jump effects on the noise channel are converted for now.
 
     PriorityEffectsMap modEffects;
 
-    for (auto& dmfEffect : pat.effect)
+    for (auto& dmfEffect : row.effect)
     {
         if (dmfEffect.code == dmf::EffectCode::PatBreak && dmfEffect.value == 0)
         {
@@ -941,18 +941,18 @@ static inline int16_t GetNewDMFVolume(int16_t dmfRowVol, const ChannelState& sta
     }
 }
 
-void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const dmf::ChannelRow& pat, PriorityEffectsMap& modEffects)
+void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const Row<DMF>& row, PriorityEffectsMap& modEffects)
 {
     ChannelState& chanState = state.channel[state.global.channel];
     
     // Determine what the volume should be for this channel
-    const int16_t newChanVol = GetNewDMFVolume(pat.volume, chanState);
+    const int16_t newChanVol = GetNewDMFVolume(row.volume, chanState);
 
     // If the volume or sample changed. If the sample changed, the MOD volume resets, so volume needs to be set again. TODO: Can optimize later.
     if (newChanVol != chanState.volume)
     {
         // The WAVE channel volume changes whether a note is attached or not, but SQ1/SQ2 need a note
-        if (chanState.channel == dmf::GameBoyChannel::WAVE || NoteHasPitch(pat.note))
+        if (chanState.channel == dmf::GameBoyChannel::WAVE || NoteHasPitch(row.note))
         {
             uint8_t newVolume = (uint8_t)std::round(newChanVol / (double)dmf::DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
 
@@ -975,7 +975,7 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const dmf::Chann
         unsigned loopbackToPattern = 0; // DMF pattern matrix row
         for (int chan = 0; chan <= (int)dmf::GameBoyChannel::NOISE; chan++)
         {
-            dmf::ChannelRow tempChanRow = dmf.GetChannelRow(chan, state.global.order, state.global.patternRow);
+            const Row<DMF>& tempChanRow = dmf.GetData().GetRow(chan, state.global.order, state.global.patternRow);
             for (const auto& effect : tempChanRow.effect)
             {
                 if (effect.code == dmf::EffectCode::PosJump && effect.value >= 0 && effect.value < (int)state.global.patternRow)
@@ -996,7 +996,7 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const dmf::Chann
             for (int chan = 0; chan <= (int)dmf::GameBoyChannel::NOISE; chan++)
             {
                 // If a note is playing on the last row before it loops, and the loopback point does not have a note playing:
-                if (chanState.notePlaying && !NoteHasPitch(dmf.GetChannelRow(chan, loopbackToPattern, 0).note))
+                if (chanState.notePlaying && !NoteHasPitch(dmf.GetData().GetRow(chan, loopbackToPattern, 0).note))
                 {
                     // TODO: A note could already be playing at the loopback point (a note which carried over from the previous pattern), but I am ignoring that case for now
                     // TODO: Would this mess up the MOD state in any way?
@@ -1025,7 +1025,7 @@ void MOD::DMFUpdateStatePost(const DMF& dmf, MODState& state, const MOD::Priorit
 }
 */
 
-Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::SampleMap& sampleMap, PriorityEffectsMap& modEffects, mod_sample_id_t& sampleId, uint16_t& period)
+Note MOD::DMFConvertNote(State& state, const Row<DMF>& row, const MOD::SampleMap& sampleMap, PriorityEffectsMap& modEffects, mod_sample_id_t& sampleId, uint16_t& period)
 {
     Note modNote{NotePitch::C, 0};
 
@@ -1057,7 +1057,7 @@ Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::Sa
         }
     }
 
-    const NoteSlot& dmfNote = pat.note;
+    const NoteSlot& dmfNote = row.note;
 
     // Convert note - No note playing
     if (NoteIsEmpty(dmfNote)) // No note is playing. Only handle effects.
@@ -1135,7 +1135,7 @@ Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::Sa
     }
 
     chanState.notePlaying = true;
-    chanState.currentNote = pat.note;
+    chanState.currentNote = row.note;
     return modNote;
 }
 

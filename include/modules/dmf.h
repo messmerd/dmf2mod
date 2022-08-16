@@ -19,6 +19,36 @@ namespace d2m {
 // Declare module
 MODULE_DECLARE(DMF, DMFConversionOptions)
 
+namespace dmf
+{
+    struct Effect
+    {
+        int16_t code;
+        int16_t value;
+    };
+}
+
+template<>
+struct Row<DMF>
+{
+    NoteSlot note;
+    int16_t volume;
+    dmf::Effect effect[4];
+    int16_t instrument;
+};
+
+template<>
+struct ChannelMetadata<DMF>
+{
+    uint8_t effectColumnsCount;
+};
+
+template<>
+struct PatternMetadata<DMF>
+{
+    std::string name;
+};
+
 namespace dmf {
 
 // Deflemask allows four effects columns per channel regardless of the system 
@@ -186,20 +216,6 @@ struct PCMSample
     uint16_t *data;
 };
 
-struct Effect
-{
-    int16_t code;
-    int16_t value;
-};
-
-struct ChannelRow
-{
-    NoteSlot note;
-    int16_t volume;
-    Effect effect[DMF_MAX_EFFECTS_COLUMN_COUNT];
-    int16_t instrument;
-};
-
 // Deflemask Game Boy channels
 namespace GameBoyChannel
 {
@@ -268,24 +284,10 @@ public:
     const dmf::VisualInfo& GetVisualInfo() const { return m_VisualInfo; }
     const dmf::ModuleInfo& GetModuleInfo() const { return m_ModuleInfo; }
 
-    uint8_t** GetPatternMatrixValues() const { return m_PatternMatrixValues; }
-
     uint8_t GetTotalWavetables() const { return m_TotalWavetables; }
 
     uint32_t** GetWavetableValues() const { return m_WavetableValues; }
     uint32_t GetWavetableValue(unsigned wavetable, unsigned index) const { return m_WavetableValues[wavetable][index]; }
-
-    dmf::ChannelRow*** GetPatternValues() const { return m_PatternValues; }
-    dmf::ChannelRow GetChannelRow(unsigned channel, unsigned patternMatrixRow, unsigned patternRow) const
-    {
-        return m_PatternValues[channel][m_PatternMatrixValues[channel][patternMatrixRow]][patternRow];
-    }
-
-    std::string GetPatternName(unsigned channel, unsigned patternMatrixRow) const
-    {
-        return m_PatternNames.at((patternMatrixRow * m_System.channels) + channel);
-    }
-
 private:
     void ImportRaw(const std::string& filename) override;
     void ExportRaw(const std::string& filename) override;
@@ -299,7 +301,7 @@ private:
     dmf::Instrument LoadInstrument(zstr::ifstream& fin, SystemType systemType);
     void LoadWavetablesData(zstr::ifstream& fin);
     void LoadPatternsData(zstr::ifstream& fin);
-    dmf::ChannelRow LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount);
+    Row<DMF> LoadPatternRow(zstr::ifstream& fin, uint8_t effectsColumnsCount);
     void LoadPCMSamplesData(zstr::ifstream& fin);
     dmf::PCMSample LoadPCMSample(zstr::ifstream& fin);
 
@@ -308,18 +310,13 @@ private:
     dmf::System          m_System;
     dmf::VisualInfo      m_VisualInfo;
     dmf::ModuleInfo      m_ModuleInfo;
-    uint8_t**       m_PatternMatrixValues;
-    uint8_t*        m_PatternMatrixMaxValues;
     uint8_t         m_TotalInstruments;
     dmf::Instrument*     m_Instruments;
     uint8_t         m_TotalWavetables;
     uint32_t*       m_WavetableSizes;
     uint32_t**      m_WavetableValues;
-    dmf::ChannelRow***   m_PatternValues;
-    uint8_t*        m_ChannelEffectsColumnsCount;
     uint8_t         m_TotalPCMSamples;
     dmf::PCMSample*      m_PCMSamples;
-    std::map<unsigned, std::string> m_PatternNames;
 };
 
 } // namespace d2m

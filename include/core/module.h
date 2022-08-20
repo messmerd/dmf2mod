@@ -43,8 +43,8 @@ protected:
     static const ModuleInfo& GetInfo();
 
 private:
-    static const ModuleInfo m_Info;
-    ModuleData<T> m_Data;
+    static const ModuleInfo m_Info;     // Info inherent to every module of type T
+    ModuleData<T> m_Data;               // Song information for a particular module file
 };
 
 

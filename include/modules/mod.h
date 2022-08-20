@@ -18,7 +18,28 @@
 namespace d2m {
 
 // Declare module
+
+class MOD;
+
+template<>
+struct ModuleGlobalData<MOD> : public ModuleGlobalDataGeneric<PatternStorageType::ORC>
+{
+    // In the future, we'll be able to detect when a MOD module
+    // was created with dmf2mod, which will help when converting
+    // from MOD to another module type.
+    bool madeWithDmf2mod;
+};
+
 MODULE_DECLARE(MOD, MODConversionOptions)
+
+template<>
+struct Row<MOD>
+{
+    uint8_t SampleNumber;
+    uint16_t SamplePeriod;
+    unsigned EffectCode;
+    unsigned EffectValue;
+};
 
 namespace mod {
 
@@ -68,6 +89,7 @@ enum EffectPriority
     EffectPriorityUnsupportedEffect /* Must be the last enum value */
 };
 
+/*
 struct ChannelRow
 {
     uint8_t SampleNumber;
@@ -75,6 +97,7 @@ struct ChannelRow
     unsigned EffectCode;
     unsigned EffectValue;
 };
+*/
 
 using dmf_sample_id_t = int;
 using mod_sample_id_t = int;
@@ -188,7 +211,7 @@ struct State
     ChannelState channel[4];
     ChannelState channelCopy[4];
 
-    ChannelRow channelRows[4];
+    Row<MOD> channelRows[4];
 
     State()
     {
@@ -322,7 +345,8 @@ public:
         Success=0,
         NotGameBoy,
         TooManyPatternMatrixRows,
-        Over64RowPattern
+        Over64RowPattern,
+        WrongChannelCount
     };
 
     enum class ConvertWarning
@@ -363,7 +387,7 @@ private:
     void DMFGetAdditionalEffects(const DMF& dmf, mod::State& state, const Row<DMF>& row, mod::PriorityEffectsMap& modEffects);
     //void DMFUpdateStatePost(const DMF& dmf, mod::State& state, const mod::PriorityEffectsMap& modEffects);
     Note DMFConvertNote(mod::State& state, const Row<DMF>& row, const SampleMap& sampleMap, mod::PriorityEffectsMap& modEffects, mod::mod_sample_id_t& sampleId, uint16_t& period);
-    mod::ChannelRow DMFApplyNoteAndEffect(mod::State& state, const mod::PriorityEffectsMap& modEffects, mod::mod_sample_id_t modSampleId, uint16_t period);
+    Row<MOD> DMFApplyNoteAndEffect(mod::State& state, const mod::PriorityEffectsMap& modEffects, mod::mod_sample_id_t modSampleId, uint16_t period);
 
     void DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed);
 
@@ -375,6 +399,7 @@ private:
     void ExportSampleData(std::ofstream& fout) const;
 
     // Other:
+    /*
     inline mod::ChannelRow& GetChannelRow(unsigned pattern, unsigned row, unsigned channel)
     {
         return m_Patterns[pattern][(row << m_NumberOfChannelsPowOfTwo) + channel];
@@ -384,6 +409,7 @@ private:
     {
         m_Patterns.at(pattern).at((row << m_NumberOfChannelsPowOfTwo) + channel) = channelRow;
     }
+    */
 
 private:
     //////////// Temporaries used during DMF-->MOD conversion
@@ -392,10 +418,10 @@ private:
     //////////// MOD file info
     std::string m_ModuleName;
     int8_t m_TotalMODSamples;
-    unsigned m_NumberOfChannels;
-    unsigned char m_NumberOfChannelsPowOfTwo; // For efficiency. 2^m_NumberOfChannelsPowOfTwo = m_NumberOfChannels.
-    unsigned m_NumberOfRowsInPatternMatrix;
-    std::vector<std::vector<mod::ChannelRow>> m_Patterns; // Per pattern: Vector of channel rows that together contain data for entire pattern
+    ///unsigned m_NumberOfChannels;
+    //unsigned char m_NumberOfChannelsPowOfTwo; // For efficiency. 2^m_NumberOfChannelsPowOfTwo = m_NumberOfChannels.
+    ///unsigned m_NumberOfRowsInPatternMatrix;
+    //std::vector<std::vector<mod::ChannelRow>> m_Patterns; // Per pattern: Vector of channel rows that together contain data for entire module
     std::map<mod::mod_sample_id_t, mod::Sample> m_Samples;
 };
 

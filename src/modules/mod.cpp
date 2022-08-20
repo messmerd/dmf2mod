@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <set>
 #include <cassert>
+#include <numeric>
 
 using namespace d2m;
 using namespace d2m::mod;
@@ -103,34 +104,54 @@ void MOD::ConvertFromDMF(const DMF& dmf)
         throw MODException(ModuleException::Category::Convert, MOD::ConvertError::NotGameBoy);
     }
 
-    const dmf::ModuleInfo& moduleInfo = dmf.GetModuleInfo();
-    m_NumberOfRowsInPatternMatrix = moduleInfo.totalRowsInPatternMatrix + (int)m_UsingSetupPattern;
-    if (m_NumberOfRowsInPatternMatrix > 64) // totalRowsInPatternMatrix is 1 more than it actually is
+    const auto& dmfData = dmf.GetData();
+    auto& modData = GetData();
+    const unsigned numOrders = dmfData.GetNumOrders() + (unsigned)m_UsingSetupPattern;
+    if (numOrders > 64) // numOrders is 1 more than it actually is
     {
         throw MODException(ModuleException::Category::Convert, MOD::ConvertError::TooManyPatternMatrixRows);
     }
 
-    if (moduleInfo.totalRowsPerPattern > 64)
+    if (dmfData.GetNumRows() > 64)
     {
         throw MODException(ModuleException::Category::Convert, MOD::ConvertError::Over64RowPattern);
     }
 
-    m_NumberOfChannels = DMF::Systems(DMF::SystemType::GameBoy).channels;
+    unsigned numChannels = dmfData.GetNumChannels();
     m_NumberOfChannelsPowOfTwo = 0;
-    unsigned channels = m_NumberOfChannels;
+    unsigned channels = numChannels;
     while (channels > 1)
     {
         channels >>= 1;
-        m_NumberOfChannelsPowOfTwo++;
+        ++m_NumberOfChannelsPowOfTwo;
     }
 
-    ///////////////// CONVERT SONG NAME
-
-    m_ModuleName.clear();
-    for (int i = 0; i < std::min((int)dmf.GetVisualInfo().songNameLength, 20); i++)
+    if (numChannels != 4)
     {
-        m_ModuleName += dmf.GetVisualInfo().songName[i];
+        throw ModuleException(ModuleException::Category::Convert, MOD::ConvertError::WrongChannelCount, "Wrong number of channels. There should be exactly 4.");
     }
+
+    modData.InitializePatternMatrix(numChannels, numOrders, 64);
+
+    for (unsigned channel = 0; channel < numChannels; ++channel)
+    {
+        // Fill pattern ids with 0,1,2,...,N
+        std::iota(modData.PatternIdsRef()[channel].begin(), modData.PatternIdsRef()[channel].end(), 0);
+    }
+
+    modData.InitializeChannels();
+    modData.InitializePatterns();
+
+    ///////////////// CONVERT SONG TITLE AND AUTHOR
+
+    modData.GlobalData() = std::make_unique<ModuleGlobalData<MOD>>(); // Create global data object
+    auto& modGlobalData = *modData.GlobalData();
+
+    modGlobalData.title = dmfData.GlobalData()->title;
+    modGlobalData.title.resize(20, ' ');
+
+    modGlobalData.author = dmfData.GlobalData()->author;
+    modGlobalData.author.resize(22, ' '); // Author will be displayed in 1st sample; sample names have 22 character limit
 
     ///////////////// CONVERT SAMPLE INFO
 
@@ -146,7 +167,7 @@ void MOD::ConvertFromDMF(const DMF& dmf)
         std::cout << "Converting pattern data...\n";
 
     DMFConvertPatterns(dmf, sampleMap);
-    
+
     ///////////////// CLEAN UP
 
     if (verbose)
@@ -420,6 +441,12 @@ void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap)
                     si.name += " (high)"; break;
             }
 
+            if (si.id == 1) // #0 is a special value, not the 1st MOD sample
+            {
+                // Overwrite 1st sample's name with author's name
+                si.name = GetData().GlobalData()->author;
+            }
+
             if (si.name.size() > 22)
                 throw std::invalid_argument("Sample name must be 22 characters or less");
 
@@ -503,7 +530,9 @@ std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned le
 
 void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
 {
-    m_Patterns.assign(m_NumberOfRowsInPatternMatrix, {});
+    auto& modData = GetData();
+
+    m_Patterns.assign(modData.GetNumOrders(), {});
 
     unsigned initialTempo, initialSpeed; // Together these will set the initial BPM
     DMFConvertInitialBPM(dmf, initialTempo, initialSpeed);
@@ -511,6 +540,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
     if (m_UsingSetupPattern)
     {
         m_Patterns[0].assign(64 * m_NumberOfChannels, {0, 0, 0, 0});
+        modData.GetPattern()
 
         // Set initial tempo
         ChannelRow tempoRow;
@@ -622,7 +652,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
             }
 
             // Set the channel rows for the current pattern row all at once
-            for (unsigned chan = 0; chan < m_NumberOfChannels; chan++)
+            for (unsigned chan = 0; chan < GetData().GetNumChannels(); ++chan)
             {
                 SetChannelRow(patMatRow + (int)m_UsingSetupPattern, patRow, chan, state.channelRows[chan]);
             }
@@ -1139,9 +1169,9 @@ Note MOD::DMFConvertNote(State& state, const Row<DMF>& row, const MOD::SampleMap
     return modNote;
 }
 
-ChannelRow MOD::DMFApplyNoteAndEffect(State& state, const PriorityEffectsMap& modEffects, mod_sample_id_t modSampleId, uint16_t period)
+Row<MOD> MOD::DMFApplyNoteAndEffect(State& state, const PriorityEffectsMap& modEffects, mod_sample_id_t modSampleId, uint16_t period)
 {
-    ChannelRow modChannelRow;
+    Row<MOD> modChannelRow;
 
     modChannelRow.SampleNumber = modSampleId;
     modChannelRow.SamplePeriod = period;
@@ -1707,19 +1737,21 @@ void MOD::ExportSampleInfo(std::ofstream& fout) const
 
 void MOD::ExportModuleInfo(std::ofstream& fout) const
 {
-    fout.put(m_NumberOfRowsInPatternMatrix);   // Song length in patterns (not total number of patterns) 
+    const uint8_t numOrders = static_cast<uint8_t>(GetData().GetNumOrders());
+
+    fout.put(numOrders);   // Song length in patterns (not total number of patterns) 
     fout.put(127);                        // 0x7F - Useless byte that has to be here
 
     // Pattern matrix (Each ProTracker pattern number is the same as its pattern matrix row number)
-    for (uint8_t i = 0; i < m_NumberOfRowsInPatternMatrix; i++)
+    for (uint8_t i = 0; i < numOrders; ++i)
     {
         fout.put(i);
     }
-    for (uint8_t i = m_NumberOfRowsInPatternMatrix; i < 128; i++)
+    for (uint8_t i = numOrders; i < 128; ++i)
     {
         fout.put(0);
     }
-    
+
     fout << "M.K."; // ProTracker uses "M!K!" if there's more than 64 pattern matrix rows
 }
 
@@ -1814,7 +1846,7 @@ std::string MODException::CreateErrorMessage(Category category, int errorCode, c
                     return std::string("Patterns must have 64 or fewer rows.\n")
                             + std::string("       A workaround for this issue is planned for a future update to dmf2mod.");
                 default:
-                    return "";
+                    return arg;
             }
             break;
     }

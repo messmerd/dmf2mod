@@ -26,6 +26,9 @@ public:
 
     inline const ModuleData<T>& GetData() const { return m_Data; }
 
+    std::string GetTitle() const override { return GetData().GlobalData().title; }
+    std::string GetAuthor() const override { return GetData().GlobalData().author; }
+
 protected:
 
     inline ModuleData<T>& GetData() { return m_Data; }

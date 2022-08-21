@@ -81,8 +81,6 @@ static constexpr double GetPeriod(Note note)
 DMF::DMF()
 {
     // Initialize pointers to nullptr to prevent segfault when freeing memory if the import fails:
-    m_VisualInfo.songName.clear();
-    m_VisualInfo.songAuthor.clear();
     m_Instruments = nullptr;
     m_WavetableSizes = nullptr;
     m_WavetableValues = nullptr;
@@ -220,8 +218,8 @@ void DMF::ImportRaw(const std::string& filename)
     LoadVisualInfo(fin);
     if (verbose)
     {
-        std::cout << "Title: " << m_VisualInfo.songName << "\n";
-        std::cout << "Author: " << m_VisualInfo.songAuthor << "\n";
+        std::cout << "Title: " << GetData().GlobalData().title << "\n";
+        std::cout << "Author: " << GetData().GlobalData().author << "\n";
         std::cout << "Loaded visual information." << "\n";
     }
 
@@ -283,20 +281,20 @@ System DMF::GetSystem(uint8_t systemByte) const
 
 void DMF::LoadVisualInfo(zstr::ifstream& fin)
 {
-    m_VisualInfo.songNameLength = fin.get();
+    const uint8_t songNameLength = fin.get();
 
-    char* tempStr = new char[m_VisualInfo.songNameLength + 1];
-    fin.read(tempStr, m_VisualInfo.songNameLength);
-    tempStr[m_VisualInfo.songNameLength] = '\0';
-    m_VisualInfo.songName = tempStr;
+    char* tempStr = new char[songNameLength + 1];
+    fin.read(tempStr, songNameLength);
+    tempStr[songNameLength] = '\0';
+    GetData().GlobalData().title = tempStr;
     delete[] tempStr;
 
-    m_VisualInfo.songAuthorLength = fin.get();
+    const uint8_t songAuthorLength = fin.get();
 
-    tempStr = new char[m_VisualInfo.songAuthorLength + 1];
-    fin.read(tempStr, m_VisualInfo.songAuthorLength);
-    tempStr[m_VisualInfo.songAuthorLength] = '\0';
-    m_VisualInfo.songAuthor = tempStr;
+    tempStr = new char[songAuthorLength + 1];
+    fin.read(tempStr, songAuthorLength);
+    tempStr[songAuthorLength] = '\0';
+    GetData().GlobalData().author = tempStr;
     delete[] tempStr;
 
     m_VisualInfo.highlightAPatterns = fin.get();
@@ -342,7 +340,7 @@ void DMF::LoadModuleInfo(zstr::ifstream& fin)
 void DMF::LoadPatternMatrixValues(zstr::ifstream& fin)
 {
     auto& moduleData = GetData();
-    moduleData.InitializePatternMatrix(
+    moduleData.AllocatePatternMatrix(
         m_System.channels, 
         m_ModuleInfo.totalRowsInPatternMatrix, 
         m_ModuleInfo.totalRowsPerPattern);
@@ -367,7 +365,7 @@ void DMF::LoadPatternMatrixValues(zstr::ifstream& fin)
         }
     }
 
-    moduleData.InitializeChannels();
+    moduleData.AllocateChannels();
 }
 
 void DMF::LoadInstrumentsData(zstr::ifstream& fin)
@@ -677,7 +675,7 @@ void DMF::LoadWavetablesData(zstr::ifstream& fin)
 void DMF::LoadPatternsData(zstr::ifstream& fin)
 {
     auto& moduleData = GetData();
-    moduleData.InitializePatterns();
+    moduleData.AllocatePatterns();
     auto& channelMetadata = moduleData.ChannelMetadataRef();
 
     std::unordered_set<std::pair<uint8_t, uint8_t>, PairHash> patternsVisited; // Storing channel/patternId pairs

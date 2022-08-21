@@ -22,15 +22,13 @@ namespace d2m {
 class MOD;
 
 template<>
-struct ModuleGlobalData<MOD> : public ModuleGlobalDataGeneric<PatternStorageType::ORC>
+struct ModuleGlobalData<MOD> : public ModuleGlobalDataGeneric<DataStorageType::ORC>
 {
     // In the future, we'll be able to detect when a MOD module
     // was created with dmf2mod, which will help when converting
     // from MOD to another module type.
     bool madeWithDmf2mod;
 };
-
-MODULE_DECLARE(MOD, MODConversionOptions)
 
 template<>
 struct Row<MOD>
@@ -40,6 +38,8 @@ struct Row<MOD>
     unsigned EffectCode;
     unsigned EffectValue;
 };
+
+MODULE_DECLARE(MOD, MODConversionOptions)
 
 namespace mod {
 
@@ -88,16 +88,6 @@ enum EffectPriority
     EffectPriorityOtherEffect,
     EffectPriorityUnsupportedEffect /* Must be the last enum value */
 };
-
-/*
-struct ChannelRow
-{
-    uint8_t SampleNumber;
-    uint16_t SamplePeriod;
-    unsigned EffectCode;
-    unsigned EffectValue;
-};
-*/
 
 using dmf_sample_id_t = int;
 using mod_sample_id_t = int;
@@ -282,7 +272,7 @@ struct State
 class MODException : public ModuleException
 {
 public:
-    template <class T, class = std::enable_if_t<std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}>>
+    template <class T, class = std::enable_if_t<std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>>>
     MODException(Category category, T errorCode, const std::string& args = "")
         : ModuleException(category, static_cast<int>(errorCode), CreateErrorMessage(category, (int)errorCode, args)) {}
 
@@ -331,8 +321,6 @@ public:
     MOD();
     ~MOD() = default;
     void CleanUp() {};
-
-    std::string GetName() const override { return m_ModuleName; }
 
     enum class ImportError {Success=0};
     enum class ImportWarning {};
@@ -398,30 +386,13 @@ private:
     void ExportPatterns(std::ofstream& fout) const;
     void ExportSampleData(std::ofstream& fout) const;
 
-    // Other:
-    /*
-    inline mod::ChannelRow& GetChannelRow(unsigned pattern, unsigned row, unsigned channel)
-    {
-        return m_Patterns[pattern][(row << m_NumberOfChannelsPowOfTwo) + channel];
-    }
-
-    inline void SetChannelRow(unsigned pattern, unsigned row, unsigned channel, mod::ChannelRow& channelRow)
-    {
-        m_Patterns.at(pattern).at((row << m_NumberOfChannelsPowOfTwo) + channel) = channelRow;
-    }
-    */
-
 private:
     //////////// Temporaries used during DMF-->MOD conversion
     const bool m_UsingSetupPattern = true; // Whether to use a pattern at the start of the module to set up the initial tempo and other stuff.
+    bool m_DataGenerated; // true = already generated data needed for main conversion loop; false = need to generate data
 
     //////////// MOD file info
-    std::string m_ModuleName;
     int8_t m_TotalMODSamples;
-    ///unsigned m_NumberOfChannels;
-    //unsigned char m_NumberOfChannelsPowOfTwo; // For efficiency. 2^m_NumberOfChannelsPowOfTwo = m_NumberOfChannels.
-    ///unsigned m_NumberOfRowsInPatternMatrix;
-    //std::vector<std::vector<mod::ChannelRow>> m_Patterns; // Per pattern: Vector of channel rows that together contain data for entire module
     std::map<mod::mod_sample_id_t, mod::Sample> m_Samples;
 };
 

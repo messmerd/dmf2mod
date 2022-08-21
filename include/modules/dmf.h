@@ -17,7 +17,11 @@
 namespace d2m {
 
 // Declare module
-MODULE_DECLARE(DMF, DMFConversionOptions)
+
+class DMF;
+
+template<>
+struct ModuleGlobalData<DMF> : public ModuleGlobalDataGeneric<DataStorageType::COR> {};
 
 namespace dmf {
     struct Effect
@@ -47,6 +51,8 @@ struct PatternMetadata<DMF>
 {
     std::string name;
 };
+
+MODULE_DECLARE(DMF, DMFConversionOptions)
 
 namespace dmf {
 
@@ -105,10 +111,6 @@ struct System
 
 struct VisualInfo
 {
-    uint8_t songNameLength;
-    std::string songName;
-    uint8_t songAuthorLength;
-    std::string songAuthor;
     uint8_t highlightAPatterns;
     uint8_t highlightBPatterns;
 };
@@ -254,8 +256,6 @@ public:
     DMF();
     ~DMF();
     void CleanUp();
-
-    std::string GetName() const override { return m_VisualInfo.songName; }
 
     ////////////
 

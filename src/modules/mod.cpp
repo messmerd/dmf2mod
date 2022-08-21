@@ -63,7 +63,10 @@ static uint16_t proTrackerPeriodTable[5][12] = {
     {107,101, 95, 90, 85, 80, 76, 71, 67, 64, 60, 57}               /* C-4 to B-4 */
 };
 
-MOD::MOD() {}
+MOD::MOD()
+{
+    m_DataGenerated = false;
+}
 
 void MOD::ImportRaw(const std::string& filename)
 {
@@ -94,6 +97,7 @@ void MOD::ConvertRaw(const Module* input)
 
 void MOD::ConvertFromDMF(const DMF& dmf)
 {
+    m_DataGenerated = false;
     const bool verbose = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Verbose).GetValue<bool>();
 
     if (verbose)
@@ -118,40 +122,30 @@ void MOD::ConvertFromDMF(const DMF& dmf)
     }
 
     unsigned numChannels = dmfData.GetNumChannels();
-    m_NumberOfChannelsPowOfTwo = 0;
-    unsigned channels = numChannels;
-    while (channels > 1)
-    {
-        channels >>= 1;
-        ++m_NumberOfChannelsPowOfTwo;
-    }
-
     if (numChannels != 4)
     {
         throw ModuleException(ModuleException::Category::Convert, MOD::ConvertError::WrongChannelCount, "Wrong number of channels. There should be exactly 4.");
     }
 
-    modData.InitializePatternMatrix(numChannels, numOrders, 64);
+    modData.AllocatePatternMatrix(numChannels, numOrders, 64);
 
-    for (unsigned channel = 0; channel < numChannels; ++channel)
-    {
-        // Fill pattern ids with 0,1,2,...,N
-        std::iota(modData.PatternIdsRef()[channel].begin(), modData.PatternIdsRef()[channel].end(), 0);
-    }
+    // Fill pattern matrix with pattern ids 0,1,2,...,N
+    std::iota(modData.PatternMatrixRef().begin(), modData.PatternMatrixRef().end(), 0);
 
-    modData.InitializeChannels();
-    modData.InitializePatterns();
+    modData.AllocateChannels();
+    modData.AllocatePatterns();
 
     ///////////////// CONVERT SONG TITLE AND AUTHOR
 
-    modData.GlobalData() = std::make_unique<ModuleGlobalData<MOD>>(); // Create global data object
-    auto& modGlobalData = *modData.GlobalData();
+    auto& modGlobalData = modData.GlobalData();
 
-    modGlobalData.title = dmfData.GlobalData()->title;
-    modGlobalData.title.resize(20, ' ');
+    modGlobalData.title = dmfData.GlobalData().title;
+    if (modGlobalData.title.size() > 20)
+        modGlobalData.title.resize(20);
 
-    modGlobalData.author = dmfData.GlobalData()->author;
-    modGlobalData.author.resize(22, ' '); // Author will be displayed in 1st sample; sample names have 22 character limit
+    modGlobalData.author = dmfData.GlobalData().author;
+    if (modGlobalData.author.size() > 22)
+        modGlobalData.author.resize(22); // Author will be displayed in 1st sample; sample names have 22 character limit
 
     ///////////////// CONVERT SAMPLE INFO
 
@@ -160,6 +154,7 @@ void MOD::ConvertFromDMF(const DMF& dmf)
 
     SampleMap sampleMap;
     DMFConvertSamples(dmf, sampleMap);
+    m_DataGenerated = true;
 
     ///////////////// CONVERT PATTERN DATA
 
@@ -444,7 +439,7 @@ void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap)
             if (si.id == 1) // #0 is a special value, not the 1st MOD sample
             {
                 // Overwrite 1st sample's name with author's name
-                si.name = GetData().GlobalData()->author;
+                si.name = GetAuthor();
             }
 
             if (si.name.size() > 22)
@@ -532,50 +527,45 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
 {
     auto& modData = GetData();
 
-    m_Patterns.assign(modData.GetNumOrders(), {});
-
     unsigned initialTempo, initialSpeed; // Together these will set the initial BPM
     DMFConvertInitialBPM(dmf, initialTempo, initialSpeed);
 
     if (m_UsingSetupPattern)
     {
-        m_Patterns[0].assign(64 * m_NumberOfChannels, {0, 0, 0, 0});
-        modData.GetPattern()
-
         // Set initial tempo
-        ChannelRow tempoRow;
+        Row<MOD> tempoRow;
         tempoRow.SampleNumber = 0;
         tempoRow.SamplePeriod = 0;
         tempoRow.EffectCode = EffectCode::SetSpeed;
         tempoRow.EffectValue = initialTempo;
-        SetChannelRow(0, 0, 0, tempoRow);
+        modData.SetRow(0, 0, 0, tempoRow);
 
         // Set initial speed
         if (GetOptions()->GetTempoType() != MODConversionOptions::TempoType::EffectCompatibility)
         {
-            ChannelRow speedRow;
+            Row<MOD> speedRow;
             speedRow.SampleNumber = 0;
             speedRow.SamplePeriod = 0;
             speedRow.EffectCode = EffectCode::SetSpeed;
             speedRow.EffectValue = initialSpeed;
-            SetChannelRow(0, 0, 1, speedRow);
+            modData.SetRow(1, 0, 0, speedRow);
         }
 
         // Set Pattern Break to start of song
-        ChannelRow posJumpRow;
+        Row<MOD> posJumpRow;
         posJumpRow.SampleNumber = 0;
         posJumpRow.SamplePeriod = 0;
         posJumpRow.EffectCode = EffectCode::PatBreak;
         posJumpRow.EffectValue = 0;
-        SetChannelRow(0, 0, 2, posJumpRow);
+        modData.SetRow(2, 0, 0, posJumpRow);
 
         // Set Amiga Filter
-        ChannelRow amigaFilterRow;
+        Row<MOD> amigaFilterRow;
         amigaFilterRow.SampleNumber = 0;
         amigaFilterRow.SamplePeriod = 0;
         amigaFilterRow.EffectCode = EffectCode::SetFilter;
         amigaFilterRow.EffectValue = !GetOptions()->GetOption(MODOptionEnum::AmigaFilter).GetValue<bool>();
-        SetChannelRow(0, 0, 3, amigaFilterRow);
+        modData.SetRow(3, 0, 0, amigaFilterRow);
 
         // All other channel rows in the pattern are already zeroed out so nothing needs to be done for them
     }
@@ -599,7 +589,6 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
         state.global.order = patMatRow;
 
         // patMatRow is in DMF pattern matrix rows, not MOD
-        m_Patterns[patMatRow + (int)m_UsingSetupPattern].assign(64 * m_NumberOfChannels, {});
 
         // Loop through rows in a pattern:
         for (unsigned patRow = 0; patRow < dmfTotalRowsPerPattern; patRow++)
@@ -612,13 +601,13 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
                 state.global.channelIndependentEffect = {EffectCode::PatBreak, 0};
 
             // Clear channel rows
-            for (unsigned chan = 0; chan < m_NumberOfChannels; chan++)
+            for (unsigned chan = 0; chan < modData.GetNumChannels(); chan++)
             {
                 state.channelRows[chan] = {};
             }
 
             // Loop through channels:
-            for (unsigned chan = 0; chan < m_NumberOfChannels; chan++)
+            for (unsigned chan = 0; chan < modData.GetNumChannels(); chan++)
             {
                 state.global.channel = chan;
 
@@ -654,21 +643,21 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
             // Set the channel rows for the current pattern row all at once
             for (unsigned chan = 0; chan < GetData().GetNumChannels(); ++chan)
             {
-                SetChannelRow(patMatRow + (int)m_UsingSetupPattern, patRow, chan, state.channelRows[chan]);
+                modData.SetRow(chan, patMatRow + (int)m_UsingSetupPattern, patRow, state.channelRows[chan]);
             }
 
             // TODO: Better channel independent effects implementation
 
         }
 
-        // If the DMF has less than 64 rows per pattern, there will be extra MOD rows which will need to be blank
+        // If the DMF has less than 64 rows per pattern, there will be extra MOD rows which will need to be blank; TODO: May not be needed
         for (unsigned patRow = dmfTotalRowsPerPattern; patRow < 64; patRow++)
         {
             // Loop through channels:
-            for (unsigned chan = 0; chan < m_NumberOfChannels; chan++)
+            for (unsigned chan = 0; chan < modData.GetNumChannels(); chan++)
             {
-                ChannelRow tempChannelRow = {0, 0, 0, 0};
-                SetChannelRow(patMatRow + (int)m_UsingSetupPattern, patRow, chan, tempChannelRow);
+                Row<MOD> tempRow = {0, 0, 0, 0};
+                modData.SetRow(chan, patMatRow + (int)m_UsingSetupPattern, patRow, tempRow);
             }
         }
     }
@@ -1020,7 +1009,7 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const Row<DMF>& 
         }
 
         // Make sure this function isn't being called from DMFCreateSampleMapping (this is a cludgy solution, but all this code will be refactored later)
-        if (!m_Patterns.empty())
+        if (m_DataGenerated)
         {
             // Add Note OFF to the loopback point for any channels where the sound would carry over
             for (int chan = 0; chan <= (int)dmf::GameBoyChannel::NOISE; chan++)
@@ -1031,9 +1020,10 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const Row<DMF>& 
                     // TODO: A note could already be playing at the loopback point (a note which carried over from the previous pattern), but I am ignoring that case for now
                     // TODO: Would this mess up the MOD state in any way?
                     // Get 1st row of the pattern we're looping back to and modify the note to use Note OFF (NOTE: This assumes silent sample exists)
-                    auto& modChanRow = GetChannelRow(loopbackToPattern + (m_UsingSetupPattern ? 1 : 0), 0, chan);
-                    modChanRow.SampleNumber = 1; // Use silent sample
-                    modChanRow.SamplePeriod = 0; // Don't need a note for the silent sample to work
+                    Row<MOD> tempModRow = GetData().GetRow(chan, loopbackToPattern + (m_UsingSetupPattern ? 1 : 0), 0);
+                    tempModRow.SampleNumber = 1; // Use silent sample
+                    tempModRow.SamplePeriod = 0; // Don't need a note for the silent sample to work
+                    GetData().SetRow(chan, loopbackToPattern + (m_UsingSetupPattern ? 1 : 0), 0, tempModRow);
                 }
             }
         }
@@ -1663,11 +1653,12 @@ void MOD::ExportRaw(const std::string& filename)
 void MOD::ExportModuleName(std::ofstream& fout) const
 {
     // Print module name, truncating or padding with zeros as needed
+    const std::string& title = GetTitle();
     for (unsigned i = 0; i < 20; i++)
     {
-        if (i < m_ModuleName.size())
+        if (i < title.size())
         {
-            fout.put(m_ModuleName[i]);
+            fout.put(title[i]);
         }
         else
         {
@@ -1685,7 +1676,7 @@ void MOD::ExportSampleInfo(std::ofstream& fout) const
         if (sample.name.size() > 22)
             throw std::length_error("Sample name must be 22 characters or less");
 
-        // Pad name with zeros
+        // Pad name with spaces
         std::string nameCopy = sample.name;
         while (nameCopy.size() < 22)
             nameCopy += " ";
@@ -1737,17 +1728,15 @@ void MOD::ExportSampleInfo(std::ofstream& fout) const
 
 void MOD::ExportModuleInfo(std::ofstream& fout) const
 {
-    const uint8_t numOrders = static_cast<uint8_t>(GetData().GetNumOrders());
-
-    fout.put(numOrders);   // Song length in patterns (not total number of patterns) 
+    fout.put(GetData().GetNumOrders());   // Song length in patterns (not total number of patterns) 
     fout.put(127);                        // 0x7F - Useless byte that has to be here
 
     // Pattern matrix (Each ProTracker pattern number is the same as its pattern matrix row number)
-    for (uint8_t i = 0; i < numOrders; ++i)
+    for (uint8_t patternId : GetData().PatternMatrixRef())
     {
-        fout.put(i);
+        fout.put(patternId);
     }
-    for (uint8_t i = numOrders; i < 128; ++i)
+    for (uint8_t i = GetData().GetNumOrders(); i < 128; ++i)
     {
         fout.put(0);
     }
@@ -1757,23 +1746,28 @@ void MOD::ExportModuleInfo(std::ofstream& fout) const
 
 void MOD::ExportPatterns(std::ofstream& fout) const
 {
-    for (const auto& pattern : m_Patterns)
+    const auto& modData = GetData();
+    for (const auto& pattern : modData.PatternsRef())
     {
-        for (const auto& channelRow : pattern)
+        for (unsigned row = 0; row < modData.GetNumRows(); ++row)
         {
-            // Sample number (upper 4b); sample period/effect param. (upper 4b)
-            fout.put((channelRow.SampleNumber & 0xF0) | ((channelRow.SamplePeriod & 0x0F00) >> 8));
+            for (unsigned channel = 0; channel < modData.GetNumChannels(); ++channel)
+            {
+                const Row<MOD>& rowData = pattern[row][channel];
+                // Sample number (upper 4b); sample period/effect param. (upper 4b)
+                fout.put((rowData.SampleNumber & 0xF0) | ((rowData.SamplePeriod & 0x0F00) >> 8));
 
-            // Sample period/effect param. (lower 8 bits)
-            fout.put(channelRow.SamplePeriod & 0x00FF);
-        
-            //const uint16_t effect = ((uint16_t)channelRow.EffectCode << 4) | channelRow.EffectValue;
+                // Sample period/effect param. (lower 8 bits)
+                fout.put(rowData.SamplePeriod & 0x00FF);
 
-            // Sample number (lower 4b); effect code (upper 4b)
-            fout.put((channelRow.SampleNumber << 4) | (channelRow.EffectCode >> 4));
-            
-            // Effect code (lower 8 bits)
-            fout.put(((channelRow.EffectCode << 4) & 0x00FF) | channelRow.EffectValue);
+                //const uint16_t effect = ((uint16_t)rowData.EffectCode << 4) | rowData.EffectValue;
+
+                // Sample number (lower 4b); effect code (upper 4b)
+                fout.put((rowData.SampleNumber << 4) | (rowData.EffectCode >> 4));
+
+                // Effect code (lower 8 bits)
+                fout.put(((rowData.EffectCode << 4) & 0x00FF) | rowData.EffectValue);
+            }
         }
     }
 }

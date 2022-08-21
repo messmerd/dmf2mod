@@ -1271,7 +1271,7 @@ void MOD::DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed)
 
     if (GetOptions()->GetTempoType() == MODConversionOptions::TempoType::EffectCompatibility)
     {
-        tempo = desiredBPM * 2;
+        tempo = static_cast<unsigned>(desiredBPM * 2);
         speed = 6;
 
         if (tempo > 255)

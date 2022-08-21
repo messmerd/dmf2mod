@@ -218,8 +218,8 @@ void DMF::ImportRaw(const std::string& filename)
     LoadVisualInfo(fin);
     if (verbose)
     {
-        std::cout << "Title: " << GetData().GlobalData().title << "\n";
-        std::cout << "Author: " << GetData().GlobalData().author << "\n";
+        std::cout << "Title: " << GetTitle() << "\n";
+        std::cout << "Author: " << GetAuthor() << "\n";
         std::cout << "Loaded visual information." << "\n";
     }
 
@@ -341,9 +341,11 @@ void DMF::LoadPatternMatrixValues(zstr::ifstream& fin)
 {
     auto& moduleData = GetData();
     moduleData.AllocatePatternMatrix(
-        m_System.channels, 
-        m_ModuleInfo.totalRowsInPatternMatrix, 
+        m_System.channels,
+        m_ModuleInfo.totalRowsInPatternMatrix,
         m_ModuleInfo.totalRowsPerPattern);
+
+    std::map<std::pair<uint8_t, uint8_t>, std::string> channelPatternIdToPatternNameMap;
 
     for (unsigned channel = 0; channel < moduleData.GetNumChannels(); ++channel)
     {
@@ -356,16 +358,26 @@ void DMF::LoadPatternMatrixValues(zstr::ifstream& fin)
             if (m_DMFFileVersion >= 25) // DMF version 25 (0x19) and newer
             {
                 const int patternNameLength = fin.get();
-                char* tempStr = new char[patternNameLength + 1];
-                fin.read(tempStr, patternNameLength);
-                tempStr[patternNameLength] = '\0';
-                moduleData.SetPatternMetadata(channel, order, PatternMetadata<DMF>{tempStr});
-                delete[] tempStr;
+                if (patternNameLength > 0)
+                {
+                    char* tempStr = new char[patternNameLength + 1];
+                    fin.read(tempStr, patternNameLength);
+                    tempStr[patternNameLength] = '\0';
+                    channelPatternIdToPatternNameMap[{channel, patternId}] = tempStr;
+                    delete[] tempStr;
+                }
             }
         }
     }
 
     moduleData.AllocateChannels();
+    moduleData.AllocatePatterns();
+
+    // Pattern metadata must be set AFTER AllocatePatterns is called
+    for (auto& [channelPatternId, patternName] : channelPatternIdToPatternNameMap)
+    {
+        moduleData.SetPatternMetadata(channelPatternId.first, channelPatternId.second, {std::move(patternName)});
+    }
 }
 
 void DMF::LoadInstrumentsData(zstr::ifstream& fin)
@@ -675,7 +687,6 @@ void DMF::LoadWavetablesData(zstr::ifstream& fin)
 void DMF::LoadPatternsData(zstr::ifstream& fin)
 {
     auto& moduleData = GetData();
-    moduleData.AllocatePatterns();
     auto& channelMetadata = moduleData.ChannelMetadataRef();
 
     std::unordered_set<std::pair<uint8_t, uint8_t>, PairHash> patternsVisited; // Storing channel/patternId pairs

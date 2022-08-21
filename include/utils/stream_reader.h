@@ -9,7 +9,6 @@
 #pragma once
 
 #include <istream>
-#include <memory>
 #include <type_traits>
 #include <string>
 #include <vector>
@@ -156,7 +155,7 @@ public:
         static_assert(ReadAmount <= sizeof(T), "Explicitly specified template parameter 'ReadAmount' must be <= sizeof(T)");
         if constexpr (ReadAmount > 1UL)
         {
-            static_assert(is_power_of_two<sizeof(T)>, "sizeof(T) must be a power of 2");
+            static_assert(is_power_of_two<sizeof(T)>, "sizeof(T) must be a power of 2"); // TODO: Unnecessary?
             static_assert(Endian != Endianness::Unspecified, "Set the endianness when creating StreamReader or set it in this method's template parameters");
             if constexpr (Endian == Endianness::Little)
                 return ReadIntLittleEndian<T, ReadAmount>();
@@ -168,7 +167,6 @@ public:
             return m_Stream.get();
         }
     }
-
 };
 
 } // namespace d2m

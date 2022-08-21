@@ -155,24 +155,21 @@ void DMF::ImportRaw(const std::string& filename)
     if (verbose)
         std::cout << "DMF Filename: " << filename << "\n";
 
-    zstr::ifstream fin(filename, std::ios_base::binary);
-    if (fin.fail())
+    Reader fin{filename, std::ios_base::binary};
+    if (fin.stream().fail())
     {
         throw ModuleException(ModuleException::Category::Import, DMF::ImportError::UnspecifiedError, "Failed to open DMF file.");
     }
 
     ///////////////// FORMAT FLAGS
-    
-    char header[17];
-    fin.read(header, 16);
-    header[16] = '\0';
-    
-    if (std::string(header) != ".DelekDefleMask.")
+
+    // Check header
+    if (fin.ReadStr(16) != ".DelekDefleMask.")
     {
         throw ModuleException(ModuleException::Category::Import, DMF::ImportError::UnspecifiedError, "DMF format header is bad.");
     }
 
-    m_DMFFileVersion = fin.get();
+    m_DMFFileVersion = fin.ReadInt();
     if (m_DMFFileVersion < DMF_FILE_VERSION_MIN || m_DMFFileVersion > DMF_FILE_VERSION_MAX)
     {
         const bool tooHigh = m_DMFFileVersion > DMF_FILE_VERSION_MAX;
@@ -209,7 +206,7 @@ void DMF::ImportRaw(const std::string& filename)
 
     ///////////////// SYSTEM SET
     
-    m_System = GetSystem(fin.get());
+    m_System = GetSystem(fin.ReadInt());
 
     if (verbose)
         std::cout << "System: " << m_System.name << " (channels: " << std::to_string(m_System.channels) << ")\n";
@@ -260,13 +257,13 @@ void DMF::ImportRaw(const std::string& filename)
 void DMF::ExportRaw(const std::string& filename)
 {
     // Not implemented
-    throw NotImplementedException();
+    throw NotImplementedException{};
 }
 
 void DMF::ConvertRaw(const Module* input)
 {
     // Not implemented
-    throw NotImplementedException();
+    throw NotImplementedException{};
 }
 
 System DMF::GetSystem(uint8_t systemByte) const
@@ -279,65 +276,48 @@ System DMF::GetSystem(uint8_t systemByte) const
     return DMFSystems.at(DMF::SystemType::Error); // Error: System byte invalid
 }
 
-void DMF::LoadVisualInfo(zstr::ifstream& fin)
+void DMF::LoadVisualInfo(Reader& fin)
 {
-    const uint8_t songNameLength = fin.get();
-
-    char* tempStr = new char[songNameLength + 1];
-    fin.read(tempStr, songNameLength);
-    tempStr[songNameLength] = '\0';
-    GetData().GlobalData().title = tempStr;
-    delete[] tempStr;
-
-    const uint8_t songAuthorLength = fin.get();
-
-    tempStr = new char[songAuthorLength + 1];
-    fin.read(tempStr, songAuthorLength);
-    tempStr[songAuthorLength] = '\0';
-    GetData().GlobalData().author = tempStr;
-    delete[] tempStr;
-
-    m_VisualInfo.highlightAPatterns = fin.get();
-    m_VisualInfo.highlightBPatterns = fin.get();
+    GetData().GlobalData().title = fin.ReadPStr();
+    GetData().GlobalData().author = fin.ReadPStr();
+    m_VisualInfo.highlightAPatterns = fin.ReadInt();
+    m_VisualInfo.highlightBPatterns = fin.ReadInt();
 }
 
-void DMF::LoadModuleInfo(zstr::ifstream& fin)
+void DMF::LoadModuleInfo(Reader& fin)
 {
-    m_ModuleInfo.timeBase = fin.get() + 1;
-    m_ModuleInfo.tickTime1 = fin.get();
-    m_ModuleInfo.tickTime2 = fin.get();
-    m_ModuleInfo.framesMode = fin.get();
-    m_ModuleInfo.usingCustomHZ = fin.get();
-    m_ModuleInfo.customHZValue1 = fin.get();
-    m_ModuleInfo.customHZValue2 = fin.get();
-    m_ModuleInfo.customHZValue3 = fin.get();
+    m_ModuleInfo.timeBase = fin.ReadInt() + 1;
+    m_ModuleInfo.tickTime1 = fin.ReadInt();
+    m_ModuleInfo.tickTime2 = fin.ReadInt();
+    m_ModuleInfo.framesMode = fin.ReadInt();
+    m_ModuleInfo.usingCustomHZ = fin.ReadInt();
+    m_ModuleInfo.customHZValue1 = fin.ReadInt();
+    m_ModuleInfo.customHZValue2 = fin.ReadInt();
+    m_ModuleInfo.customHZValue3 = fin.ReadInt();
 
     if (m_DMFFileVersion >= 24) // DMF version 24 (0x18) and newer.
     {
         // Newer versions read 4 bytes here
-        m_ModuleInfo.totalRowsPerPattern = fin.get();
-        m_ModuleInfo.totalRowsPerPattern |= fin.get() << 8;
-        m_ModuleInfo.totalRowsPerPattern |= fin.get() << 16;
-        m_ModuleInfo.totalRowsPerPattern |= fin.get() << 24;
+        m_ModuleInfo.totalRowsPerPattern = fin.ReadInt<uint32_t>();
     }
     else // DMF version 23 (0x17) and older. WARNING: I don't have the specs for version 23 (0x17), so this may be wrong.
     {
         // Earlier versions such as 22 (0x16) only read one byte here
-        m_ModuleInfo.totalRowsPerPattern = fin.get();
+        m_ModuleInfo.totalRowsPerPattern = fin.ReadInt();
     }
 
-    m_ModuleInfo.totalRowsInPatternMatrix = fin.get();
+    m_ModuleInfo.totalRowsInPatternMatrix = fin.ReadInt();
 
     // Prior to Deflemask Version 0.11.1, arpeggio tick speed was stored here
     // I don't have the specs for DMF version 20 (0x14), but based on a real DMF file of that version, it is the first DMF version 
     //      to NOT contain the arpeggio tick speed byte.
     if (m_DMFFileVersion <= 19) // DMF version 19 (0x13) and older
     {
-        fin.get(); // arpTickSpeed: Discard for now
+        fin.ReadInt(); // arpTickSpeed: Discard for now
     }
 }
 
-void DMF::LoadPatternMatrixValues(zstr::ifstream& fin)
+void DMF::LoadPatternMatrixValues(Reader& fin)
 {
     auto& moduleData = GetData();
     moduleData.AllocatePatternMatrix(
@@ -351,20 +331,16 @@ void DMF::LoadPatternMatrixValues(zstr::ifstream& fin)
     {
         for (unsigned order = 0; order < moduleData.GetNumOrders(); ++order)
         {
-            const uint8_t patternId = fin.get();
+            const uint8_t patternId = fin.ReadInt();
             moduleData.SetPatternId(channel, order, patternId);
 
             // Version 1.1 introduces pattern names
             if (m_DMFFileVersion >= 25) // DMF version 25 (0x19) and newer
             {
-                const int patternNameLength = fin.get();
-                if (patternNameLength > 0)
+                std::string patternName = fin.ReadPStr();
+                if (patternName.size() > 0)
                 {
-                    char* tempStr = new char[patternNameLength + 1];
-                    fin.read(tempStr, patternNameLength);
-                    tempStr[patternNameLength] = '\0';
-                    channelPatternIdToPatternNameMap[{channel, patternId}] = tempStr;
-                    delete[] tempStr;
+                    channelPatternIdToPatternNameMap[{channel, patternId}] = std::move(patternName);
                 }
             }
         }
@@ -380,9 +356,9 @@ void DMF::LoadPatternMatrixValues(zstr::ifstream& fin)
     }
 }
 
-void DMF::LoadInstrumentsData(zstr::ifstream& fin)
+void DMF::LoadInstrumentsData(Reader& fin)
 {
-    m_TotalInstruments = fin.get();
+    m_TotalInstruments = fin.ReadInt();
     m_Instruments = new Instrument[m_TotalInstruments];
 
     for (int i = 0; i < m_TotalInstruments; i++)
@@ -391,21 +367,15 @@ void DMF::LoadInstrumentsData(zstr::ifstream& fin)
     }
 }
 
-Instrument DMF::LoadInstrument(zstr::ifstream& fin, DMF::SystemType systemType)
+Instrument DMF::LoadInstrument(Reader& fin, DMF::SystemType systemType)
 {
     Instrument inst = {};
 
-    uint8_t name_size = fin.get();
-
-    char* tempStr = new char[name_size + 1];
-    fin.read(tempStr, name_size);
-    tempStr[name_size] = '\0';
-    inst.name = tempStr;
-    delete[] tempStr;
+    inst.name = fin.ReadPStr();
 
     // Get instrument mode (Standard or FM)
     inst.mode = Instrument::InvalidMode;
-    switch (fin.get())
+    switch (fin.ReadInt())
     {
         case 0:
             inst.mode = Instrument::StandardMode; break;
@@ -416,127 +386,112 @@ Instrument DMF::LoadInstrument(zstr::ifstream& fin, DMF::SystemType systemType)
     }
 
     // Now we can import the instrument depending on the mode (Standard/FM)
-    
+
     if (inst.mode == Instrument::StandardMode)
     {
         if (m_DMFFileVersion <= 17) // DMF version 17 (0x11) or older
         {
             // Volume macro
-            inst.std.volEnvSize = fin.get();
+            inst.std.volEnvSize = fin.ReadInt();
             inst.std.volEnvValue = new int32_t[inst.std.volEnvSize];
             
             for (int i = 0; i < inst.std.volEnvSize; i++)
             {
                 // 4 bytes, little-endian
-                inst.std.volEnvValue[i] = fin.get();
-                inst.std.volEnvValue[i] |= fin.get() << 8;
-                inst.std.volEnvValue[i] |= fin.get() << 16;
-                inst.std.volEnvValue[i] |= fin.get() << 24;
+                inst.std.volEnvValue[i] = fin.ReadInt<int32_t>();
             }
 
             // Always get envelope loop position byte regardless of envelope size
-            inst.std.volEnvLoopPos = fin.get();
+            inst.std.volEnvLoopPos = fin.ReadInt<int8_t>();
         }
         else if (systemType != DMF::SystemType::GameBoy) // Not a Game Boy and DMF version 18 (0x12) or newer
         {
             // Volume macro
-            inst.std.volEnvSize = fin.get();
+            inst.std.volEnvSize = fin.ReadInt();
             inst.std.volEnvValue = new int32_t[inst.std.volEnvSize];
             
             for (int i = 0; i < inst.std.volEnvSize; i++)
             {
                 // 4 bytes, little-endian
-                inst.std.volEnvValue[i] = fin.get();
-                inst.std.volEnvValue[i] |= fin.get() << 8;
-                inst.std.volEnvValue[i] |= fin.get() << 16;
-                inst.std.volEnvValue[i] |= fin.get() << 24;
+                inst.std.volEnvValue[i] = fin.ReadInt<int32_t>();
             }
 
             if (inst.std.volEnvSize > 0)
-                inst.std.volEnvLoopPos = fin.get();
+                inst.std.volEnvLoopPos = fin.ReadInt<int8_t>();
         }
 
         // Arpeggio macro
-        inst.std.arpEnvSize = fin.get();
+        inst.std.arpEnvSize = fin.ReadInt();
         inst.std.arpEnvValue = new int32_t[inst.std.arpEnvSize];
         
         for (int i = 0; i < inst.std.arpEnvSize; i++)
         {
             // 4 bytes, little-endian
-            inst.std.arpEnvValue[i] = fin.get();
-            inst.std.arpEnvValue[i] |= fin.get() << 8;
-            inst.std.arpEnvValue[i] |= fin.get() << 16;
-            inst.std.arpEnvValue[i] |= fin.get() << 24;
+            inst.std.arpEnvValue[i] = fin.ReadInt<int32_t>();
         }
 
         if (inst.std.arpEnvSize > 0 || m_DMFFileVersion <= 17) // DMF version 17 and older always gets envelope loop position byte
-            inst.std.arpEnvLoopPos = fin.get();
+            inst.std.arpEnvLoopPos = fin.ReadInt<int8_t>();
         
-        inst.std.arpMacroMode = fin.get();
+        inst.std.arpMacroMode = fin.ReadInt();
 
         // Duty/Noise macro
-        inst.std.dutyNoiseEnvSize = fin.get();
+        inst.std.dutyNoiseEnvSize = fin.ReadInt();
         inst.std.dutyNoiseEnvValue = new int32_t[inst.std.dutyNoiseEnvSize];
         
         for (int i = 0; i < inst.std.dutyNoiseEnvSize; i++)
         {
             // 4 bytes, little-endian
-            inst.std.dutyNoiseEnvValue[i] = fin.get();
-            inst.std.dutyNoiseEnvValue[i] |= fin.get() << 8;
-            inst.std.dutyNoiseEnvValue[i] |= fin.get() << 16;
-            inst.std.dutyNoiseEnvValue[i] |= fin.get() << 24;
+            inst.std.dutyNoiseEnvValue[i] = fin.ReadInt<int32_t>();
         }
 
         if (inst.std.dutyNoiseEnvSize > 0 || m_DMFFileVersion <= 17) // DMF version 17 and older always gets envelope loop position byte
-            inst.std.dutyNoiseEnvLoopPos = fin.get();
+            inst.std.dutyNoiseEnvLoopPos = fin.ReadInt<int8_t>();
 
         // Wavetable macro
-        inst.std.wavetableEnvSize = fin.get();
+        inst.std.wavetableEnvSize = fin.ReadInt();
         inst.std.wavetableEnvValue = new int32_t[inst.std.wavetableEnvSize];
         
         for (int i = 0; i < inst.std.wavetableEnvSize; i++)
         {
             // 4 bytes, little-endian
-            inst.std.wavetableEnvValue[i] = fin.get();
-            inst.std.wavetableEnvValue[i] |= fin.get() << 8;
-            inst.std.wavetableEnvValue[i] |= fin.get() << 16;
-            inst.std.wavetableEnvValue[i] |= fin.get() << 24;
+            inst.std.wavetableEnvValue[i] = fin.ReadInt<int32_t>();
         }
 
         if (inst.std.wavetableEnvSize > 0 || m_DMFFileVersion <= 17) // DMF version 17 and older always gets envelope loop position byte
-            inst.std.wavetableEnvLoopPos = fin.get();
+            inst.std.wavetableEnvLoopPos = fin.ReadInt<int8_t>();
 
         // Per system data
         if (systemType == DMF::SystemType::C64_SID_8580 || systemType == DMF::SystemType::C64_SID_6581) // Using Commodore 64
         {
-            inst.std.c64TriWaveEn = fin.get();
-            inst.std.c64SawWaveEn = fin.get();
-            inst.std.c64PulseWaveEn = fin.get();
-            inst.std.c64NoiseWaveEn = fin.get();
-            inst.std.c64Attack = fin.get();
-            inst.std.c64Decay = fin.get();
-            inst.std.c64Sustain = fin.get();
-            inst.std.c64Release = fin.get();
-            inst.std.c64PulseWidth = fin.get();
-            inst.std.c64RingModEn = fin.get();
-            inst.std.c64SyncModEn = fin.get();
-            inst.std.c64ToFilter = fin.get();
-            inst.std.c64VolMacroToFilterCutoffEn = fin.get();
-            inst.std.c64UseFilterValuesFromInst = fin.get();
+            inst.std.c64TriWaveEn = fin.ReadInt();
+            inst.std.c64SawWaveEn = fin.ReadInt();
+            inst.std.c64PulseWaveEn = fin.ReadInt();
+            inst.std.c64NoiseWaveEn = fin.ReadInt();
+            inst.std.c64Attack = fin.ReadInt();
+            inst.std.c64Decay = fin.ReadInt();
+            inst.std.c64Sustain = fin.ReadInt();
+            inst.std.c64Release = fin.ReadInt();
+            inst.std.c64PulseWidth = fin.ReadInt();
+            inst.std.c64RingModEn = fin.ReadInt();
+            inst.std.c64SyncModEn = fin.ReadInt();
+            inst.std.c64ToFilter = fin.ReadInt();
+            inst.std.c64VolMacroToFilterCutoffEn = fin.ReadInt();
+            inst.std.c64UseFilterValuesFromInst = fin.ReadInt();
             
             // Filter globals
-            inst.std.c64FilterResonance = fin.get();
-            inst.std.c64FilterCutoff = fin.get();
-            inst.std.c64FilterHighPass = fin.get();
-            inst.std.c64FilterLowPass = fin.get();
-            inst.std.c64FilterCH2Off = fin.get();
+            inst.std.c64FilterResonance = fin.ReadInt();
+            inst.std.c64FilterCutoff = fin.ReadInt();
+            inst.std.c64FilterHighPass = fin.ReadInt();
+            inst.std.c64FilterLowPass = fin.ReadInt();
+            inst.std.c64FilterCH2Off = fin.ReadInt();
         }
         else if (systemType == DMF::SystemType::GameBoy && m_DMFFileVersion >= 18) // Using Game Boy and DMF version is 18 or newer
         {
-            inst.std.gbEnvVol = fin.get();
-            inst.std.gbEnvDir = fin.get();
-            inst.std.gbEnvLen = fin.get();
-            inst.std.gbSoundLen = fin.get();
+            inst.std.gbEnvVol = fin.ReadInt();
+            inst.std.gbEnvDir = fin.ReadInt();
+            inst.std.gbEnvLen = fin.ReadInt();
+            inst.std.gbSoundLen = fin.ReadInt();
         }
     }
     else if (inst.mode == Instrument::FMMode)
@@ -551,98 +506,98 @@ Instrument DMF::LoadInstrument(zstr::ifstream& fin, DMF::SystemType systemType)
         {
             if (systemType == DMF::SystemType::SMS_OPLL || systemType == DMF::SystemType::NES_VRC7)
             {
-                inst.fm.sus = fin.get();
-                inst.fm.fb = fin.get();
-                inst.fm.dc = fin.get();
-                inst.fm.dm = fin.get();
+                inst.fm.sus = fin.ReadInt();
+                inst.fm.fb = fin.ReadInt();
+                inst.fm.dc = fin.ReadInt();
+                inst.fm.dm = fin.ReadInt();
             }
             else
             {
-                inst.fm.alg = fin.get();
-                inst.fm.fb = fin.get();
-                inst.fm.lfo = fin.get();
-                inst.fm.lfo2 = fin.get();
+                inst.fm.alg = fin.ReadInt();
+                inst.fm.fb = fin.ReadInt();
+                inst.fm.lfo = fin.ReadInt();
+                inst.fm.lfo2 = fin.ReadInt();
             }
 
             inst.fm.numOperators = 4;
         }
         else
         {
-            inst.fm.alg = fin.get();
-            fin.get(); // Reserved byte (must be 0)
-            inst.fm.fb = fin.get();
-            fin.get(); // Reserved byte (must be 0)
-            inst.fm.lfo = fin.get();
-            fin.get(); // Reserved byte (must be 0)
+            inst.fm.alg = fin.ReadInt();
+            fin.ReadInt(); // Reserved byte (must be 0)
+            inst.fm.fb = fin.ReadInt();
+            fin.ReadInt(); // Reserved byte (must be 0)
+            inst.fm.lfo = fin.ReadInt();
+            fin.ReadInt(); // Reserved byte (must be 0)
 
-            const bool totalOperatorsBool = fin.get();
+            const bool totalOperatorsBool = fin.ReadInt<bool>();
             inst.fm.numOperators = totalOperatorsBool ? 4 : 2;
 
-            inst.fm.lfo2 = fin.get();
+            inst.fm.lfo2 = fin.ReadInt();
         }
 
         for (int i = 0; i < inst.fm.numOperators; i++)
         {
             if (m_DMFFileVersion > 18) // Newer than DMF version 18 (0x12)
             {
-                inst.fm.ops[i].am = fin.get();
-                inst.fm.ops[i].ar = fin.get();
-                inst.fm.ops[i].dr = fin.get();
-                inst.fm.ops[i].mult = fin.get();
-                inst.fm.ops[i].rr = fin.get();
-                inst.fm.ops[i].sl = fin.get();
-                inst.fm.ops[i].tl = fin.get();
+                inst.fm.ops[i].am = fin.ReadInt();
+                inst.fm.ops[i].ar = fin.ReadInt();
+                inst.fm.ops[i].dr = fin.ReadInt();
+                inst.fm.ops[i].mult = fin.ReadInt();
+                inst.fm.ops[i].rr = fin.ReadInt();
+                inst.fm.ops[i].sl = fin.ReadInt();
+                inst.fm.ops[i].tl = fin.ReadInt();
 
                 if (systemType == DMF::SystemType::SMS_OPLL || systemType == DMF::SystemType::NES_VRC7)
                 {
-                    const uint8_t opllPreset = fin.get();
+                    const uint8_t opllPreset = fin.ReadInt();
                     if (i == 0)
                         inst.fm.opllPreset = opllPreset;
                     
-                    inst.fm.ops[i].ksr = fin.get();
-                    inst.fm.ops[i].vib = fin.get();
-                    inst.fm.ops[i].ksl = fin.get();
-                    inst.fm.ops[i].egs = fin.get(); // EG-S in Deflemask. 0 if OFF; 8 if ON.
+                    inst.fm.ops[i].ksr = fin.ReadInt();
+                    inst.fm.ops[i].vib = fin.ReadInt();
+                    inst.fm.ops[i].ksl = fin.ReadInt();
+                    inst.fm.ops[i].egs = fin.ReadInt(); // EG-S in Deflemask. 0 if OFF; 8 if ON.
                 }
                 else
                 {
-                    inst.fm.ops[i].dt2 = fin.get();
-                    inst.fm.ops[i].rs = fin.get();
-                    inst.fm.ops[i].dt = fin.get();
-                    inst.fm.ops[i].d2r = fin.get();
-                    inst.fm.ops[i].SSGMode = fin.get();
+                    inst.fm.ops[i].dt2 = fin.ReadInt();
+                    inst.fm.ops[i].rs = fin.ReadInt();
+                    inst.fm.ops[i].dt = fin.ReadInt();
+                    inst.fm.ops[i].d2r = fin.ReadInt();
+                    inst.fm.ops[i].SSGMode = fin.ReadInt();
                 }
             }
             else // DMF version 17 (0x11) or older
             {
-                inst.fm.ops[i].am = fin.get();
-                inst.fm.ops[i].ar = fin.get();
-                inst.fm.ops[i].dam = fin.get();
-                inst.fm.ops[i].dr = fin.get();
-                inst.fm.ops[i].dvb = fin.get();
-                inst.fm.ops[i].egt = fin.get();
-                inst.fm.ops[i].ksl = fin.get();
-                inst.fm.ops[i].mult = fin.get();
-                inst.fm.ops[i].rr = fin.get();
-                inst.fm.ops[i].sl = fin.get();
-                inst.fm.ops[i].sus = fin.get();
-                inst.fm.ops[i].tl = fin.get();
-                inst.fm.ops[i].vib = fin.get();
-                inst.fm.ops[i].ws = fin.get();
-                inst.fm.ops[i].ksr = fin.get(); // RS on SEGA Genesis
-                inst.fm.ops[i].dt = fin.get();
-                inst.fm.ops[i].d2r = fin.get();
-                inst.fm.ops[i].SSGMode = fin.get();
+                inst.fm.ops[i].am = fin.ReadInt();
+                inst.fm.ops[i].ar = fin.ReadInt();
+                inst.fm.ops[i].dam = fin.ReadInt();
+                inst.fm.ops[i].dr = fin.ReadInt();
+                inst.fm.ops[i].dvb = fin.ReadInt();
+                inst.fm.ops[i].egt = fin.ReadInt();
+                inst.fm.ops[i].ksl = fin.ReadInt();
+                inst.fm.ops[i].mult = fin.ReadInt();
+                inst.fm.ops[i].rr = fin.ReadInt();
+                inst.fm.ops[i].sl = fin.ReadInt();
+                inst.fm.ops[i].sus = fin.ReadInt();
+                inst.fm.ops[i].tl = fin.ReadInt();
+                inst.fm.ops[i].vib = fin.ReadInt();
+                inst.fm.ops[i].ws = fin.ReadInt();
+                inst.fm.ops[i].ksr = fin.ReadInt(); // RS on SEGA Genesis
+                inst.fm.ops[i].dt = fin.ReadInt();
+                inst.fm.ops[i].d2r = fin.ReadInt();
+                inst.fm.ops[i].SSGMode = fin.ReadInt();
             }
         }
     }
-    
+
     return inst;
 }
 
-void DMF::LoadWavetablesData(zstr::ifstream& fin)
+void DMF::LoadWavetablesData(Reader& fin)
 {
-    m_TotalWavetables = fin.get();
+    m_TotalWavetables = fin.ReadInt();
     
     m_WavetableSizes = new uint32_t[m_TotalWavetables];
     m_WavetableValues = new uint32_t*[m_TotalWavetables];
@@ -659,21 +614,13 @@ void DMF::LoadWavetablesData(zstr::ifstream& fin)
 
     for (int i = 0; i < m_TotalWavetables; i++)
     {
-        m_WavetableSizes[i] = fin.get();
-        m_WavetableSizes[i] |= fin.get() << 8;
-        m_WavetableSizes[i] |= fin.get() << 16;
-        m_WavetableSizes[i] |= fin.get() << 24;
+        m_WavetableSizes[i] = fin.ReadInt<uint32_t>();
 
         m_WavetableValues[i] = new uint32_t[m_WavetableSizes[i]];
 
         for (unsigned j = 0; j < m_WavetableSizes[i]; j++)
         {
-            m_WavetableValues[i][j] = fin.get();
-            m_WavetableValues[i][j] |= fin.get() << 8;
-            m_WavetableValues[i][j] |= fin.get() << 16;
-            m_WavetableValues[i][j] |= fin.get() << 24;
-
-            m_WavetableValues[i][j] &= dataMask;
+            m_WavetableValues[i][j] = fin.ReadInt<uint32_t>() & dataMask;
 
             // Bug fix for DMF version 25 (0x19): Transform 4-bit FDS wavetables into 6-bit
             if (GetSystem().type == DMF::SystemType::NES_FDS && m_DMFFileVersion <= 25)
@@ -684,7 +631,7 @@ void DMF::LoadWavetablesData(zstr::ifstream& fin)
     }
 }
 
-void DMF::LoadPatternsData(zstr::ifstream& fin)
+void DMF::LoadPatternsData(Reader& fin)
 {
     auto& moduleData = GetData();
     auto& channelMetadata = moduleData.ChannelMetadataRef();
@@ -693,7 +640,7 @@ void DMF::LoadPatternsData(zstr::ifstream& fin)
 
     for (unsigned channel = 0; channel < moduleData.GetNumChannels(); ++channel)
     {
-        channelMetadata[channel].effectColumnsCount = fin.get();
+        channelMetadata[channel].effectColumnsCount = fin.ReadInt();
 
         for (unsigned order = 0; order < moduleData.GetNumOrders(); ++order)
         {
@@ -706,7 +653,7 @@ void DMF::LoadPatternsData(zstr::ifstream& fin)
                 unsigned seekAmount = (8 + 4 * channelMetadata[channel].effectColumnsCount) * moduleData.GetNumRows();
                 while (0 < seekAmount--)
                 {
-                    fin.get();
+                    fin.ReadInt();
                 }
                 continue;
             }
@@ -724,14 +671,12 @@ void DMF::LoadPatternsData(zstr::ifstream& fin)
     }
 }
 
-Row<DMF> DMF::LoadPatternRow(zstr::ifstream& fin, uint8_t effectsColumnsCount)
+Row<DMF> DMF::LoadPatternRow(Reader& fin, uint8_t effectsColumnsCount)
 {
     Row<DMF> row;
 
-    uint16_t tempPitch = fin.get();
-    tempPitch |= fin.get() << 8; // Unused byte. Storing it anyway.
-    uint16_t tempOctave = fin.get();
-    tempOctave |= fin.get() << 8; // Unused byte. Storing it anyway.
+    const uint16_t tempPitch = fin.ReadInt<uint16_t>();
+    uint16_t tempOctave = fin.ReadInt<uint16_t>();
 
     switch (tempPitch)
     {
@@ -753,34 +698,28 @@ Row<DMF> DMF::LoadPatternRow(zstr::ifstream& fin, uint8_t effectsColumnsCount)
             break;
     }
 
-    row.volume = fin.get();
-    row.volume |= fin.get() << 8;
-
-    // NOTE: C# is considered the 1st note of an octave rather than C- like in the Deflemask program.
+    row.volume = fin.ReadInt<int16_t>();
 
     for (uint8_t col = 0; col < effectsColumnsCount; ++col)
     {
-        row.effect[col].code = fin.get();
-        row.effect[col].code |= fin.get() << 8;
-        row.effect[col].value = fin.get();
-        row.effect[col].value |= fin.get() << 8;
+        row.effect[col].code = fin.ReadInt<int16_t>();
+        row.effect[col].value = fin.ReadInt<int16_t>();
     }
 
     // Initialize the rest to zero
-    for (int col = effectsColumnsCount; col < 4; ++col) // Max total of 4 effects columns in Deflemask
+    for (uint8_t col = effectsColumnsCount; col < 4; ++col) // Max total of 4 effects columns in Deflemask
     {
         row.effect[col] = {(int16_t)EffectCode::NoEffect, (int16_t)EffectCode::NoEffectVal};
     }
 
-    row.instrument = fin.get();
-    row.instrument |= fin.get() << 8;
+    row.instrument = fin.ReadInt<int16_t>();
 
     return row;
 }
 
-void DMF::LoadPCMSamplesData(zstr::ifstream& fin)
+void DMF::LoadPCMSamplesData(Reader& fin)
 {
-    m_TotalPCMSamples = fin.get();
+    m_TotalPCMSamples = fin.ReadInt();
     m_PCMSamples = new PCMSample[m_TotalPCMSamples];
 
     for (unsigned sample = 0; sample < m_TotalPCMSamples; sample++)
@@ -789,25 +728,16 @@ void DMF::LoadPCMSamplesData(zstr::ifstream& fin)
     }
 }
 
-PCMSample DMF::LoadPCMSample(zstr::ifstream& fin)
+PCMSample DMF::LoadPCMSample(Reader& fin)
 {
     PCMSample sample;
 
-    sample.size = fin.get();
-    sample.size |= fin.get() << 8;
-    sample.size |= fin.get() << 16;
-    sample.size |= fin.get() << 24;
+    sample.size = fin.ReadInt<uint32_t>();
 
     if (m_DMFFileVersion >= 24) // DMF version 24 (0x18)
     {
         // Read PCM sample name
-        uint8_t name_size = fin.get();
-
-        char* tempStr = new char[name_size];
-        fin.read(tempStr, name_size);
-        tempStr[name_size] = '\0';
-        sample.name = tempStr;
-        delete[] tempStr;
+        sample.name = fin.ReadPStr();
     }
     else // DMF version 23 (0x17) and older. WARNING: I don't have the specs for version 23 (0x17), so this may be wrong.
     {
@@ -815,20 +745,19 @@ PCMSample DMF::LoadPCMSample(zstr::ifstream& fin)
         sample.name = "";
     }
 
-    sample.rate = fin.get();
-    sample.pitch = fin.get();
-    sample.amp = fin.get();
+    sample.rate = fin.ReadInt();
+    sample.pitch = fin.ReadInt();
+    sample.amp = fin.ReadInt();
 
     if (m_DMFFileVersion >= 22) // DMF version 22 (0x16) and newer
     {
-        sample.bits = fin.get();
+        sample.bits = fin.ReadInt();
     }
 
     sample.data = new uint16_t[sample.size];
     for (uint32_t i = 0; i < sample.size; i++)
     {
-        sample.data[i] = fin.get();
-        sample.data[i] |= fin.get() << 8;
+        sample.data[i] = fin.ReadInt<uint16_t>();
     }
 
     return sample;

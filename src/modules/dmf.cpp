@@ -11,6 +11,7 @@
 
 #include "dmf.h"
 #include "utils/utils.h"
+#include "utils/hash.h"
 
 // For inflating .dmf files so that they can be read
 #include <zlib.h>
@@ -26,6 +27,7 @@
 #include <map>
 #include <cmath>
 #include <array>
+#include <unordered_set>
 
 using namespace d2m;
 using namespace d2m::dmf;
@@ -70,26 +72,19 @@ static constexpr auto G_PeriodTable = []() constexpr
     return ret;
 }();
 
-static constexpr double GetPeriod(unsigned note, unsigned octave)
+static constexpr double GetPeriod(Note note)
 {
-    assert(note < 12 && octave < 9);
-    return G_PeriodTable[note + 12*octave];
+    assert(static_cast<uint16_t>(note.pitch) < 12 && note.octave < 9);
+    return G_PeriodTable[static_cast<uint16_t>(note.pitch) + 12*note.octave];
 }
 
 DMF::DMF()
 {
     // Initialize pointers to nullptr to prevent segfault when freeing memory if the import fails:
-    m_VisualInfo.songName.clear();
-    m_VisualInfo.songAuthor.clear();
-    m_PatternValues = nullptr;
-    m_ChannelEffectsColumnsCount = nullptr;
-    m_PatternMatrixValues = nullptr;
-    m_PatternMatrixMaxValues = nullptr;
     m_Instruments = nullptr;
     m_WavetableSizes = nullptr;
     m_WavetableValues = nullptr;
     m_PCMSamples = nullptr;
-    m_PatternNames.clear();
 }
 
 DMF::~DMF()
@@ -100,36 +95,6 @@ DMF::~DMF()
 void DMF::CleanUp()
 {
     // Free memory allocated for members
-    if (m_PatternMatrixMaxValues)
-    {
-        for (int channel = 0; channel < m_System.channels; channel++)
-        {
-            for (int i = 0; i < m_PatternMatrixMaxValues[channel] + 1; i++)
-            {
-                delete[] m_PatternValues[channel][i];
-                m_PatternValues[channel][i] = nullptr;
-            }
-            delete[] m_PatternValues[channel];
-            m_PatternValues[channel] = nullptr;
-        }
-        delete[] m_PatternValues;
-        m_PatternValues = nullptr;
-    }
-
-    if (m_PatternMatrixValues)
-    {
-        for (int i = 0; i < m_System.channels; i++)
-        {
-            delete[] m_PatternMatrixValues[i];
-            m_PatternMatrixValues[i] = nullptr;
-        }
-        delete[] m_PatternMatrixValues;
-        m_PatternMatrixValues = nullptr;
-    }
-    
-    delete[] m_PatternMatrixMaxValues;
-    m_PatternMatrixMaxValues = nullptr;
-
     if (m_Instruments)
     {
         for (int i = 0; i < m_TotalInstruments; i++) 
@@ -160,9 +125,6 @@ void DMF::CleanUp()
         m_WavetableValues = nullptr;
     }
     
-    delete[] m_ChannelEffectsColumnsCount;
-    m_ChannelEffectsColumnsCount = nullptr;
-
     if (m_PCMSamples)
     {
         for (int sample = 0; sample < m_TotalPCMSamples; sample++) 
@@ -173,7 +135,7 @@ void DMF::CleanUp()
         m_PCMSamples = nullptr;
     }
 
-    m_PatternNames.clear();
+    GetData().CleanUp();
 }
 
 void DMF::ImportRaw(const std::string& filename)
@@ -256,8 +218,8 @@ void DMF::ImportRaw(const std::string& filename)
     LoadVisualInfo(fin);
     if (verbose)
     {
-        std::cout << "Title: " << m_VisualInfo.songName << "\n";
-        std::cout << "Author: " << m_VisualInfo.songAuthor << "\n";
+        std::cout << "Title: " << GetTitle() << "\n";
+        std::cout << "Author: " << GetAuthor() << "\n";
         std::cout << "Loaded visual information." << "\n";
     }
 
@@ -319,20 +281,20 @@ System DMF::GetSystem(uint8_t systemByte) const
 
 void DMF::LoadVisualInfo(zstr::ifstream& fin)
 {
-    m_VisualInfo.songNameLength = fin.get();
+    const uint8_t songNameLength = fin.get();
 
-    char* tempStr = new char[m_VisualInfo.songNameLength + 1];
-    fin.read(tempStr, m_VisualInfo.songNameLength);
-    tempStr[m_VisualInfo.songNameLength] = '\0';
-    m_VisualInfo.songName = tempStr;
+    char* tempStr = new char[songNameLength + 1];
+    fin.read(tempStr, songNameLength);
+    tempStr[songNameLength] = '\0';
+    GetData().GlobalData().title = tempStr;
     delete[] tempStr;
 
-    m_VisualInfo.songAuthorLength = fin.get();
+    const uint8_t songAuthorLength = fin.get();
 
-    tempStr = new char[m_VisualInfo.songAuthorLength + 1];
-    fin.read(tempStr, m_VisualInfo.songAuthorLength);
-    tempStr[m_VisualInfo.songAuthorLength] = '\0';
-    m_VisualInfo.songAuthor = tempStr;
+    tempStr = new char[songAuthorLength + 1];
+    fin.read(tempStr, songAuthorLength);
+    tempStr[songAuthorLength] = '\0';
+    GetData().GlobalData().author = tempStr;
     delete[] tempStr;
 
     m_VisualInfo.highlightAPatterns = fin.get();
@@ -377,35 +339,44 @@ void DMF::LoadModuleInfo(zstr::ifstream& fin)
 
 void DMF::LoadPatternMatrixValues(zstr::ifstream& fin)
 {
-    // Format: patterMatrixValues[channel][pattern matrix row]
-    m_PatternMatrixValues = new uint8_t*[m_System.channels];
-    m_PatternMatrixMaxValues = new uint8_t[m_System.channels];
+    auto& moduleData = GetData();
+    moduleData.AllocatePatternMatrix(
+        m_System.channels,
+        m_ModuleInfo.totalRowsInPatternMatrix,
+        m_ModuleInfo.totalRowsPerPattern);
 
-    for (int i = 0; i < m_System.channels; i++)
+    std::map<std::pair<uint8_t, uint8_t>, std::string> channelPatternIdToPatternNameMap;
+
+    for (unsigned channel = 0; channel < moduleData.GetNumChannels(); ++channel)
     {
-        m_PatternMatrixMaxValues[i] = 0;
-        m_PatternMatrixValues[i] = new uint8_t[m_ModuleInfo.totalRowsInPatternMatrix];
-        
-        for (int j = 0; j < m_ModuleInfo.totalRowsInPatternMatrix; j++)
+        for (unsigned order = 0; order < moduleData.GetNumOrders(); ++order)
         {
-            m_PatternMatrixValues[i][j] = fin.get();
-            
-            if (m_PatternMatrixValues[i][j] > m_PatternMatrixMaxValues[i])
-            {
-                m_PatternMatrixMaxValues[i] = m_PatternMatrixValues[i][j];
-            }
+            const uint8_t patternId = fin.get();
+            moduleData.SetPatternId(channel, order, patternId);
 
             // Version 1.1 introduces pattern names
             if (m_DMFFileVersion >= 25) // DMF version 25 (0x19) and newer
             {
                 const int patternNameLength = fin.get();
-                char* tempStr = new char[patternNameLength + 1];
-                fin.read(tempStr, patternNameLength);
-                tempStr[patternNameLength] = '\0';
-                m_PatternNames[(j * m_System.channels) + i] = tempStr;
-                delete[] tempStr;
+                if (patternNameLength > 0)
+                {
+                    char* tempStr = new char[patternNameLength + 1];
+                    fin.read(tempStr, patternNameLength);
+                    tempStr[patternNameLength] = '\0';
+                    channelPatternIdToPatternNameMap[{channel, patternId}] = tempStr;
+                    delete[] tempStr;
+                }
             }
         }
+    }
+
+    moduleData.AllocateChannels();
+    moduleData.AllocatePatterns();
+
+    // Pattern metadata must be set AFTER AllocatePatterns is called
+    for (auto& [channelPatternId, patternName] : channelPatternIdToPatternNameMap)
+    {
+        moduleData.SetPatternMetadata(channelPatternId.first, channelPatternId.second, {std::move(patternName)});
     }
 }
 
@@ -715,81 +686,96 @@ void DMF::LoadWavetablesData(zstr::ifstream& fin)
 
 void DMF::LoadPatternsData(zstr::ifstream& fin)
 {
-    // patternValues[channel][pattern number][pattern row number]
-    m_PatternValues = new ChannelRow**[m_System.channels];
-    m_ChannelEffectsColumnsCount = new uint8_t[m_System.channels];
-    
-    uint8_t patternMatrixNumber;
+    auto& moduleData = GetData();
+    auto& channelMetadata = moduleData.ChannelMetadataRef();
 
-    for (unsigned channel = 0; channel < m_System.channels; channel++)
+    std::unordered_set<std::pair<uint8_t, uint8_t>, PairHash> patternsVisited; // Storing channel/patternId pairs
+
+    for (unsigned channel = 0; channel < moduleData.GetNumChannels(); ++channel)
     {
-        m_ChannelEffectsColumnsCount[channel] = fin.get();
+        channelMetadata[channel].effectColumnsCount = fin.get();
 
-        m_PatternValues[channel] = new ChannelRow*[m_PatternMatrixMaxValues[channel] + 1]();
-
-        for (unsigned rowInPatternMatrix = 0; rowInPatternMatrix < m_ModuleInfo.totalRowsInPatternMatrix; rowInPatternMatrix++)
+        for (unsigned order = 0; order < moduleData.GetNumOrders(); ++order)
         {
-            patternMatrixNumber = m_PatternMatrixValues[channel][rowInPatternMatrix];
+            const uint8_t patternId = moduleData.GetPatternId(channel, order);
 
-            if (m_PatternValues[channel][patternMatrixNumber]) // If pattern has been loaded previously
+            if (patternsVisited.count({channel, patternId}) > 0) // If pattern has been loaded previously
             {
                 // Skip patterns that have already been loaded (unnecessary information)
                 // zstr's seekg method does not seem to work, so I will use this:
-                unsigned seekAmount = (8 + 4 * m_ChannelEffectsColumnsCount[channel]) * m_ModuleInfo.totalRowsPerPattern;
+                unsigned seekAmount = (8 + 4 * channelMetadata[channel].effectColumnsCount) * moduleData.GetNumRows();
                 while (0 < seekAmount--)
                 {
                     fin.get();
                 }
                 continue;
             }
-
-            m_PatternValues[channel][patternMatrixNumber] = new ChannelRow[m_ModuleInfo.totalRowsPerPattern];
-
-            for (uint32_t row = 0; row < m_ModuleInfo.totalRowsPerPattern; row++)
+            else
             {
-                m_PatternValues[channel][patternMatrixNumber][row] = LoadPatternRow(fin, m_ChannelEffectsColumnsCount[channel]);
+                // Mark this patternId for this channel as visited
+                patternsVisited.insert({channel, patternId});
+            }
+
+            for (unsigned row = 0; row < moduleData.GetNumRows(); ++row)
+            {
+                moduleData.SetRowById(channel, patternId, row, LoadPatternRow(fin, channelMetadata[channel].effectColumnsCount));
             }
         }
     }
 }
 
-ChannelRow DMF::LoadPatternRow(zstr::ifstream& fin, int effectsColumnsCount)
+Row<DMF> DMF::LoadPatternRow(zstr::ifstream& fin, uint8_t effectsColumnsCount)
 {
-    ChannelRow pat;
-    pat.note.pitch = fin.get();
-    pat.note.pitch |= fin.get() << 8; // Unused byte. Storing it anyway.
-    pat.note.octave = fin.get();
-    pat.note.octave |= fin.get() << 8; // Unused byte. Storing it anyway.
-    pat.volume = fin.get();
-    pat.volume |= fin.get() << 8;
+    Row<DMF> row;
 
-    // Apparently, the note pitch for C- can be either 0 or 12. I'm setting it to 0 always.
-    if (pat.note.pitch == NotePitch::C_Alt)
+    uint16_t tempPitch = fin.get();
+    tempPitch |= fin.get() << 8; // Unused byte. Storing it anyway.
+    uint16_t tempOctave = fin.get();
+    tempOctave |= fin.get() << 8; // Unused byte. Storing it anyway.
+
+    switch (tempPitch)
     {
-        pat.note.pitch = (uint16_t)NotePitch::C;
-        pat.note.octave++;
+        case 0:
+            if (tempOctave == 0)
+                row.note = NoteTypes::Empty{};
+            else
+                row.note = NoteTypes::Note{static_cast<NotePitch>(tempPitch), tempOctave};
+            break;
+        case 100:
+            row.note = NoteTypes::Off{};
+            break;
+        default:
+            // Apparently, the note pitch for C- can be either 0 or 12. I'm setting it to 0 always.
+            if (tempPitch == 12)
+                row.note = NoteTypes::Note{NotePitch::C, ++tempOctave};
+            else
+                row.note = NoteTypes::Note{static_cast<NotePitch>(tempPitch), tempOctave};
+            break;
     }
+
+    row.volume = fin.get();
+    row.volume |= fin.get() << 8;
 
     // NOTE: C# is considered the 1st note of an octave rather than C- like in the Deflemask program.
 
-    for (int col = 0; col < effectsColumnsCount; col++)
+    for (uint8_t col = 0; col < effectsColumnsCount; ++col)
     {
-        pat.effect[col].code = fin.get();
-        pat.effect[col].code |= fin.get() << 8;
-        pat.effect[col].value = fin.get();
-        pat.effect[col].value |= fin.get() << 8;
+        row.effect[col].code = fin.get();
+        row.effect[col].code |= fin.get() << 8;
+        row.effect[col].value = fin.get();
+        row.effect[col].value |= fin.get() << 8;
     }
 
     // Initialize the rest to zero
-    for (int col = effectsColumnsCount; col < DMF_MAX_EFFECTS_COLUMN_COUNT; col++)
+    for (int col = effectsColumnsCount; col < 4; ++col) // Max total of 4 effects columns in Deflemask
     {
-        pat.effect[col] = {(int16_t)EffectCode::NoEffect, (int16_t)EffectCode::NoEffectVal};
+        row.effect[col] = {(int16_t)EffectCode::NoEffect, (int16_t)EffectCode::NoEffectVal};
     }
 
-    pat.instrument = fin.get();
-    pat.instrument |= fin.get() << 8;
+    row.instrument = fin.get();
+    row.instrument |= fin.get() << 8;
 
-    return pat;
+    return row;
 }
 
 void DMF::LoadPCMSamplesData(zstr::ifstream& fin)
@@ -893,78 +879,38 @@ double DMF::GetBPM() const
     return numerator * 1.0 / denominator;
 }
 
-int DMF::GetRowsUntilPortUpAutoOff(const dmf::Note& note, int portUpParam) const
+int DMF::GetRowsUntilPortUpAutoOff(const NoteSlot& note, int portUpParam) const
 {
     const unsigned ticksPerRowPair = GetTicksPerRowPair();
     return GetRowsUntilPortUpAutoOff(ticksPerRowPair, note, portUpParam);
 }
 
-int DMF::GetRowsUntilPortUpAutoOff(unsigned ticksPerRowPair, const dmf::Note& note, int portUpParam)
+int DMF::GetRowsUntilPortUpAutoOff(unsigned ticksPerRowPair, const NoteSlot& note, int portUpParam)
 {
     // Note: This is not always 100% accurate, probably due to differences in rounding/truncating at intermediate steps of the calculation, but it's very close.
     // TODO: Need to take into account odd/even rows rather than using the average ticks per row
-    if (!note.HasPitch())
+    if (!NoteHasPitch(note))
         return 0;
 
-    constexpr double highestPeriod = GetPeriod(0, 8); // C-8
+    constexpr double highestPeriod = GetPeriod({NotePitch::C, 8}); // C-8
 
     // Not sure why the 0.75 is needed
-    return static_cast<int>(std::max(std::ceil(0.75 * (highestPeriod - GetPeriod(note.pitch, note.octave)) / ((ticksPerRowPair / 2.0) * portUpParam * -1.0)), 1.0));
+    return static_cast<int>(std::max(std::ceil(0.75 * (highestPeriod - GetPeriod(GetNote(note))) / ((ticksPerRowPair / 2.0) * portUpParam * -1.0)), 1.0));
 }
 
-int DMF::GetRowsUntilPortDownAutoOff(const dmf::Note& note, int portDownParam) const
+int DMF::GetRowsUntilPortDownAutoOff(const NoteSlot& note, int portDownParam) const
 {
     const unsigned ticksPerRowPair = GetTicksPerRowPair();
     return GetRowsUntilPortDownAutoOff(ticksPerRowPair, note, portDownParam);
 }
 
-int DMF::GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const dmf::Note& note, int portDownParam)
+int DMF::GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const NoteSlot& note, int portDownParam)
 {
     // Note: This is not always 100% accurate, probably due to differences in rounding/truncating at intermediate steps of the calculation, but it's very close.
     // TODO: Need to take into account odd/even rows rather than using the average ticks per row
-    if (!note.HasPitch())
+    if (!NoteHasPitch(note))
         return 0;
 
-    constexpr double lowestPeriod = GetPeriod(0, 2); // C-2
-    return static_cast<int>(std::max(std::ceil((lowestPeriod - GetPeriod(note.pitch, note.octave)) / ((ticksPerRowPair / 2.0) * portDownParam)), 1.0));
-}
-
-int dmf::GetNoteRange(const Note& low, const Note& high)
-{
-    // Returns range in semitones. Assumes notes have octave and pitch.
-    // Range is inclusive on both ends.
-
-    return (high.octave - low.octave) * 12 + (high.pitch - low.pitch) + 1;
-}
-
-bool Note::operator==(const Note& rhs) const
-{
-    return this->octave == rhs.octave && this->pitch == rhs.pitch;
-}
-
-bool Note::operator!=(const Note& rhs) const
-{
-    return this->octave != rhs.octave || this->pitch != rhs.pitch;
-}
-
-// The following operators assume notes aren't Note OFF or Empty note
-
-bool Note::operator>(const Note& rhs) const
-{
-    return (this->octave << 4) + this->pitch > (rhs.octave << 4) + rhs.pitch;
-}
-
-bool Note::operator<(const Note& rhs) const
-{
-    return (this->octave << 4) + this->pitch < (rhs.octave << 4) + rhs.pitch;
-}
-
-bool Note::operator>=(const Note& rhs) const
-{
-    return (this->octave << 4) + this->pitch >= (rhs.octave << 4) + rhs.pitch;
-}
-
-bool Note::operator<=(const Note& rhs) const
-{
-    return (this->octave << 4) + this->pitch <= (rhs.octave << 4) + rhs.pitch;
+    constexpr double lowestPeriod = GetPeriod({NotePitch::C, 2}); // C-2
+    return static_cast<int>(std::max(std::ceil((lowestPeriod - GetPeriod(GetNote(note))) / ((ticksPerRowPair / 2.0) * portDownParam)), 1.0));
 }

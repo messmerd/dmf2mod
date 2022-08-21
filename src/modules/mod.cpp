@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <set>
 #include <cassert>
+#include <numeric>
 
 using namespace d2m;
 using namespace d2m::mod;
@@ -62,7 +63,10 @@ static uint16_t proTrackerPeriodTable[5][12] = {
     {107,101, 95, 90, 85, 80, 76, 71, 67, 64, 60, 57}               /* C-4 to B-4 */
 };
 
-MOD::MOD() {}
+MOD::MOD()
+{
+    m_DataGenerated = false;
+}
 
 void MOD::ImportRaw(const std::string& filename)
 {
@@ -93,6 +97,7 @@ void MOD::ConvertRaw(const Module* input)
 
 void MOD::ConvertFromDMF(const DMF& dmf)
 {
+    m_DataGenerated = false;
     const bool verbose = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Verbose).GetValue<bool>();
 
     if (verbose)
@@ -103,34 +108,44 @@ void MOD::ConvertFromDMF(const DMF& dmf)
         throw MODException(ModuleException::Category::Convert, MOD::ConvertError::NotGameBoy);
     }
 
-    const dmf::ModuleInfo& moduleInfo = dmf.GetModuleInfo();
-    m_NumberOfRowsInPatternMatrix = moduleInfo.totalRowsInPatternMatrix + (int)m_UsingSetupPattern;
-    if (m_NumberOfRowsInPatternMatrix > 64) // totalRowsInPatternMatrix is 1 more than it actually is
+    const auto& dmfData = dmf.GetData();
+    auto& modData = GetData();
+    const unsigned numOrders = dmfData.GetNumOrders() + (unsigned)m_UsingSetupPattern;
+    if (numOrders > 64) // numOrders is 1 more than it actually is
     {
         throw MODException(ModuleException::Category::Convert, MOD::ConvertError::TooManyPatternMatrixRows);
     }
 
-    if (moduleInfo.totalRowsPerPattern > 64)
+    if (dmfData.GetNumRows() > 64)
     {
         throw MODException(ModuleException::Category::Convert, MOD::ConvertError::Over64RowPattern);
     }
 
-    m_NumberOfChannels = DMF::Systems(DMF::SystemType::GameBoy).channels;
-    m_NumberOfChannelsPowOfTwo = 0;
-    unsigned channels = m_NumberOfChannels;
-    while (channels > 1)
+    unsigned numChannels = dmfData.GetNumChannels();
+    if (numChannels != 4)
     {
-        channels >>= 1;
-        m_NumberOfChannelsPowOfTwo++;
+        throw ModuleException(ModuleException::Category::Convert, MOD::ConvertError::WrongChannelCount, "Wrong number of channels. There should be exactly 4.");
     }
 
-    ///////////////// CONVERT SONG NAME
+    modData.AllocatePatternMatrix(numChannels, numOrders, 64);
 
-    m_ModuleName.clear();
-    for (int i = 0; i < std::min((int)dmf.GetVisualInfo().songNameLength, 20); i++)
-    {
-        m_ModuleName += dmf.GetVisualInfo().songName[i];
-    }
+    // Fill pattern matrix with pattern ids 0,1,2,...,N
+    std::iota(modData.PatternMatrixRef().begin(), modData.PatternMatrixRef().end(), 0);
+
+    modData.AllocateChannels();
+    modData.AllocatePatterns();
+
+    ///////////////// CONVERT SONG TITLE AND AUTHOR
+
+    auto& modGlobalData = modData.GlobalData();
+
+    modGlobalData.title = dmfData.GlobalData().title;
+    if (modGlobalData.title.size() > 20)
+        modGlobalData.title.resize(20);
+
+    modGlobalData.author = dmfData.GlobalData().author;
+    if (modGlobalData.author.size() > 22)
+        modGlobalData.author.resize(22); // Author will be displayed in 1st sample; sample names have 22 character limit
 
     ///////////////// CONVERT SAMPLE INFO
 
@@ -139,6 +154,7 @@ void MOD::ConvertFromDMF(const DMF& dmf)
 
     SampleMap sampleMap;
     DMFConvertSamples(dmf, sampleMap);
+    m_DataGenerated = true;
 
     ///////////////// CONVERT PATTERN DATA
 
@@ -146,7 +162,7 @@ void MOD::ConvertFromDMF(const DMF& dmf)
         std::cout << "Converting pattern data...\n";
 
     DMFConvertPatterns(dmf, sampleMap);
-    
+
     ///////////////// CLEAN UP
 
     if (verbose)
@@ -217,7 +233,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
 
                 ChannelState& chanState = state.channel[chan];
 
-                dmf::ChannelRow chanRow = dmf.GetChannelRow(chan, patMatRow, patRow);
+                const auto& chanRow = dmf.GetData().GetRow(chan, patMatRow, patRow);
 
                 // If just arrived at jump destination:
                 if (patMatRow == state.global.jumpDestination && patRow == 0 && state.global.suspended)
@@ -230,7 +246,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
                 //mod_sample_id_t modSampleId = 0;
                 //uint16_t period = 0;
 
-                if (chan == dmf::GameBoyChannel::NOISE)
+                if (chan == static_cast<int>(dmf::GameBoyChannel::NOISE))
                 {
                     modEffects = DMFConvertEffects_NoiseChannel(chanRow);
                     DMFUpdateStatePre(dmf, state, modEffects);
@@ -272,18 +288,18 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
                 }
 
                 // Convert note - Note OFF
-                if (chanRow.note.IsOff()) // Note OFF. Use silent sample and handle effects.
+                if (NoteIsOff(chanRow.note)) // Note OFF. Use silent sample and handle effects.
                 {
                     chanState.notePlaying = false;
-                    chanState.currentNote = {};
+                    chanState.currentNote = NoteTypes::Off{};
                 }
 
                 // A note on the SQ1, SQ2, or WAVE channels:
-                if (chanRow.note.HasPitch() && chan != dmf::GameBoyChannel::NOISE)
+                if (NoteHasPitch(chanRow.note) && chan != dmf::GameBoyChannel::NOISE)
                 {
-                    const dmf::Note& dmfNote = chanRow.note;
+                    const Note& dmfNote = GetNote(chanRow.note);
                     chanState.notePlaying = true;
-                    chanState.currentNote = dmfNote;
+                    chanState.currentNote = chanRow.note;
 
                     mod_sample_id_t sampleId = chan == dmf::GameBoyChannel::WAVE ? chanState.wavetable + 4 : chanState.dutyCycle;
 
@@ -293,7 +309,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
                     // Get lowest/highest notes
                     if (sampleIdLowestHighestNotesMap.count(sampleId) == 0) // 1st time
                     {
-                        sampleIdLowestHighestNotesMap[sampleId] = std::pair<dmf::Note, dmf::Note>(dmfNote, dmfNote);
+                        sampleIdLowestHighestNotesMap[sampleId] = std::pair<Note, Note>(dmfNote, dmfNote);
                     }
                     else
                     {
@@ -301,12 +317,12 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
                         if (dmfNote > notePair.second)
                         {
                             // Found a new highest note
-                            notePair.second = chanRow.note;
+                            notePair.second = dmfNote;
                         }
                         if (dmfNote < notePair.first)
                         {
                             // Found a new lowest note
-                            notePair.first = chanRow.note;
+                            notePair.first = dmfNote;
                         }
                     }
                 }
@@ -420,6 +436,12 @@ void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap)
                     si.name += " (high)"; break;
             }
 
+            if (si.id == 1) // #0 is a special value, not the 1st MOD sample
+            {
+                // Overwrite 1st sample's name with author's name
+                si.name = GetAuthor();
+            }
+
             if (si.name.size() > 22)
                 throw std::invalid_argument("Sample name must be 22 characters or less");
 
@@ -503,49 +525,47 @@ std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned le
 
 void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
 {
-    m_Patterns.assign(m_NumberOfRowsInPatternMatrix, {});
+    auto& modData = GetData();
 
     unsigned initialTempo, initialSpeed; // Together these will set the initial BPM
     DMFConvertInitialBPM(dmf, initialTempo, initialSpeed);
 
     if (m_UsingSetupPattern)
     {
-        m_Patterns[0].assign(64 * m_NumberOfChannels, {0, 0, 0, 0});
-
         // Set initial tempo
-        ChannelRow tempoRow;
+        Row<MOD> tempoRow;
         tempoRow.SampleNumber = 0;
         tempoRow.SamplePeriod = 0;
         tempoRow.EffectCode = EffectCode::SetSpeed;
         tempoRow.EffectValue = initialTempo;
-        SetChannelRow(0, 0, 0, tempoRow);
+        modData.SetRow(0, 0, 0, tempoRow);
 
         // Set initial speed
         if (GetOptions()->GetTempoType() != MODConversionOptions::TempoType::EffectCompatibility)
         {
-            ChannelRow speedRow;
+            Row<MOD> speedRow;
             speedRow.SampleNumber = 0;
             speedRow.SamplePeriod = 0;
             speedRow.EffectCode = EffectCode::SetSpeed;
             speedRow.EffectValue = initialSpeed;
-            SetChannelRow(0, 0, 1, speedRow);
+            modData.SetRow(1, 0, 0, speedRow);
         }
 
         // Set Pattern Break to start of song
-        ChannelRow posJumpRow;
+        Row<MOD> posJumpRow;
         posJumpRow.SampleNumber = 0;
         posJumpRow.SamplePeriod = 0;
         posJumpRow.EffectCode = EffectCode::PatBreak;
         posJumpRow.EffectValue = 0;
-        SetChannelRow(0, 0, 2, posJumpRow);
+        modData.SetRow(2, 0, 0, posJumpRow);
 
         // Set Amiga Filter
-        ChannelRow amigaFilterRow;
+        Row<MOD> amigaFilterRow;
         amigaFilterRow.SampleNumber = 0;
         amigaFilterRow.SamplePeriod = 0;
         amigaFilterRow.EffectCode = EffectCode::SetFilter;
         amigaFilterRow.EffectValue = !GetOptions()->GetOption(MODOptionEnum::AmigaFilter).GetValue<bool>();
-        SetChannelRow(0, 0, 3, amigaFilterRow);
+        modData.SetRow(3, 0, 0, amigaFilterRow);
 
         // All other channel rows in the pattern are already zeroed out so nothing needs to be done for them
     }
@@ -569,7 +589,6 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
         state.global.order = patMatRow;
 
         // patMatRow is in DMF pattern matrix rows, not MOD
-        m_Patterns[patMatRow + (int)m_UsingSetupPattern].assign(64 * m_NumberOfChannels, {});
 
         // Loop through rows in a pattern:
         for (unsigned patRow = 0; patRow < dmfTotalRowsPerPattern; patRow++)
@@ -582,17 +601,17 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
                 state.global.channelIndependentEffect = {EffectCode::PatBreak, 0};
 
             // Clear channel rows
-            for (unsigned chan = 0; chan < m_NumberOfChannels; chan++)
+            for (unsigned chan = 0; chan < modData.GetNumChannels(); chan++)
             {
                 state.channelRows[chan] = {};
             }
 
             // Loop through channels:
-            for (unsigned chan = 0; chan < m_NumberOfChannels; chan++)
+            for (unsigned chan = 0; chan < modData.GetNumChannels(); chan++)
             {
                 state.global.channel = chan;
 
-                dmf::ChannelRow chanRow = dmf.GetChannelRow(chan, patMatRow, patRow);
+                const auto& chanRow = dmf.GetData().GetRow(chan, patMatRow, patRow);
 
                 // If just arrived at jump destination:
                 if (patMatRow == state.global.jumpDestination && patRow == 0 && state.global.suspended)
@@ -622,29 +641,29 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
             }
 
             // Set the channel rows for the current pattern row all at once
-            for (unsigned chan = 0; chan < m_NumberOfChannels; chan++)
+            for (unsigned chan = 0; chan < GetData().GetNumChannels(); ++chan)
             {
-                SetChannelRow(patMatRow + (int)m_UsingSetupPattern, patRow, chan, state.channelRows[chan]);
+                modData.SetRow(chan, patMatRow + (int)m_UsingSetupPattern, patRow, state.channelRows[chan]);
             }
 
             // TODO: Better channel independent effects implementation
 
         }
 
-        // If the DMF has less than 64 rows per pattern, there will be extra MOD rows which will need to be blank
+        // If the DMF has less than 64 rows per pattern, there will be extra MOD rows which will need to be blank; TODO: May not be needed
         for (unsigned patRow = dmfTotalRowsPerPattern; patRow < 64; patRow++)
         {
             // Loop through channels:
-            for (unsigned chan = 0; chan < m_NumberOfChannels; chan++)
+            for (unsigned chan = 0; chan < modData.GetNumChannels(); chan++)
             {
-                ChannelRow tempChannelRow = {0, 0, 0, 0};
-                SetChannelRow(patMatRow + (int)m_UsingSetupPattern, patRow, chan, tempChannelRow);
+                Row<MOD> tempRow = {0, 0, 0, 0};
+                modData.SetRow(chan, patMatRow + (int)m_UsingSetupPattern, patRow, tempRow);
             }
         }
     }
 }
 
-PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& state)
+PriorityEffectsMap MOD::DMFConvertEffects(const Row<DMF>& row, State& state)
 {
     const auto& options = GetOptions();
     auto& channelState = state.channel[state.global.channel];
@@ -654,7 +673,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
 
     if (options->AllowEffects())
     {
-        if (!pat.note.IsEmpty())
+        if (!NoteIsEmpty(row.note))
         {
             // Portamento to note stops when next note is reached or on Note OFF
             persistentEffects.erase(EffectPriorityPort2Note);
@@ -679,13 +698,13 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
                 persistentEffects.erase(EffectPriorityPortDown);
                 channelState.rowsUntilPortAutoOff = -1;
             }
-            else if (pat.note.HasPitch())
+            else if (NoteHasPitch(row.note))
             {
                 // Reset the time until port effects automatically turn off
                 if (channelState.portDirection == ChannelState::PORT_UP)
-                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortUpAutoOff(state.global.ticksPerRowPair, pat.note, channelState.portParam);
+                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortUpAutoOff(state.global.ticksPerRowPair, row.note, channelState.portParam);
                 else
-                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortDownAutoOff(state.global.ticksPerRowPair, pat.note, channelState.portParam);
+                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortDownAutoOff(state.global.ticksPerRowPair, row.note, channelState.portParam);
             }
             else
             {
@@ -695,12 +714,12 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
     }
 
     // Convert DMF effects to MOD effects
-    for (const auto& dmfEffect : pat.effect)
+    for (const auto& dmfEffect : row.effect)
     {
         if (dmfEffect.code == dmf::EffectCode::NoEffect)
             continue;
 
-        switch (dmf::EffectCode(dmfEffect.code))
+        switch (dmfEffect.code)
         {
             case dmf::EffectCode::Arp:
             {
@@ -724,7 +743,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
                 }
                 persistentEffects.emplace(EffectPriorityPortUp, Effect{EffectCode::PortUp, (uint16_t)dmfEffect.value});
                 if (channelState.rowsUntilPortAutoOff == -1)
-                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortUpAutoOff(state.global.ticksPerRowPair, pat.note.HasPitch() ? pat.note : channelState.currentNote, dmfEffect.value);
+                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortUpAutoOff(state.global.ticksPerRowPair, NoteHasPitch(row.note) ? row.note : channelState.currentNote, dmfEffect.value);
                 channelState.portDirection = ChannelState::PORT_UP;
                 channelState.portParam = dmfEffect.value;
                 break;
@@ -742,7 +761,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
                 }
                 persistentEffects.emplace(EffectPriorityPortDown, Effect{EffectCode::PortDown, (uint16_t)dmfEffect.value});
                 if (channelState.rowsUntilPortAutoOff == -1)
-                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortDownAutoOff(state.global.ticksPerRowPair, pat.note.HasPitch() ? pat.note : channelState.currentNote, dmfEffect.value);
+                    channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortDownAutoOff(state.global.ticksPerRowPair, NoteHasPitch(row.note) ? row.note : channelState.currentNote, dmfEffect.value);
                 channelState.portDirection = ChannelState::PORT_DOWN;
                 channelState.portParam = dmfEffect.value;
                 break;
@@ -799,7 +818,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
                 break; // Unsupported effect
         }
 
-        switch (dmf::GameBoyEffectCode(dmfEffect.code))
+        switch (dmfEffect.code)
         {
             case dmf::GameBoyEffectCode::SetDutyCycle:
                 modEffects.emplace(EffectPrioritySampleChange, Effect{EffectCode::DutyCycleChange, (uint16_t)dmfEffect.value});
@@ -820,14 +839,14 @@ PriorityEffectsMap MOD::DMFConvertEffects(const dmf::ChannelRow& pat, State& sta
     return modEffects;
 }
 
-PriorityEffectsMap MOD::DMFConvertEffects_NoiseChannel(const dmf::ChannelRow& pat)
+PriorityEffectsMap MOD::DMFConvertEffects_NoiseChannel(const Row<DMF>& row)
 {
     // Temporary method until the Noise channel is supported.
     // Only Pattern Break and Jump effects on the noise channel are converted for now.
 
     PriorityEffectsMap modEffects;
 
-    for (auto& dmfEffect : pat.effect)
+    for (auto& dmfEffect : row.effect)
     {
         if (dmfEffect.code == dmf::EffectCode::PatBreak && dmfEffect.value == 0)
         {
@@ -941,18 +960,18 @@ static inline int16_t GetNewDMFVolume(int16_t dmfRowVol, const ChannelState& sta
     }
 }
 
-void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const dmf::ChannelRow& pat, PriorityEffectsMap& modEffects)
+void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const Row<DMF>& row, PriorityEffectsMap& modEffects)
 {
     ChannelState& chanState = state.channel[state.global.channel];
     
     // Determine what the volume should be for this channel
-    const int16_t newChanVol = GetNewDMFVolume(pat.volume, chanState);
+    const int16_t newChanVol = GetNewDMFVolume(row.volume, chanState);
 
     // If the volume or sample changed. If the sample changed, the MOD volume resets, so volume needs to be set again. TODO: Can optimize later.
     if (newChanVol != chanState.volume)
     {
         // The WAVE channel volume changes whether a note is attached or not, but SQ1/SQ2 need a note
-        if (chanState.channel == dmf::GameBoyChannel::WAVE || pat.note.HasPitch())
+        if (chanState.channel == dmf::GameBoyChannel::WAVE || NoteHasPitch(row.note))
         {
             uint8_t newVolume = (uint8_t)std::round(newChanVol / (double)dmf::DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
 
@@ -975,7 +994,7 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const dmf::Chann
         unsigned loopbackToPattern = 0; // DMF pattern matrix row
         for (int chan = 0; chan <= (int)dmf::GameBoyChannel::NOISE; chan++)
         {
-            dmf::ChannelRow tempChanRow = dmf.GetChannelRow(chan, state.global.order, state.global.patternRow);
+            const Row<DMF>& tempChanRow = dmf.GetData().GetRow(chan, state.global.order, state.global.patternRow);
             for (const auto& effect : tempChanRow.effect)
             {
                 if (effect.code == dmf::EffectCode::PosJump && effect.value >= 0 && effect.value < (int)state.global.patternRow)
@@ -990,20 +1009,21 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const dmf::Chann
         }
 
         // Make sure this function isn't being called from DMFCreateSampleMapping (this is a cludgy solution, but all this code will be refactored later)
-        if (!m_Patterns.empty())
+        if (m_DataGenerated)
         {
             // Add Note OFF to the loopback point for any channels where the sound would carry over
             for (int chan = 0; chan <= (int)dmf::GameBoyChannel::NOISE; chan++)
             {
                 // If a note is playing on the last row before it loops, and the loopback point does not have a note playing:
-                if (chanState.notePlaying && !dmf.GetChannelRow(chan, loopbackToPattern, 0).note.HasPitch())
+                if (chanState.notePlaying && !NoteHasPitch(dmf.GetData().GetRow(chan, loopbackToPattern, 0).note))
                 {
                     // TODO: A note could already be playing at the loopback point (a note which carried over from the previous pattern), but I am ignoring that case for now
                     // TODO: Would this mess up the MOD state in any way?
                     // Get 1st row of the pattern we're looping back to and modify the note to use Note OFF (NOTE: This assumes silent sample exists)
-                    auto& modChanRow = GetChannelRow(loopbackToPattern + (m_UsingSetupPattern ? 1 : 0), 0, chan);
-                    modChanRow.SampleNumber = 1; // Use silent sample
-                    modChanRow.SamplePeriod = 0; // Don't need a note for the silent sample to work
+                    Row<MOD> tempModRow = GetData().GetRow(chan, loopbackToPattern + (m_UsingSetupPattern ? 1 : 0), 0);
+                    tempModRow.SampleNumber = 1; // Use silent sample
+                    tempModRow.SamplePeriod = 0; // Don't need a note for the silent sample to work
+                    GetData().SetRow(chan, loopbackToPattern + (m_UsingSetupPattern ? 1 : 0), 0, tempModRow);
                 }
             }
         }
@@ -1025,9 +1045,9 @@ void MOD::DMFUpdateStatePost(const DMF& dmf, MODState& state, const MOD::Priorit
 }
 */
 
-Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::SampleMap& sampleMap, PriorityEffectsMap& modEffects, mod_sample_id_t& sampleId, uint16_t& period)
+Note MOD::DMFConvertNote(State& state, const Row<DMF>& row, const MOD::SampleMap& sampleMap, PriorityEffectsMap& modEffects, mod_sample_id_t& sampleId, uint16_t& period)
 {
-    Note modNote{0, 0};
+    Note modNote{NotePitch::C, 0};
 
     sampleId = 0;
     period = 0;
@@ -1057,10 +1077,10 @@ Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::Sa
         }
     }
 
-    const dmf::Note& dmfNote = pat.note;
+    const NoteSlot& dmfNote = row.note;
 
     // Convert note - No note playing
-    if (dmfNote.IsEmpty()) // No note is playing. Only handle effects.
+    if (NoteIsEmpty(dmfNote)) // No note is playing. Only handle effects.
     {
         sampleId = 0; // Keeps previous sample id
         period = 0;
@@ -1068,7 +1088,7 @@ Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::Sa
     }
     
     // Convert note - Note OFF
-    if (dmfNote.IsOff()) // Note OFF. Use silent sample and handle effects.
+    if (NoteIsOff(dmfNote)) // Note OFF. Use silent sample and handle effects.
     {
         sampleId = sampleMap.at(-1).GetFirstMODSampleId(); // Use silent sample
         period = 0; // Don't need a note for the silent sample to work
@@ -1082,14 +1102,14 @@ Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::Sa
     // If we are on the NOISE channel, dmfSampleId will go unused
     dmf_sample_id_t dmfSampleId = state.global.channel == dmf::GameBoyChannel::WAVE ? chanState.wavetable + 4 : chanState.dutyCycle;
     
-    if (dmfNote.HasPitch() && state.global.channel != dmf::GameBoyChannel::NOISE) // A note not on Noise channel
+    if (NoteHasPitch(dmfNote) && state.global.channel != dmf::GameBoyChannel::NOISE) // A note not on Noise channel
     {
         if (sampleMap.count(dmfSampleId) > 0)
         {
             const DMFSampleMapper& sampleMapper = sampleMap.at(dmfSampleId);
             
             DMFSampleMapper::NoteRange noteRange;
-            modNote = sampleMapper.GetMODNote(dmfNote, noteRange);
+            modNote = sampleMapper.GetMODNote(GetNote(dmfNote), noteRange);
 
             if (chanState.noteRange != noteRange)
             {
@@ -1104,13 +1124,7 @@ Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::Sa
         }
     }
 
-    if (dmfNote.pitch == dmf::NotePitch::C_Alt)
-    {
-        assert(false && "In MOD::DMFConvertNote: DMF note pitch is 12 (C) - This should never happen since we're converting these pitches of 12 to 0 when importing DMF");
-        //modOctave++;
-    }
-
-    period = proTrackerPeriodTable[modNote.octave][modNote.pitch];
+    period = proTrackerPeriodTable[modNote.octave][static_cast<uint16_t>(modNote.pitch)];
 
     if (chanState.sampleChanged || !chanState.notePlaying)
     {
@@ -1141,13 +1155,13 @@ Note MOD::DMFConvertNote(State& state, const dmf::ChannelRow& pat, const MOD::Sa
     }
 
     chanState.notePlaying = true;
-    chanState.currentNote = pat.note;
+    chanState.currentNote = row.note;
     return modNote;
 }
 
-ChannelRow MOD::DMFApplyNoteAndEffect(State& state, const PriorityEffectsMap& modEffects, mod_sample_id_t modSampleId, uint16_t period)
+Row<MOD> MOD::DMFApplyNoteAndEffect(State& state, const PriorityEffectsMap& modEffects, mod_sample_id_t modSampleId, uint16_t period)
 {
-    ChannelRow modChannelRow;
+    Row<MOD> modChannelRow;
 
     modChannelRow.SampleNumber = modSampleId;
     modChannelRow.SamplePeriod = period;
@@ -1257,7 +1271,7 @@ void MOD::DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed)
 
     if (GetOptions()->GetTempoType() == MODConversionOptions::TempoType::EffectCompatibility)
     {
-        tempo = desiredBPM * 2;
+        tempo = static_cast<unsigned>(desiredBPM * 2);
         speed = 6;
 
         if (tempo > 255)
@@ -1338,7 +1352,7 @@ DMFSampleMapper::DMFSampleMapper()
     m_ModOctaveShift = 0;
 }
 
-mod_sample_id_t DMFSampleMapper::Init(dmf_sample_id_t dmfSampleId, mod_sample_id_t startingId, const std::pair<dmf::Note, dmf::Note>& dmfNoteRange)
+mod_sample_id_t DMFSampleMapper::Init(dmf_sample_id_t dmfSampleId, mod_sample_id_t startingId, const std::pair<Note, Note>& dmfNoteRange)
 {
     // Determines how to split up a DMF sample into MOD sample(s). Returns the next free MOD sample id.
 
@@ -1350,14 +1364,14 @@ mod_sample_id_t DMFSampleMapper::Init(dmf_sample_id_t dmfSampleId, mod_sample_id
     m_SampleType = dmfSampleId < 4 ? SampleType::Square : SampleType::Wave;
     m_DmfId = dmfSampleId;
 
-    const dmf::Note& lowestNote = dmfNoteRange.first;
-    const dmf::Note& highestNote = dmfNoteRange.second;
+    const Note& lowestNote = dmfNoteRange.first;
+    const Note& highestNote = dmfNoteRange.second;
 
     // Note ranges always start on a C, so get nearest C note (in downwards direction):
-    const dmf::Note lowestNoteNearestC = dmf::Note(dmf::NotePitch::C, lowestNote.octave);
+    const Note lowestNoteNearestC = Note{NotePitch::C, (uint16_t)lowestNote.octave}; // DMF note
 
     // Get the number of MOD samples needed
-    const int range = dmf::GetNoteRange(lowestNoteNearestC, highestNote);
+    const int range = GetNoteRange(lowestNoteNearestC, highestNote);
     if (range <= 36) // Only one MOD note range needed
         m_NumMODSamples = 1;
     else if (range <= 72)
@@ -1370,9 +1384,9 @@ mod_sample_id_t DMFSampleMapper::Init(dmf_sample_id_t dmfSampleId, mod_sample_id
     // Initializing for 3 MOD samples is always the same:
     if (m_NumMODSamples == 3)
     {
-        m_RangeStart.emplace_back(dmf::NotePitch::C, 0);
-        m_RangeStart.emplace_back(dmf::NotePitch::C, 2);
-        m_RangeStart.emplace_back(dmf::NotePitch::C, 5);
+        m_RangeStart.push_back({NotePitch::C, (uint16_t)0});
+        m_RangeStart.push_back({NotePitch::C, (uint16_t)2});
+        m_RangeStart.push_back({NotePitch::C, (uint16_t)5});
         m_ModSampleLengths[0] = 256;
         m_ModSampleLengths[1] = 64;
         m_ModSampleLengths[2] = 8;
@@ -1396,17 +1410,17 @@ mod_sample_id_t DMFSampleMapper::Init(dmf_sample_id_t dmfSampleId, mod_sample_id
     // From here on, 1 or 2 MOD samples are needed
 
     // If we can, shift RangeStart lower to possibly prevent the need for downsampling:
-    dmf::Note lowestPossibleRangeStart = lowestNoteNearestC;
+    Note lowestPossibleRangeStart = lowestNoteNearestC; // DMF note
     int possibleShiftAmount = 0;
 
-    dmf::Note currentHighEnd = lowestNoteNearestC;
+    Note currentHighEnd = lowestNoteNearestC; // DMF note
     currentHighEnd.octave += 3;
     if (m_NumMODSamples == 2)
         currentHighEnd.octave += 3;
 
     assert(currentHighEnd > highestNote);
 
-    const int highEndSlack = dmf::GetNoteRange(highestNote, currentHighEnd) - 1;
+    const int highEndSlack = GetNoteRange(highestNote, currentHighEnd) - 1;
     if (highEndSlack > 24 && lowestNoteNearestC.octave >= 2) // 2 octaves of slack at upper end, plus room to shift at bottom
         possibleShiftAmount = 2; // Can shift MOD notes down 2 octaves
     else if (highEndSlack > 12 && lowestNoteNearestC.octave >= 1) // 1 octave of slack at upper end, plus room to shift at bottom
@@ -1458,7 +1472,7 @@ mod_sample_id_t DMFSampleMapper::Init(dmf_sample_id_t dmfSampleId, mod_sample_id
     // Set Range Start and Sample Length for 2nd MOD sample (if it exists):
     if (m_NumMODSamples == 2)
     {
-        m_RangeStart.emplace_back(dmf::NotePitch::C, lowestPossibleRangeStart.octave + 3);
+        m_RangeStart.push_back({NotePitch::C, uint16_t(lowestPossibleRangeStart.octave + 3)});
         m_ModSampleLengths[1] = rangeStartOctaveToSampleLengthMap[m_RangeStart[1].octave];
 
         // For whatever reason, wave samples need to be transposed down one octave to match their sound in Deflemask
@@ -1489,20 +1503,20 @@ mod_sample_id_t DMFSampleMapper::InitSilence()
     return 2; // The next available MOD sample id
 }
 
-Note DMFSampleMapper::GetMODNote(const dmf::Note& dmfNote, NoteRange& modNoteRange) const
+Note DMFSampleMapper::GetMODNote(const Note& dmfNote, NoteRange& modNoteRange) const
 {
     // Returns the MOD note to use given a DMF note. Also returns which
     //      MOD sample the MOD note needs to use. The MOD note's octave
     //      and pitch should always be exactly what gets displayed in ProTracker.
 
-    Note modNote(dmf::NotePitch::C, 1);
+    Note modNote{NotePitch::C, (uint16_t)1};
     modNoteRange = NoteRange::First;
 
     if (m_SampleType == SampleType::Silence)
         return modNote;
 
     modNoteRange = GetMODNoteRange(dmfNote);
-    const dmf::Note& rangeStart = m_RangeStart[static_cast<int>(modNoteRange)];
+    const Note& rangeStart = m_RangeStart[static_cast<int>(modNoteRange)];
 
     modNote.pitch = dmfNote.pitch;
     modNote.octave = dmfNote.octave - rangeStart.octave + 1;
@@ -1515,7 +1529,7 @@ Note DMFSampleMapper::GetMODNote(const dmf::Note& dmfNote, NoteRange& modNoteRan
     return modNote;
 }
 
-DMFSampleMapper::NoteRange DMFSampleMapper::GetMODNoteRange(const dmf::Note& dmfNote) const
+DMFSampleMapper::NoteRange DMFSampleMapper::GetMODNoteRange(const Note& dmfNote) const
 {
     // Returns which MOD sample in the collection (1st, 2nd, or 3rd) should be used for the given DMF note
     // Assumes dmfNote is a valid note for this MOD sample collection
@@ -1547,7 +1561,7 @@ DMFSampleMapper::NoteRange DMFSampleMapper::GetMODNoteRange(const dmf::Note& dmf
     }
 }
 
-mod_sample_id_t DMFSampleMapper::GetMODSampleId(const dmf::Note& dmfNote) const
+mod_sample_id_t DMFSampleMapper::GetMODSampleId(const Note& dmfNote) const
 {
     // Returns the MOD sample id that would be used for the given DMF note
     // Assumes dmfNote is a valid note for this MOD sample collection
@@ -1639,11 +1653,12 @@ void MOD::ExportRaw(const std::string& filename)
 void MOD::ExportModuleName(std::ofstream& fout) const
 {
     // Print module name, truncating or padding with zeros as needed
+    const std::string& title = GetTitle();
     for (unsigned i = 0; i < 20; i++)
     {
-        if (i < m_ModuleName.size())
+        if (i < title.size())
         {
-            fout.put(m_ModuleName[i]);
+            fout.put(title[i]);
         }
         else
         {
@@ -1661,7 +1676,7 @@ void MOD::ExportSampleInfo(std::ofstream& fout) const
         if (sample.name.size() > 22)
             throw std::length_error("Sample name must be 22 characters or less");
 
-        // Pad name with zeros
+        // Pad name with spaces
         std::string nameCopy = sample.name;
         while (nameCopy.size() < 22)
             nameCopy += " ";
@@ -1713,41 +1728,46 @@ void MOD::ExportSampleInfo(std::ofstream& fout) const
 
 void MOD::ExportModuleInfo(std::ofstream& fout) const
 {
-    fout.put(m_NumberOfRowsInPatternMatrix);   // Song length in patterns (not total number of patterns) 
+    fout.put(GetData().GetNumOrders());   // Song length in patterns (not total number of patterns) 
     fout.put(127);                        // 0x7F - Useless byte that has to be here
 
     // Pattern matrix (Each ProTracker pattern number is the same as its pattern matrix row number)
-    for (uint8_t i = 0; i < m_NumberOfRowsInPatternMatrix; i++)
+    for (uint8_t patternId : GetData().PatternMatrixRef())
     {
-        fout.put(i);
+        fout.put(patternId);
     }
-    for (uint8_t i = m_NumberOfRowsInPatternMatrix; i < 128; i++)
+    for (uint8_t i = GetData().GetNumOrders(); i < 128; ++i)
     {
         fout.put(0);
     }
-    
+
     fout << "M.K."; // ProTracker uses "M!K!" if there's more than 64 pattern matrix rows
 }
 
 void MOD::ExportPatterns(std::ofstream& fout) const
 {
-    for (const auto& pattern : m_Patterns)
+    const auto& modData = GetData();
+    for (const auto& pattern : modData.PatternsRef())
     {
-        for (const auto& channelRow : pattern)
+        for (unsigned row = 0; row < modData.GetNumRows(); ++row)
         {
-            // Sample number (upper 4b); sample period/effect param. (upper 4b)
-            fout.put((channelRow.SampleNumber & 0xF0) | ((channelRow.SamplePeriod & 0x0F00) >> 8));
+            for (unsigned channel = 0; channel < modData.GetNumChannels(); ++channel)
+            {
+                const Row<MOD>& rowData = pattern[row][channel];
+                // Sample number (upper 4b); sample period/effect param. (upper 4b)
+                fout.put((rowData.SampleNumber & 0xF0) | ((rowData.SamplePeriod & 0x0F00) >> 8));
 
-            // Sample period/effect param. (lower 8 bits)
-            fout.put(channelRow.SamplePeriod & 0x00FF);
-        
-            //const uint16_t effect = ((uint16_t)channelRow.EffectCode << 4) | channelRow.EffectValue;
+                // Sample period/effect param. (lower 8 bits)
+                fout.put(rowData.SamplePeriod & 0x00FF);
 
-            // Sample number (lower 4b); effect code (upper 4b)
-            fout.put((channelRow.SampleNumber << 4) | (channelRow.EffectCode >> 4));
-            
-            // Effect code (lower 8 bits)
-            fout.put(((channelRow.EffectCode << 4) & 0x00FF) | channelRow.EffectValue);
+                //const uint16_t effect = ((uint16_t)rowData.EffectCode << 4) | rowData.EffectValue;
+
+                // Sample number (lower 4b); effect code (upper 4b)
+                fout.put((rowData.SampleNumber << 4) | (rowData.EffectCode >> 4));
+
+                // Effect code (lower 8 bits)
+                fout.put(((rowData.EffectCode << 4) & 0x00FF) | rowData.EffectValue);
+            }
         }
     }
 }
@@ -1820,36 +1840,9 @@ std::string MODException::CreateErrorMessage(Category category, int errorCode, c
                     return std::string("Patterns must have 64 or fewer rows.\n")
                             + std::string("       A workaround for this issue is planned for a future update to dmf2mod.");
                 default:
-                    return "";
+                    return arg;
             }
             break;
     }
     return "";
-}
-
-Note::Note(const dmf::Note& dmfNote)
-{
-    this->pitch = dmfNote.pitch % 12;
-    this->octave = dmfNote.octave;
-}
-
-Note::Note(dmf::NotePitch p, uint16_t o)
-{
-    this->pitch = (uint16_t)p % 12;
-    this->octave = o;
-}
-
-Note& Note::operator=(const dmf::Note& dmfNote)
-{
-    this->pitch = dmfNote.pitch % 12;
-    this->octave = dmfNote.octave;
-    return *this;
-}
-
-dmf::Note Note::ToDMFNote() const
-{
-    dmf::Note n;
-    n.octave = octave;
-    n.pitch = pitch;
-    return n;
 }

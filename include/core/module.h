@@ -9,12 +9,14 @@
 #pragma once
 
 #include "module_base.h"
+#include "data.h"
+#include "note.h"
 #include "conversion_options.h"
 #include "global_options.h"
 
 namespace d2m {
 
-// All module classes must inherit this using CRTP
+// All module classes must derive from this using CRTP
 template <class T, class O>
 class ModuleInterface : public ModuleBase
 {
@@ -22,7 +24,15 @@ public:
     friend class Registrar;
     using OptionsType = O;
 
+    inline const ModuleData<T>& GetData() const { return m_Data; }
+
+    std::string GetTitle() const override { return GetData().GlobalData().title; }
+    std::string GetAuthor() const override { return GetData().GlobalData().author; }
+
 protected:
+
+    inline ModuleData<T>& GetData() { return m_Data; }
+
     ModuleType GetType() const override
     {
         return m_Info.GetType();
@@ -36,7 +46,8 @@ protected:
     static const ModuleInfo& GetInfo();
 
 private:
-    static const ModuleInfo m_Info;
+    static const ModuleInfo m_Info;     // Info inherent to every module of type T
+    ModuleData<T> m_Data;               // Song information for a particular module file
 };
 
 

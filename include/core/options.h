@@ -52,7 +52,7 @@ public:
     OptionDefinition() : m_OptionType(OPTION), m_Id(-1), m_ValueType(Type::BOOL), m_Name(""), m_ShortName('\0'), m_DefaultValue(false) {}
 
     // OptionDefinition without accepted values; The value can be anything allowed by the variant
-    template<typename T, typename = std::enable_if_t<std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{})>>
+    template<typename T, typename = std::enable_if_t<std::is_integral<T>{} || (std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>)>>
     OptionDefinition(OptionType type, T id, const std::string& name, char shortName, const value_t& defaultValue, const std::string& description)
         : m_OptionType(type), m_Id(static_cast<int>(id)), m_Name(name), m_ShortName(shortName), m_DefaultValue(defaultValue), m_AcceptedValues({}), m_AcceptedValuesOrdered({}), m_Description(description)
     {
@@ -69,8 +69,8 @@ public:
 
     // OptionDefinition with accepted values; Ensures that defaultValue and acceptedValues are the same type and are a valid variant alternative
     template <typename T, typename U, 
-        typename = std::enable_if_t<std::is_constructible<value_t, U>{} && /* U must be a valid variant alternative */
-        (std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}))>> /* T must be int or enum class with int underlying type */
+        typename = std::enable_if_t<std::is_constructible_v<value_t, U> && /* U must be a valid variant alternative */
+        (std::is_integral_v<T> || (std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>))>> /* T must be int or enum class with int underlying type */
     OptionDefinition(OptionType type, T id, const std::string& name, char shortName, const U& defaultValue, const std::initializer_list<U>& acceptedValues, const std::string& description)
         : m_OptionType(type), m_Id(static_cast<int>(id)), m_Name(name), m_ShortName(shortName), m_DefaultValue(defaultValue), m_Description(description)
     {
@@ -110,13 +110,13 @@ public:
     }
 
     // Allows the use of string literals, which are converted to std::string
-    template<typename T, typename = std::enable_if_t<std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{})>>
+    template<typename T, typename = std::enable_if_t<std::is_integral_v<T> || (std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>)>>
     OptionDefinition(OptionType type, T id, const std::string& name, char shortName, const char* defaultValue, const std::initializer_list<std::string>& acceptedValues, const std::string& description)
         : OptionDefinition(type, id, name, shortName, std::string(defaultValue), acceptedValues, description) {}
 
     // Allows custom accepted values text which is used when printing help for this option. m_AcceptedValues is empty.
-    template<typename T, typename U, typename = std::enable_if_t<std::is_constructible<value_t, U>{} && /* U must be a valid variant alternative */
-    (std::is_integral<T>{} || (std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}))>> /* T must be int or enum class with int underlying type */
+    template<typename T, typename U, typename = std::enable_if_t<std::is_constructible_v<value_t, U> && /* U must be a valid variant alternative */
+    (std::is_integral_v<T> || (std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>))>> /* T must be int or enum class with int underlying type */
     OptionDefinition(OptionType type, T id, const std::string& name, char shortName, const U& defaultValue, const char* customAcceptedValuesText, const std::string& description)
         : OptionDefinition(type, id, name, shortName, defaultValue, description)
     {
@@ -287,13 +287,13 @@ public:
     const Option& GetOption(int id) const { return m_OptionsMap.at(id); }
     Option& GetOption(int id) { return m_OptionsMap[id]; }
 
-    template<typename T, class = std::enable_if_t<std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}>>
+    template<typename T, class = std::enable_if_t<std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>>>
     const Option& GetOption(T id) const
     {
         return GetOption(static_cast<int>(id));
     }
 
-    template<typename T, class = std::enable_if_t<std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}>>
+    template<typename T, class = std::enable_if_t<std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>>>
     Option& GetOption(T id)
     {
         return GetOption(static_cast<int>(id));

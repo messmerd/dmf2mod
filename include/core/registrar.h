@@ -53,7 +53,7 @@ public:
 
     ModuleInfo() = default;
 
-    template<class T, class = std::enable_if_t<std::is_base_of<ModuleInterface<T, typename T::OptionsType>, T>{}>>
+    template<class T, class = std::enable_if_t<std::is_base_of_v<ModuleInterface<T, typename T::OptionsType>, T>>>
     static ModuleInfo Create(ModuleType moduleType, std::string friendlyName, std::string fileExtension)
     {
         return ModuleInfo(
@@ -89,13 +89,13 @@ public:
 
     ConversionOptionsInfo() = default;
 
-    template<class T, class = std::enable_if_t<std::is_base_of<ConversionOptionsInterface<T>, T>{}>>
+    template<class T, class = std::enable_if_t<std::is_base_of_v<ConversionOptionsInterface<T>, T>>>
     static ConversionOptionsInfo Create(ModuleType moduleType, std::shared_ptr<OptionDefinitionCollection> definitions)
     {
         return ConversionOptionsInfo([](){ return std::make_shared<T>(); }, moduleType, definitions);
     }
 
-    template<class T, class = std::enable_if_t<std::is_base_of<ConversionOptionsInterface<T>, T>{}>>
+    template<class T, class = std::enable_if_t<std::is_base_of_v<ConversionOptionsInterface<T>, T>>>
     static ConversionOptionsInfo Create(ModuleType moduleType)
     {
         return ConversionOptionsInfo([](){ return std::make_shared<T>(); }, moduleType, std::make_shared<OptionDefinitionCollection>());
@@ -137,7 +137,7 @@ private:
      * Registers a module in the registration maps
      * TODO: Need to also check whether the ConversionOptionsStatic<T> specialization exists?
      */
-    template <class T, class = std::enable_if_t<std::is_base_of<ModuleInterface<T, typename T::OptionsType>, T>{}>>
+    template <class T, class = std::enable_if_t<std::is_base_of_v<ModuleInterface<T, typename T::OptionsType>, T>>>
     static void Register();
 
 private:

@@ -126,7 +126,7 @@ OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutput
     inputOutputInfo.OutputFile = "";
     inputOutputInfo.OutputType = ModuleType::NONE;
 
-    const int argCount = args.size();
+    const size_t argCount = args.size();
 
     if (argCount == 1)
     {

@@ -10,6 +10,7 @@
 
 #include <istream>
 #include <type_traits>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,17 @@ namespace detail
         template<typename Operation>
         inline void operator()(Operation& op) {}
     };
+
+    // Adapted from: https://peter.bloomfield.online/using-cpp-templates-for-size-based-type-selection/
+    template <uint8_t NumBytes>
+    using UIntSelector =
+        typename std::conditional<NumBytes == 1, uint_fast8_t,
+            typename std::conditional<NumBytes == 2, uint_fast16_t,
+                typename std::conditional<NumBytes == 3 || NumBytes == 4, uint_fast32_t,
+                    uint_fast64_t
+                >::type
+            >::type
+        >::type;
 }
 
 enum class Endianness { Unspecified, Little, Big };
@@ -44,14 +56,11 @@ class StreamReader
 private:
     IStream m_Stream;
 
-    template <size_t Integer>
-    static inline constexpr bool is_power_of_two = ((Integer > 0) && (Integer & (Integer - 1)) == 0);
-
-    template<typename T, size_t Size>
+    template<typename T, uint8_t NumBytes>
     struct LittleEndianReadOperator
     {
-        static constexpr size_t ShiftAmount = (Size - 1) * 8;
-        static_assert(Size > 0);
+        static constexpr uint_fast8_t ShiftAmount = (NumBytes - 1) * 8;
+        static_assert(NumBytes > 0);
 
         inline void operator()()
         {
@@ -74,16 +83,15 @@ private:
         T value{};
     };
 
-    template<typename T, size_t Size, typename = std::enable_if_t<std::is_integral_v<T> && is_power_of_two<sizeof(T)>>>
+    template<typename T, bool Signed, uint8_t NumBytes>
     inline T ReadIntLittleEndian()
     {
-        static_assert(Size <= sizeof(T), "Explicitly specified template parameter 'Size' must be <= sizeof(T)");
-        LittleEndianReadOperator<T, Size> oper{stream()};
-        detail::LoopUnroller<Size>{}(oper);
+        LittleEndianReadOperator<T, NumBytes> oper{stream()};
+        detail::LoopUnroller<NumBytes>{}(oper);
 
-        if constexpr (std::is_signed_v<T> && Size < sizeof(T))
+        if constexpr (Signed && NumBytes < sizeof(T))
         {
-            struct SignExtender { T value : Size * 8; };
+            struct SignExtender { T value : NumBytes * 8; };
             return SignExtender{oper.value}.value;
         }
         else
@@ -92,16 +100,15 @@ private:
         }
     }
 
-    template<typename T, size_t Size, typename = std::enable_if_t<std::is_integral_v<T> && is_power_of_two<sizeof(T)>>>
+    template<typename T, bool Signed, uint8_t NumBytes>
     inline T ReadIntBigEndian()
     {
-        static_assert(Size <= sizeof(T), "Explicitly specified template parameter 'Size' must be <= sizeof(T)");
         BigEndianReadOperator<T> oper{stream()};
-        detail::LoopUnroller<Size>{}(oper);
+        detail::LoopUnroller<NumBytes>{}(oper);
 
-        if constexpr (std::is_signed_v<T> && Size < sizeof(T))
+        if constexpr (Signed && NumBytes < sizeof(T))
         {
-            struct SignExtender { T value : Size * 8; };
+            struct SignExtender { T value : NumBytes * 8; };
             return SignExtender{oper.value}.value;
         }
         else
@@ -149,22 +156,26 @@ public:
         return tempBytes;
     }
 
-    template<typename T = uint8_t, size_t ReadAmount = sizeof(T), Endianness Endian = GlobalEndian, typename = std::enable_if_t<std::is_integral_v<T>>>
-    T ReadInt()
+    template<bool Signed = false, uint8_t NumBytes = 1, Endianness Endian = GlobalEndian>
+    auto ReadInt()
     {
-        static_assert(ReadAmount <= sizeof(T), "Explicitly specified template parameter 'ReadAmount' must be <= sizeof(T)");
-        if constexpr (ReadAmount > 1UL)
+        using UIntType = std::conditional_t<(NumBytes > 1), detail::UIntSelector<NumBytes>, uint8_t>;
+        using ReturnType = std::conditional_t<Signed, std::make_signed_t<UIntType>, UIntType>;
+
+        static_assert(NumBytes <= 8 && NumBytes >= 1, "Accepted range for NumBytes: 1 <= NumBytes <= 8");
+        if constexpr (NumBytes > 1)
         {
-            static_assert(is_power_of_two<sizeof(T)>, "sizeof(T) must be a power of 2"); // TODO: Unnecessary?
             static_assert(Endian != Endianness::Unspecified, "Set the endianness when creating StreamReader or set it in this method's template parameters");
             if constexpr (Endian == Endianness::Little)
-                return ReadIntLittleEndian<T, ReadAmount>();
+                return static_cast<ReturnType>(ReadIntLittleEndian<UIntType, Signed, NumBytes>());
             else
-                return ReadIntBigEndian<T, ReadAmount>();
+                return static_cast<ReturnType>(ReadIntBigEndian<UIntType, Signed, NumBytes>());
         }
         else
         {
-            return m_Stream.get();
+            // For single-byte reads, the size of the return value is guaranteed
+            // to be 1 byte and setting the Signed parameter is unnecessary
+            return static_cast<ReturnType>(m_Stream.get());
         }
     }
 };

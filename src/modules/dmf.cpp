@@ -298,7 +298,7 @@ void DMF::LoadModuleInfo(Reader& fin)
     if (m_DMFFileVersion >= 24) // DMF version 24 (0x18) and newer.
     {
         // Newer versions read 4 bytes here
-        m_ModuleInfo.totalRowsPerPattern = fin.ReadInt<uint32_t>();
+        m_ModuleInfo.totalRowsPerPattern = fin.ReadInt<false, 4>();
     }
     else // DMF version 23 (0x17) and older. WARNING: I don't have the specs for version 23 (0x17), so this may be wrong.
     {
@@ -398,11 +398,11 @@ Instrument DMF::LoadInstrument(Reader& fin, DMF::SystemType systemType)
             for (int i = 0; i < inst.std.volEnvSize; i++)
             {
                 // 4 bytes, little-endian
-                inst.std.volEnvValue[i] = fin.ReadInt<int32_t>();
+                inst.std.volEnvValue[i] = fin.ReadInt<true, 4>();
             }
 
             // Always get envelope loop position byte regardless of envelope size
-            inst.std.volEnvLoopPos = fin.ReadInt<int8_t>();
+            inst.std.volEnvLoopPos = fin.ReadInt();
         }
         else if (systemType != DMF::SystemType::GameBoy) // Not a Game Boy and DMF version 18 (0x12) or newer
         {
@@ -413,11 +413,11 @@ Instrument DMF::LoadInstrument(Reader& fin, DMF::SystemType systemType)
             for (int i = 0; i < inst.std.volEnvSize; i++)
             {
                 // 4 bytes, little-endian
-                inst.std.volEnvValue[i] = fin.ReadInt<int32_t>();
+                inst.std.volEnvValue[i] = fin.ReadInt<true, 4>();
             }
 
             if (inst.std.volEnvSize > 0)
-                inst.std.volEnvLoopPos = fin.ReadInt<int8_t>();
+                inst.std.volEnvLoopPos = fin.ReadInt();
         }
 
         // Arpeggio macro
@@ -427,11 +427,11 @@ Instrument DMF::LoadInstrument(Reader& fin, DMF::SystemType systemType)
         for (int i = 0; i < inst.std.arpEnvSize; i++)
         {
             // 4 bytes, little-endian
-            inst.std.arpEnvValue[i] = fin.ReadInt<int32_t>();
+            inst.std.arpEnvValue[i] = fin.ReadInt<true, 4>();
         }
 
         if (inst.std.arpEnvSize > 0 || m_DMFFileVersion <= 17) // DMF version 17 and older always gets envelope loop position byte
-            inst.std.arpEnvLoopPos = fin.ReadInt<int8_t>();
+            inst.std.arpEnvLoopPos = fin.ReadInt();
         
         inst.std.arpMacroMode = fin.ReadInt();
 
@@ -442,11 +442,11 @@ Instrument DMF::LoadInstrument(Reader& fin, DMF::SystemType systemType)
         for (int i = 0; i < inst.std.dutyNoiseEnvSize; i++)
         {
             // 4 bytes, little-endian
-            inst.std.dutyNoiseEnvValue[i] = fin.ReadInt<int32_t>();
+            inst.std.dutyNoiseEnvValue[i] = fin.ReadInt<true, 4>();
         }
 
         if (inst.std.dutyNoiseEnvSize > 0 || m_DMFFileVersion <= 17) // DMF version 17 and older always gets envelope loop position byte
-            inst.std.dutyNoiseEnvLoopPos = fin.ReadInt<int8_t>();
+            inst.std.dutyNoiseEnvLoopPos = fin.ReadInt();
 
         // Wavetable macro
         inst.std.wavetableEnvSize = fin.ReadInt();
@@ -455,11 +455,11 @@ Instrument DMF::LoadInstrument(Reader& fin, DMF::SystemType systemType)
         for (int i = 0; i < inst.std.wavetableEnvSize; i++)
         {
             // 4 bytes, little-endian
-            inst.std.wavetableEnvValue[i] = fin.ReadInt<int32_t>();
+            inst.std.wavetableEnvValue[i] = fin.ReadInt<true, 4>();
         }
 
         if (inst.std.wavetableEnvSize > 0 || m_DMFFileVersion <= 17) // DMF version 17 and older always gets envelope loop position byte
-            inst.std.wavetableEnvLoopPos = fin.ReadInt<int8_t>();
+            inst.std.wavetableEnvLoopPos = fin.ReadInt();
 
         // Per system data
         if (systemType == DMF::SystemType::C64_SID_8580 || systemType == DMF::SystemType::C64_SID_6581) // Using Commodore 64
@@ -530,7 +530,7 @@ Instrument DMF::LoadInstrument(Reader& fin, DMF::SystemType systemType)
             inst.fm.lfo = fin.ReadInt();
             fin.ReadInt(); // Reserved byte (must be 0)
 
-            const bool totalOperatorsBool = fin.ReadInt<bool>();
+            const bool totalOperatorsBool = fin.ReadInt();
             inst.fm.numOperators = totalOperatorsBool ? 4 : 2;
 
             inst.fm.lfo2 = fin.ReadInt();
@@ -614,13 +614,13 @@ void DMF::LoadWavetablesData(Reader& fin)
 
     for (int i = 0; i < m_TotalWavetables; i++)
     {
-        m_WavetableSizes[i] = fin.ReadInt<uint32_t>();
+        m_WavetableSizes[i] = fin.ReadInt<false, 4>();
 
         m_WavetableValues[i] = new uint32_t[m_WavetableSizes[i]];
 
         for (unsigned j = 0; j < m_WavetableSizes[i]; j++)
         {
-            m_WavetableValues[i][j] = fin.ReadInt<uint32_t>() & dataMask;
+            m_WavetableValues[i][j] = fin.ReadInt<false, 4>() & dataMask;
 
             // Bug fix for DMF version 25 (0x19): Transform 4-bit FDS wavetables into 6-bit
             if (GetSystem().type == DMF::SystemType::NES_FDS && m_DMFFileVersion <= 25)
@@ -675,8 +675,8 @@ Row<DMF> DMF::LoadPatternRow(Reader& fin, uint8_t effectsColumnsCount)
 {
     Row<DMF> row;
 
-    const uint16_t tempPitch = fin.ReadInt<uint16_t>();
-    uint16_t tempOctave = fin.ReadInt<uint16_t>();
+    const uint16_t tempPitch = fin.ReadInt<false, 2>();
+    uint16_t tempOctave = fin.ReadInt<false, 2>();
 
     switch (tempPitch)
     {
@@ -698,12 +698,12 @@ Row<DMF> DMF::LoadPatternRow(Reader& fin, uint8_t effectsColumnsCount)
             break;
     }
 
-    row.volume = fin.ReadInt<int16_t>();
+    row.volume = fin.ReadInt<true, 2>();
 
     for (uint8_t col = 0; col < effectsColumnsCount; ++col)
     {
-        row.effect[col].code = fin.ReadInt<int16_t>();
-        row.effect[col].value = fin.ReadInt<int16_t>();
+        row.effect[col].code = fin.ReadInt<true, 2>();
+        row.effect[col].value = fin.ReadInt<true, 2>();
     }
 
     // Initialize the rest to zero
@@ -712,7 +712,7 @@ Row<DMF> DMF::LoadPatternRow(Reader& fin, uint8_t effectsColumnsCount)
         row.effect[col] = {(int16_t)EffectCode::NoEffect, (int16_t)EffectCode::NoEffectVal};
     }
 
-    row.instrument = fin.ReadInt<int16_t>();
+    row.instrument = fin.ReadInt<true, 2>();
 
     return row;
 }
@@ -732,7 +732,7 @@ PCMSample DMF::LoadPCMSample(Reader& fin)
 {
     PCMSample sample;
 
-    sample.size = fin.ReadInt<uint32_t>();
+    sample.size = fin.ReadInt<false, 4>();
 
     if (m_DMFFileVersion >= 24) // DMF version 24 (0x18)
     {
@@ -757,7 +757,7 @@ PCMSample DMF::LoadPCMSample(Reader& fin)
     sample.data = new uint16_t[sample.size];
     for (uint32_t i = 0; i < sample.size; i++)
     {
-        sample.data[i] = fin.ReadInt<uint16_t>();
+        sample.data[i] = fin.ReadInt<false, 2>();
     }
 
     return sample;

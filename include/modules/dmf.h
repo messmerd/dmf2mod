@@ -9,6 +9,7 @@
 #pragma once
 
 #include "core/module.h"
+#include "utils/stream_reader.h"
 #include <zstr/zstr.hpp>
 
 #include <string>
@@ -290,17 +291,19 @@ private:
     void ExportRaw(const std::string& filename) override;
     void ConvertRaw(const Module* input) override;
 
+    using Reader = StreamReader<zstr::ifstream, Endianness::Little>;
+
     dmf::System GetSystem(uint8_t systemByte) const;
-    void LoadVisualInfo(zstr::ifstream& fin);
-    void LoadModuleInfo(zstr::ifstream& fin);
-    void LoadPatternMatrixValues(zstr::ifstream& fin);
-    void LoadInstrumentsData(zstr::ifstream& fin);
-    dmf::Instrument LoadInstrument(zstr::ifstream& fin, SystemType systemType);
-    void LoadWavetablesData(zstr::ifstream& fin);
-    void LoadPatternsData(zstr::ifstream& fin);
-    Row<DMF> LoadPatternRow(zstr::ifstream& fin, uint8_t effectsColumnsCount);
-    void LoadPCMSamplesData(zstr::ifstream& fin);
-    dmf::PCMSample LoadPCMSample(zstr::ifstream& fin);
+    void LoadVisualInfo(Reader& fin);
+    void LoadModuleInfo(Reader& fin);
+    void LoadPatternMatrixValues(Reader& fin);
+    void LoadInstrumentsData(Reader& fin);
+    dmf::Instrument LoadInstrument(Reader& fin, SystemType systemType);
+    void LoadWavetablesData(Reader& fin);
+    void LoadPatternsData(Reader& fin);
+    Row<DMF> LoadPatternRow(Reader& fin, uint8_t effectsColumnsCount);
+    void LoadPCMSamplesData(Reader& fin);
+    dmf::PCMSample LoadPCMSample(Reader& fin);
 
 private:
     uint8_t         m_DMFFileVersion;

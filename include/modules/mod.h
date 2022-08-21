@@ -18,6 +18,27 @@
 namespace d2m {
 
 // Declare module
+
+class MOD;
+
+template<>
+struct ModuleGlobalData<MOD> : public ModuleGlobalDataGeneric<DataStorageType::ORC>
+{
+    // In the future, we'll be able to detect when a MOD module
+    // was created with dmf2mod, which will help when converting
+    // from MOD to another module type.
+    bool madeWithDmf2mod;
+};
+
+template<>
+struct Row<MOD>
+{
+    uint8_t SampleNumber;
+    uint16_t SamplePeriod;
+    unsigned EffectCode;
+    unsigned EffectValue;
+};
+
 MODULE_DECLARE(MOD, MODConversionOptions)
 
 namespace mod {
@@ -68,60 +89,6 @@ enum EffectPriority
     EffectPriorityUnsupportedEffect /* Must be the last enum value */
 };
 
-struct Note
-{
-    uint16_t pitch;
-    uint16_t octave;
-
-    Note() = default;
-    Note(uint16_t p, uint16_t o)
-        : pitch(p), octave(o)
-    {}
-
-    bool operator>(const Note& rhs) const
-    {
-        return (this->octave << 4) + this->pitch > (rhs.octave << 4) + rhs.pitch;
-    }
-
-    bool operator>=(const Note& rhs) const
-    {
-        return (this->octave << 4) + this->pitch >= (rhs.octave << 4) + rhs.pitch;
-    }
-
-    bool operator<(const Note& rhs) const
-    {
-        return (this->octave << 4) + this->pitch < (rhs.octave << 4) + rhs.pitch;
-    }
-
-    bool operator<=(const Note& rhs) const
-    {
-        return (this->octave << 4) + this->pitch <= (rhs.octave << 4) + rhs.pitch;
-    }
-
-    bool operator==(const Note& rhs) const
-    {
-        return this->octave == rhs.octave && this->pitch == rhs.pitch;
-    }
-
-    bool operator!=(const Note& rhs) const
-    {
-        return !(*this == rhs);
-    }
-
-    Note(const dmf::Note& dmfNote);
-    Note(dmf::NotePitch p, uint16_t o);
-    Note& operator=(const dmf::Note& dmfNote);
-    dmf::Note ToDMFNote() const;
-};
-
-struct ChannelRow
-{
-    uint8_t SampleNumber;
-    uint16_t SamplePeriod;
-    unsigned EffectCode;
-    unsigned EffectValue;
-};
-
 using dmf_sample_id_t = int;
 using mod_sample_id_t = int;
 
@@ -152,12 +119,12 @@ public:
 
     DMFSampleMapper();
 
-    mod_sample_id_t Init(dmf_sample_id_t dmfSampleId, mod_sample_id_t startingId, const std::pair<dmf::Note, dmf::Note>& dmfNoteRange);
+    mod_sample_id_t Init(dmf_sample_id_t dmfSampleId, mod_sample_id_t startingId, const std::pair<Note, Note>& dmfNoteRange);
     mod_sample_id_t InitSilence();
 
-    Note GetMODNote(const dmf::Note& dmfNote, NoteRange& modNoteRange) const;
-    NoteRange GetMODNoteRange(const dmf::Note& dmfNote) const;
-    mod_sample_id_t GetMODSampleId(const dmf::Note& dmfNote) const;
+    Note GetMODNote(const Note& dmfNote, NoteRange& modNoteRange) const;
+    NoteRange GetMODNoteRange(const Note& dmfNote) const;
+    mod_sample_id_t GetMODSampleId(const Note& dmfNote) const;
     mod_sample_id_t GetMODSampleId(NoteRange modNoteRange) const;
     unsigned GetMODSampleLength(NoteRange modNoteRange) const;
     NoteRange GetMODNoteRange(mod_sample_id_t modSampleId) const;
@@ -172,7 +139,7 @@ private:
     dmf_sample_id_t m_DmfId;
     mod_sample_id_t m_ModIds[3]; // Up to 3 MOD samples from one DMF sample
     unsigned m_ModSampleLengths[3];
-    std::vector<dmf::Note> m_RangeStart;
+    std::vector<Note> m_RangeStart;
     int m_NumMODSamples;
     SampleType m_SampleType;
     bool m_DownsamplingNeeded;
@@ -215,7 +182,7 @@ struct ChannelState
     int rowsUntilPortAutoOff;
     PORTDIR portDirection;
     uint16_t portParam;
-    dmf::Note currentNote;
+    NoteSlot currentNote; // DMF Note
 };
 
 struct State
@@ -234,7 +201,7 @@ struct State
     ChannelState channel[4];
     ChannelState channelCopy[4];
 
-    ChannelRow channelRows[4];
+    Row<MOD> channelRows[4];
 
     State()
     {
@@ -305,8 +272,8 @@ struct State
 class MODException : public ModuleException
 {
 public:
-    template <class T, class = std::enable_if_t<std::is_enum<T>{} && std::is_convertible<std::underlying_type_t<T>, int>{}>>
-    MODException(Category category, T errorCode, const std::string args = "")
+    template <class T, class = std::enable_if_t<std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>>>
+    MODException(Category category, T errorCode, const std::string& args = "")
         : ModuleException(category, static_cast<int>(errorCode), CreateErrorMessage(category, (int)errorCode, args)) {}
 
 private:
@@ -355,8 +322,6 @@ public:
     ~MOD() = default;
     void CleanUp() {};
 
-    std::string GetName() const override { return m_ModuleName; }
-
     enum class ImportError {Success=0};
     enum class ImportWarning {};
 
@@ -368,7 +333,8 @@ public:
         Success=0,
         NotGameBoy,
         TooManyPatternMatrixRows,
-        Over64RowPattern
+        Over64RowPattern,
+        WrongChannelCount
     };
 
     enum class ConvertWarning
@@ -389,7 +355,7 @@ public:
 
 private:
     using SampleMap = std::map<mod::dmf_sample_id_t, mod::DMFSampleMapper>;
-    using DMFSampleNoteRangeMap = std::map<mod::dmf_sample_id_t, std::pair<dmf::Note, dmf::Note>>;
+    using DMFSampleNoteRangeMap = std::map<mod::dmf_sample_id_t, std::pair<Note, Note>>;
 
     void ImportRaw(const std::string& filename) override;
     void ExportRaw(const std::string& filename) override;
@@ -403,13 +369,13 @@ private:
     void DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap);
 
     void DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap);
-    mod::PriorityEffectsMap DMFConvertEffects(const dmf::ChannelRow& pat, mod::State& state);
-    mod::PriorityEffectsMap DMFConvertEffects_NoiseChannel(const dmf::ChannelRow& pat);
+    mod::PriorityEffectsMap DMFConvertEffects(const Row<DMF>& row, mod::State& state);
+    mod::PriorityEffectsMap DMFConvertEffects_NoiseChannel(const Row<DMF>& row);
     void DMFUpdateStatePre(const DMF& dmf, mod::State& state, const mod::PriorityEffectsMap& modEffects);
-    void DMFGetAdditionalEffects(const DMF& dmf, mod::State& state, const dmf::ChannelRow& pat, mod::PriorityEffectsMap& modEffects);
+    void DMFGetAdditionalEffects(const DMF& dmf, mod::State& state, const Row<DMF>& row, mod::PriorityEffectsMap& modEffects);
     //void DMFUpdateStatePost(const DMF& dmf, mod::State& state, const mod::PriorityEffectsMap& modEffects);
-    mod::Note DMFConvertNote(mod::State& state, const dmf::ChannelRow& pat, const SampleMap& sampleMap, mod::PriorityEffectsMap& modEffects, mod::mod_sample_id_t& sampleId, uint16_t& period);
-    mod::ChannelRow DMFApplyNoteAndEffect(mod::State& state, const mod::PriorityEffectsMap& modEffects, mod::mod_sample_id_t modSampleId, uint16_t period);
+    Note DMFConvertNote(mod::State& state, const Row<DMF>& row, const SampleMap& sampleMap, mod::PriorityEffectsMap& modEffects, mod::mod_sample_id_t& sampleId, uint16_t& period);
+    Row<MOD> DMFApplyNoteAndEffect(mod::State& state, const mod::PriorityEffectsMap& modEffects, mod::mod_sample_id_t modSampleId, uint16_t period);
 
     void DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed);
 
@@ -420,28 +386,13 @@ private:
     void ExportPatterns(std::ofstream& fout) const;
     void ExportSampleData(std::ofstream& fout) const;
 
-    // Other:
-    inline mod::ChannelRow& GetChannelRow(unsigned pattern, unsigned row, unsigned channel)
-    {
-        return m_Patterns[pattern][(row << m_NumberOfChannelsPowOfTwo) + channel];
-    }
-
-    inline void SetChannelRow(unsigned pattern, unsigned row, unsigned channel, mod::ChannelRow& channelRow)
-    {
-        m_Patterns.at(pattern).at((row << m_NumberOfChannelsPowOfTwo) + channel) = channelRow;
-    }
-
 private:
     //////////// Temporaries used during DMF-->MOD conversion
     const bool m_UsingSetupPattern = true; // Whether to use a pattern at the start of the module to set up the initial tempo and other stuff.
+    bool m_DataGenerated; // true = already generated data needed for main conversion loop; false = need to generate data
 
     //////////// MOD file info
-    std::string m_ModuleName;
     int8_t m_TotalMODSamples;
-    unsigned m_NumberOfChannels;
-    unsigned char m_NumberOfChannelsPowOfTwo; // For efficiency. 2^m_NumberOfChannelsPowOfTwo = m_NumberOfChannels.
-    unsigned m_NumberOfRowsInPatternMatrix;
-    std::vector<std::vector<mod::ChannelRow>> m_Patterns; // Per pattern: Vector of channel rows that together contain data for entire pattern
     std::map<mod::mod_sample_id_t, mod::Sample> m_Samples;
 };
 

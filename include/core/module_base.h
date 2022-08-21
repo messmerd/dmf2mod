@@ -35,7 +35,7 @@ public:
     /*
      * Create a new module of the desired module type
      */
-    template <class T, class = std::enable_if_t<std::is_base_of<ModuleInterface<T, typename T::OptionsType>, T>{}>>
+    template <class T, class = std::enable_if_t<std::is_base_of_v<ModuleInterface<T, typename T::OptionsType>, T>>>
     static ModulePtr Create()
     {
         return ModulePtr(new T);
@@ -151,18 +151,21 @@ public:
     /*
      * Cast a Module pointer to a pointer of a derived type
      */
-    template <class T, class = std::enable_if_t<std::is_base_of<ModuleInterface<T, typename T::OptionsType>, T>{}>>
+    template <class T, class = std::enable_if_t<std::is_base_of_v<ModuleInterface<T, typename T::OptionsType>, T>>>
     const T* Cast() const
     {
         return static_cast<const T*>(this);
     }
 
     /*
-     * Get the name of the module
-     * Module classes must implement this
+     * Get the title of the module
      */
-    virtual std::string GetName() const = 0;
+    virtual std::string GetTitle() const = 0;
 
+    /*
+     * Get the author of the module
+     */
+    virtual std::string GetAuthor() const = 0;
 
     ////////////////////////////////////////////////////////
     // Methods for getting static info about module type  //

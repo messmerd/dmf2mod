@@ -36,7 +36,7 @@ public:
      * Create a new ConversionOptions object for the desired module type
      */
     template <class moduleClass, 
-        class = std::enable_if_t<std::is_base_of<ModuleInterface<moduleClass, class moduleClass::OptionsType>, moduleClass>{}>>
+        class = std::enable_if_t<std::is_base_of_v<ModuleInterface<moduleClass, class moduleClass::OptionsType>, moduleClass>>>
     static ConversionOptionsPtr Create()
     {
         return ModuleInterface<moduleClass, class moduleClass::OptionsType>::m_Info.m_CreateOptionsFunc();
@@ -55,7 +55,7 @@ public:
     /*
      * Cast an options pointer to a pointer of a derived type
      */
-    template <class Derived, class = std::enable_if_t<std::is_base_of<ConversionOptionsInterface<Derived>, Derived>{}>>
+    template <class Derived, class = std::enable_if_t<std::is_base_of_v<ConversionOptionsInterface<Derived>, Derived>>>
     const Derived* Cast() const
     {
         return static_cast<const Derived*>(this);
@@ -89,7 +89,7 @@ public:
      */
     virtual void PrintHelp() const = 0;
 
-    template <class optionsClass, class = std::enable_if_t<std::is_base_of<ConversionOptionsInterface<optionsClass>, optionsClass>{}>>
+    template <class optionsClass, class = std::enable_if_t<std::is_base_of_v<ConversionOptionsInterface<optionsClass>, optionsClass>>>
     static void PrintHelp()
     {
         PrintHelp(ConversionOptionsInterface<optionsClass>::GetTypeStatic());

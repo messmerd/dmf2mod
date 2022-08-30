@@ -27,6 +27,12 @@ using namespace d2m;
 using namespace d2m::mod;
 // DO NOT use any module namespace other than d2m::mod
 
+// The Info object cannot be set as constexpr in the class template like Builder, because each class buildable by the factory will be defining it differently.
+template<> Info<MOD> EnableFactory<MOD, ModuleBase>::m_Info = {};
+template<> Info<MODConversionOptions> EnableFactory<MODConversionOptions, ConversionOptionsBase>::m_Info = {};
+
+
+
 // Define the command-line options that MOD accepts:
 using MODOptionEnum = MODConversionOptions::OptionEnum;
 auto MODOptions = CreateOptionDefinitions(

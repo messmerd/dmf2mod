@@ -10,36 +10,36 @@
 #include "registrar.h"
 #include "status.h"
 
+#include "conversion_options_base.h"
+
 #include <string>
 #include <memory>
 
 namespace d2m {
 
-// Base class for all module types (DMF, MOD, XM, etc.)
-class ModuleBase
+// Specialized Info class for Modules
+class ModuleBase;
+template<>
+struct Info<ModuleBase> : public InfoBase
 {
-public:
+    std::string friendlyName{};
+    std::string fileExtension{};
+};
+
+// Base class for all module types (DMF, MOD, XM, etc.)
+class ModuleBase : public EnableSubfactories<ConversionOptionsBase>
+{
+protected:
+
     ModuleBase() = default;
     virtual ~ModuleBase() = default;
 
-    /*
-     * Create a new module using the ModuleType enum to specify the desired module type
-     * If the resulting Module object evaluates to false or Get() == nullptr, the module type is 
-     * probably not registered
-     */
-    static ModulePtr Create(ModuleType moduleType)
+    enum class ExportState
     {
-        return Registrar::GetModuleInfo(moduleType)->m_CreateFunc();
-    }
+        Empty, Invalid, Ready
+    };
 
-    /*
-     * Create a new module of the desired module type
-     */
-    template <class T, class = std::enable_if_t<std::is_base_of_v<ModuleInterface<T, typename T::OptionsType>, T>>>
-    static ModulePtr Create()
-    {
-        return ModulePtr(new T);
-    }
+public:
 
     /*
      * Create and import a new module given a filename. Module type is inferred from the file extension.
@@ -47,8 +47,8 @@ public:
      */
     static ModulePtr CreateAndImport(const std::string& filename)
     {
-        const ModuleType type = Registrar::GetTypeFromFilename(filename);
-        ModulePtr m = Module::Create(type);
+        const ModuleType type = ModuleType::NONE; // TODO: Registrar::GetTypeFromFilename(filename);
+        ModulePtr m = Factory<ModuleBase>::Create(type);
         if (!m)
             return nullptr;
 
@@ -117,7 +117,7 @@ public:
             return nullptr;
 
         // Create new module object
-        ModulePtr output = Module::Create(type);
+        ModulePtr output = Factory<ModuleBase>::Create(type);
         if (!output)
             return nullptr;
 
@@ -149,15 +149,6 @@ public:
     bool HandleResults() const { return m_Status.HandleResults(); }
 
     /*
-     * Cast a Module pointer to a pointer of a derived type
-     */
-    template <class T, class = std::enable_if_t<std::is_base_of_v<ModuleInterface<T, typename T::OptionsType>, T>>>
-    const T* Cast() const
-    {
-        return static_cast<const T*>(this);
-    }
-
-    /*
      * Get the title of the module
      */
     virtual std::string GetTitle() const = 0;
@@ -170,42 +161,6 @@ public:
     ////////////////////////////////////////////////////////
     // Methods for getting static info about module type  //
     ////////////////////////////////////////////////////////
-
-    /*
-     * Get a ModuleType enum value representing the type of the module
-     */
-    virtual ModuleType GetType() const = 0;
-
-    /*
-     * Get info about this type of module
-     */
-    const ModuleInfo* GetModuleInfo() const
-    {
-        return Registrar::GetModuleInfo(GetType());
-    }
-
-    /*
-     * Get info about the given type of module
-     */
-    static const ModuleInfo* GetModuleInfo(ModuleType moduleType)
-    {
-        return Registrar::GetModuleInfo(moduleType);
-    }
-
-    // Note: For the following methods, rather than return ConversionOptionsInfo objects,
-    //      return OptionDefinitionCollection from those objects, since it is the only
-    //      new information that Modules do not have access to.
-
-    /*
-     * Get option definitions for this type of module
-     */
-    const std::shared_ptr<const OptionDefinitionCollection>& GetOptionDefinitions() const;
-
-    /*
-     * Get option definitions for the given type of module
-     * Will be nullptr if the module doesn't have any options
-     */
-    static const std::shared_ptr<const OptionDefinitionCollection>& GetOptionDefinitions(ModuleType moduleType);
 
 protected:
     // Import() and Export() and Convert() are wrappers for these methods, which must be implemented by a module class:

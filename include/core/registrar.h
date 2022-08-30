@@ -13,6 +13,7 @@
 
 #pragma once
 
+#include "config_types.h"
 #include "options.h"
 
 #include <string>
@@ -22,131 +23,237 @@
 #include <memory>
 #include <variant>
 #include <type_traits>
+#include <experimental/type_traits>
+#include <exception>
 
 namespace d2m {
 
-// Add all supported modules to this enum
-enum class ModuleType
-{
-    NONE=0,
-    DMF,
-    MOD
-};
-
 // Forward declares
-class ModuleBase;
-class ConversionOptionsBase;
-template <typename T, typename O> class ModuleInterface;
-template <typename T> class ConversionOptionsInterface;
+template<class T> class Factory;
 
-// Using's to make usage easier
-using Module = ModuleBase;
-using ModulePtr = std::shared_ptr<Module>;
-using ConversionOptions = ConversionOptionsBase;
-using ConversionOptionsPtr = std::shared_ptr<ConversionOptions>;
+namespace detail {
 
-class ModuleInfo
+    struct EnableFactoryBase {};
+    struct EnableSubfactoriesBase {};
+    struct EnableReflectionBase {};
+
+    // With C++20 concepts, these won't be needed
+    template<class T> using get_subclasses = typename T::subclasses_t;
+    template<class T> using get_subclasses_or_void = std::experimental::detected_or_t<void, detail::get_subclasses, T>;
+    template<class T> constexpr bool subfactories_enabled_v = std::is_base_of_v<EnableSubfactoriesBase, T>;
+    template<class T> constexpr bool reflection_enabled_v = std::is_base_of_v<EnableReflectionBase, T>;
+} // namespace detail
+
+
+template <class...Sub>
+struct EnableSubfactories : public EnableSubfactoriesBase
 {
-public:
-    friend class ModuleBase;
-    friend class ConversionOptionsBase;
-
-    ModuleInfo() = default;
-
-    template<class T, class = std::enable_if_t<std::is_base_of_v<ModuleInterface<T, typename T::OptionsType>, T>>>
-    static ModuleInfo Create(ModuleType moduleType, std::string friendlyName, std::string fileExtension)
-    {
-        return ModuleInfo(
-            [](){ return std::make_shared<T>(); },
-            [](){ return std::make_shared<typename T::OptionsType>(); },
-            moduleType,
-            friendlyName,
-            fileExtension
-        );
-    }
-
-    ModuleType GetType() const { return m_TypeEnum; }
-    std::string GetFriendlyName() const { return m_FriendlyName; }
-    std::string GetFileExtension() const { return m_FileExtension; }
-
-private:
-    ModuleInfo(std::function<ModulePtr()> createFunc, std::function<ConversionOptionsPtr()> createOptionsFunc, ModuleType moduleType, std::string friendlyName, std::string fileExtension)
-        : m_CreateFunc(createFunc), m_CreateOptionsFunc(createOptionsFunc), m_TypeEnum(moduleType), m_FriendlyName(friendlyName), m_FileExtension(fileExtension) {}
-
-    std::function<ModulePtr()> m_CreateFunc = nullptr;
-    std::function<ConversionOptionsPtr()> m_CreateOptionsFunc = nullptr;
-    ModuleType m_TypeEnum = ModuleType::NONE;
-    std::string m_FriendlyName{};
-    std::string m_FileExtension{};
+    using subclasses_t = std::tuple<Sub...>;
 };
 
 
-class ConversionOptionsInfo
+struct BuilderBase {};
+
+template <class BaseType>
+struct IBuilder : public BuilderBase
 {
+    virtual std::shared_ptr<BaseType> Build() const = 0;
+};
+
+template <class DerivedType, class BaseType>
+struct Builder : public IBuilder<BaseType>
+{
+    std::shared_ptr<BaseType> Build() const override { return std::make_shared<DerivedType>(); };
+};
+
+struct InfoBase
+{
+    ModuleType moduleType = ModuleType::NONE;
+};
+
+// Static data for a factory-enabled class; Can specialize this
+template <class T>
+struct Info : public InfoBase {};
+
+
+
+
+template <class BaseClass> // BaseClass would be ModuleBase, ConversionOptionsBase, etc.
+class Factory
+{
+private:
+
+    Factory() = delete;
+    virtual ~Factory() { Clear(); }
+
+    Factory(const Factory&) = delete;
+    Factory(Factory&&) = delete;
+    Factory& operator=(const Factory&) = delete;
+    Factory& operator=(Factory&&) = delete;
+
+    // If BaseClass defines subclasses, subclasses_t = the subclasses, else subclasses_t = void.
+    using subclasses_t = detail::get_subclasses_or_void<BaseClass>;
+    static void InitializeImpl(); // Declaration. Registrars will have to define their own.
+
 public:
-    friend class ModuleBase;
-    friend class ConversionOptionsBase;
 
-    ConversionOptionsInfo() = default;
-
-    template<class T, class = std::enable_if_t<std::is_base_of_v<ConversionOptionsInterface<T>, T>>>
-    static ConversionOptionsInfo Create(ModuleType moduleType, std::shared_ptr<OptionDefinitionCollection> definitions)
+    static void Initialize()
     {
-        return ConversionOptionsInfo([](){ return std::make_shared<T>(); }, moduleType, definitions);
+        std::cout << "In Factory<" << typeid(BaseClass).name() << ">::Initialize()\n";
+        if (m_Initialized)
+            return;
+
+        InitializeImpl();
+
+        if constexpr (detail::subfactories_enabled_v<BaseClass>)
+        {
+            std::cout << "--Factory has subclasses\n";
+            auto indexes = std::make_index_sequence<std::tuple_size_v<subclasses_t>>{};
+            Initialize(indexes); // Calls Initialize for each class in subclasses_t
+            std::cout << "--Initialized the subclass factories.\n";
+        }
+        else
+        {
+            std::cout << "--Factory<"<< typeid(BaseClass).name() << "> does not have subclasses\n";
+        }
+        m_Initialized = true;
     }
 
-    template<class T, class = std::enable_if_t<std::is_base_of_v<ConversionOptionsInterface<T>, T>>>
-    static ConversionOptionsInfo Create(ModuleType moduleType)
+    static std::shared_ptr<BaseClass> Create(ModuleType moduleType)
     {
-        return ConversionOptionsInfo([](){ return std::make_shared<T>(); }, moduleType, std::make_shared<OptionDefinitionCollection>());
+        if (!m_Initialized)
+            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(BaseClass).name()));
+        if (m_Builders.find(moduleType) != m_Builders.end())
+            return static_cast<IBuilder<BaseClass> const*>(m_Builders.at(moduleType))->Build();
+        throw std::runtime_error("Factory is not initialized for ModuleType '" + std::to_string(static_cast<int>(moduleType)) + ".");
+        return nullptr;
     }
 
-    ModuleType GetType() const { return m_TypeEnum; }
-    const std::shared_ptr<const OptionDefinitionCollection>& GetDefinitions() const { return m_Definitions; }
+    static InfoBase const* GetInfo(ModuleType moduleType)
+    {
+        if (!m_Initialized)
+            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(BaseClass).name()));
+        if (m_Info.find(moduleType) != m_Info.end())
+            return m_Info.at(moduleType);
+        throw std::runtime_error("Factory is not initialized for ModuleType '" + std::to_string(static_cast<int>(moduleType)) + ".");
+        return nullptr;
+    }
+
+    template <class T, class = std::enable_if_t<std::is_base_of_v<BaseClass, T>>>
+    static std::shared_ptr<T> Create()
+    {
+        return std::make_shared<T>();
+    }
+
+    //template <class T>
+    //static Info<T> const* GetInfo();
+
+    template<size_t Index>
+    static auto CreateSubclass(ModuleType moduleType)
+    {
+        if (!m_Initialized)
+            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(BaseClass).name()));
+        static_assert(detail::subfactories_enabled_v<BaseClass>, "Base class must inherit from EnableSubfactories");
+        static_assert(Index < std::tuple_size_v<subclasses_t>, "Out of range of subclasses_t tuple");
+        return Factory<std::tuple_element_t<Index, subclasses_t>>::Create(moduleType);
+    }
+
+    static const std::map<ModuleType, InfoBase const*>& Info() { return m_Info; }
+
+    template<class Type>
+    static ModuleType GetEnumFromType()
+    {
+        const auto& type = typeid(Type);
+        if (m_TypeToEnum.find(type) != m_TypeToEnum.end())
+            return m_TypeToEnum.at(type);
+        throw std::runtime_error("Enum does not exist for type, or Factory has not been initialized");
+    }
+
+protected:
+
+    template <ModuleType eT, class T>
+    static void Register()
+    {
+        // TODO: Enable if T inherits from EnableFactory?
+
+        m_Builders[eT] = Builder<T>{};
+        m_Info[eT] = d2m::Info<T>{};
+        m_Info[eT]->moduleType = eT;
+        m_TypeToEnum[typeid(T)] = eT;
+    }
+
+    template <ModuleType eT, class T>
+    static void Register(d2m::Info<T>&& info)
+    {
+        // TODO: Enable if T inherits from EnableFactory?
+
+        m_Builders[eT] = Builder<T>{};
+        m_Info[eT] = std::move(info);
+        m_Info[eT]->moduleType = eT;
+        m_TypeToEnum[typeid(T)] = eT;
+    }
+
+    static void Clear()
+    {
+        m_Builders.clear();
+        m_Info.clear();
+        m_Initialized = false;
+    }
 
 private:
-    ConversionOptionsInfo(std::function<ConversionOptionsPtr()> createFunc, ModuleType moduleType, const std::shared_ptr<OptionDefinitionCollection>& definitions)
-        : m_CreateFunc(createFunc), m_TypeEnum(moduleType), m_Definitions(definitions) {}
 
-    std::function<ConversionOptionsPtr()> m_CreateFunc = nullptr;
-    ModuleType m_TypeEnum = ModuleType::NONE;
-    std::shared_ptr<const OptionDefinitionCollection> m_Definitions{};
+    template<std::size_t...Is>
+    static auto Initialize(std::index_sequence<Is...>)
+    {
+        ( ( Factory<std::tuple_element_t<Is, subclasses_t>>::Initialize()), ... );
+    }
+
+private:
+
+    static std::map<ModuleType, BuilderBase const*> m_Builders;
+    static std::map<ModuleType, InfoBase*> m_Info;
+    static std::map<std::type_info, ModuleType> m_TypeToEnum;
+    static bool m_Initialized;
 };
 
 
-// Handles module registration and creation
-class Registrar
+// If a base inherits this using CRTP, derived classes will have knowledge about themselves after Factory initialization
+struct EnableReflection : public detail::EnableReflectionBase
 {
-public:
-    // This must be called in main() to register to supported module types with dmf2mod
-    static void RegisterModules();
-
-    // Helper methods that utilize module registration information
-    static std::vector<ModuleType> GetAvailableModules();
-    
-    static ModuleType GetTypeFromFilename(const std::string& filename);
-    static ModuleType GetTypeFromFileExtension(const std::string& extension);
-    static std::string GetExtensionFromType(ModuleType moduleType);
-
-    static const ModuleInfo* GetModuleInfo(ModuleType moduleType);
-    static const ConversionOptionsInfo* GetConversionOptionsInfo(ModuleType moduleType);
-    static std::shared_ptr<const OptionDefinitionCollection> GetOptionDefinitions(ModuleType moduleType);
-
-private:
-    /*
-     * Registers a module in the registration maps
-     * TODO: Need to also check whether the ConversionOptionsStatic<T> specialization exists?
-     */
-    template <class T, class = std::enable_if_t<std::is_base_of_v<ModuleInterface<T, typename T::OptionsType>, T>>>
-    static void Register();
-
-private:
-
-    static std::map<ModuleType, const ModuleInfo*> m_ModuleRegistrationMap;
-    static std::map<ModuleType, const ConversionOptionsInfo*> m_ConversionOptionsRegistrationMap;
-
-    // File extension to ModuleType map (could use m_ModuleRegistrationMap but this should be more efficient)
-    static std::map<std::string, ModuleType> m_FileExtensionMap;
+    virtual ModuleType GetType() const = 0;
+    virtual InfoBase const* GetInfo() const = 0;
 };
+
+
+/*
+ * If a base class inherits from EnableReflection, EnableReflection will declare virtual methods which must be implemented
+ * in a derived class. One of the derived classes will be EnableFactory. EnableFactory must know whether to implement the
+ * virtual methods or not, and this depends on whether the base class inherits from EnableReflection. In order to conditionally
+ * implement these methods, EnableFactory uses std::conditional_t to inherit from either Base or ReflectionImpl<Derived, Base>.
+ * ReflectionImpl<Derived, Base> implements the virtual methods.
+ */
+template<class Derived, class Base>
+struct ReflectionImpl : public Base
+{
+    ModuleType GetType() const override
+    {
+        static ModuleType moduleType = Factory<Base>::GetEnumForType<Derived>();
+        return moduleType;
+    }
+    InfoBase const* GetInfo() const override
+    {
+        return Factory<Base>::GetInfo(GetType());
+    }
+};
+
+
+// Inherit this class using CRTP to enable factory for any class
+template <class Derived, class Base>
+class EnableFactory : public EnableFactoryBase, public std::conditional_t<detail::reflection_enabled_v<Base>, detail::ReflectionImpl<Derived, Base>, Base> // See note above
+{
+    static_assert(std::is_base_of_v<InfoBase, Info<Derived>>, "Info<Derived> must inherit from InfoBase");
+    static_assert(std::is_base_of_v<IBuilder<Base>, Builder<Derived, Base>>, "Builder<Derived, Base> must inherit from IBuilder<Base>");
+};
+
 
 } // namespace d2m

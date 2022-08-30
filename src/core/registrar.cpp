@@ -31,6 +31,17 @@
 
 using namespace d2m;
 
+
+// Initialize for the primary template
+template<class T> std::map<ModuleType, BuilderBase const*> Factory<T>::m_Builders{};
+template<class T> std::map<ModuleType, InfoBase*> Factory<T>::m_Info{};
+template<class T> std::map<std::type_info, ModuleType> Factory<T>::m_TypeToEnum{};
+template<class T> bool Factory<T>::m_Initialized = false;
+
+
+
+
+/*
 // Initialize module registration maps
 std::map<ModuleType, const ModuleInfo*> Registrar::m_ModuleRegistrationMap = {};
 std::map<ModuleType, const ConversionOptionsInfo*> Registrar::m_ConversionOptionsRegistrationMap = {};
@@ -51,11 +62,11 @@ void Registrar::RegisterModules()
 template <class T, class>
 void Registrar::Register()
 {
-    using Option = typename T::OptionsType;
+    using OptionsType = typename T::options_t;
     const ModuleType moduleType = T::GetInfo().GetType();
 
-    const ModuleInfo& moduleInfo = ModuleInterface<T, Option>::GetInfo();
-    const ConversionOptionsInfo& conversionOptionsInfo = ConversionOptionsInterface<Option>::GetInfo();
+    const ModuleInfo& moduleInfo = ModuleInterface<T, OptionsType>::GetInfo();
+    const ConversionOptionsInfo& conversionOptionsInfo = ConversionOptionsInterface<OptionsType>::GetInfo();
 
     m_ModuleRegistrationMap[moduleType] = &moduleInfo;
     m_ConversionOptionsRegistrationMap[moduleType] = &conversionOptionsInfo;
@@ -78,7 +89,7 @@ ModuleType Registrar::GetTypeFromFilename(const std::string& filename)
     std::string ext = ModuleUtils::GetFileExtension(filename);
     if (ext.empty())
         return ModuleType::NONE;
-    
+
     const auto iter = m_FileExtensionMap.find(ext);
     if (iter != m_FileExtensionMap.end())
         return iter->second;
@@ -115,12 +126,13 @@ std::shared_ptr<const OptionDefinitionCollection> Registrar::GetOptionDefinition
     return nullptr;
 }
 
-const ModuleInfo* Registrar::GetModuleInfo(ModuleType moduleType)
+ModuleInfo const* Registrar::GetModuleInfo(ModuleType moduleType)
 {
     return m_ModuleRegistrationMap.at(moduleType);
 }
 
-const ConversionOptionsInfo* Registrar::GetConversionOptionsInfo(ModuleType moduleType)
+ConversionOptionsInfo const* Registrar::GetConversionOptionsInfo(ModuleType moduleType)
 {
     return m_ConversionOptionsRegistrationMap.at(moduleType);
 }
+*/

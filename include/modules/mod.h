@@ -307,7 +307,7 @@ public:
     inline bool AllowPortamento() const { return GetOption(OptionEnum::Portamento).GetValue<bool>(); }
     inline bool AllowPort2Note() const { return GetOption(OptionEnum::Port2Note).GetValue<bool>(); }
     inline bool AllowVibrato() const { return GetOption(OptionEnum::Vibrato).GetValue<bool>(); }
-    inline TempoType GetTempoType() const { return static_cast<TempoType>(GetOption(OptionEnum::TempoType).GetValueAsIndex()); }
+    inline TempoType GetTempoType() const { return TempoType{GetOption(OptionEnum::TempoType).GetValueAsIndex()}; }
 
     inline bool AllowEffects() const { return AllowArpeggio() || AllowPortamento() || AllowPort2Note() || AllowVibrato(); }
 
@@ -315,9 +315,12 @@ private:
 
 };
 
-class MOD : public ModuleInterface<MOD, MODConversionOptions>
+class MOD : public ModuleInterface<MOD>
 {
 public:
+
+    using options_t = MODConversionOptions;
+
     MOD();
     ~MOD() = default;
     void CleanUp() {};

@@ -234,9 +234,12 @@ public:
     ~DMFConversionOptions() = default;
 };
 
-class DMF : public ModuleInterface<DMF, DMFConversionOptions>
+class DMF : public ModuleInterface<DMF>
 {
 public:
+
+    using options_t = DMFConversionOptions;
+
     enum ImportError
     {
         Success=0,

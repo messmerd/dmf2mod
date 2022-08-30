@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include "config_types.h"
+
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -22,6 +24,11 @@ public:
     static std::string ReplaceFileExtension(const std::string& filename, const std::string& newFileExtension);
     static std::string GetFileExtension(const std::string& filename);
     static bool FileExists(const std::string& filename);
+
+    // File utils which require Factory initialization
+    static ModuleType GetTypeFromFilename(const std::string& filename);
+    static ModuleType GetTypeFromFileExtension(const std::string& extension);
+    static std::string GetExtensionFromType(ModuleType moduleType);
 
     // Command-line arguments and options utils
     static std::vector<std::string> GetArgsAsVector(int argc, char *argv[]);

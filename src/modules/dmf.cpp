@@ -33,8 +33,14 @@ using namespace d2m;
 using namespace d2m::dmf;
 // DO NOT use any module namespace other than d2m::dmf
 
+
+// The Info object cannot be set as constexpr in the class template like Builder, because each class buildable by the factory will be defining it differently.
+template<> Info<DMF> EnableFactory<DMF, ModuleBase>::m_Info = {};
+template<> Info<DMFConversionOptions> EnableFactory<DMFConversionOptions, ConversionOptionsBase>::m_Info = {};
+
+
 // Define module info
-MODULE_DEFINE(DMF, DMFConversionOptions, ModuleType::DMF, "Deflemask", "dmf", {})
+///MODULE_DEFINE(DMF, DMFConversionOptions, ModuleType::DMF, "Deflemask", "dmf", {})
 
 #define DMF_FILE_VERSION_MIN 17 // DMF files as old as version 17 (0x11) are supported
 #define DMF_FILE_VERSION_MAX 26 // DMF files as new as version 26 (0x1a) are supported
@@ -278,8 +284,8 @@ System DMF::GetSystem(uint8_t systemByte) const
 
 void DMF::LoadVisualInfo(Reader& fin)
 {
-    GetData().GlobalData().title = fin.ReadPStr();
-    GetData().GlobalData().author = fin.ReadPStr();
+    GetGlobalData().title = fin.ReadPStr();
+    GetGlobalData().author = fin.ReadPStr();
     m_VisualInfo.highlightAPatterns = fin.ReadInt();
     m_VisualInfo.highlightBPatterns = fin.ReadInt();
 }

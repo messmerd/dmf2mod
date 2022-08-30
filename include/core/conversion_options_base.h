@@ -33,53 +33,6 @@ public:
     virtual ~ConversionOptionsBase() = default;
 
     /*
-     * Create a new ConversionOptions object for the desired module type
-     */
-    template <class moduleClass, 
-        class = std::enable_if_t<std::is_base_of_v<ModuleInterface<moduleClass, class moduleClass::OptionsType>, moduleClass>>>
-    static ConversionOptionsPtr Create()
-    {
-        return ModuleInterface<moduleClass, class moduleClass::OptionsType>::m_Info.m_CreateOptionsFunc();
-    }
-
-    /*
-     * Create a new module using the ModuleType enum to specify the desired module type
-     * If the resulting ConversionOptions object evaluates to false or Get() == nullptr, the module type 
-     * is probably not registered
-     */
-    static ConversionOptionsPtr Create(ModuleType moduleType)
-    {
-        return Registrar::GetConversionOptionsInfo(moduleType)->m_CreateFunc();
-    }
-
-    /*
-     * Cast an options pointer to a pointer of a derived type
-     */
-    template <class Derived, class = std::enable_if_t<std::is_base_of_v<ConversionOptionsInterface<Derived>, Derived>>>
-    const Derived* Cast() const
-    {
-        return static_cast<const Derived*>(this);
-    }
-
-    /*
-     * Get a ModuleType enum value representing the type of the conversion option's module
-     */
-    virtual ModuleType GetType() const = 0;
-
-    /*
-     * Returns a collection of option definitions which define the options available to modules of this type
-     */
-    virtual const std::shared_ptr<const OptionDefinitionCollection>& GetDefinitions() const = 0;
-
-    /*
-     * Returns a collection of option definitions which define the options available to modules of type moduleType
-     */
-    static const std::shared_ptr<const OptionDefinitionCollection>& GetDefinitions(ModuleType moduleType)
-    {
-        return Registrar::GetConversionOptionsInfo(moduleType)->GetDefinitions();
-    }
-
-    /*
      * Get the filename of the output file. Returns empty string if error occurred.
      */
     std::string GetOutputFilename() const { return m_OutputFile; }
@@ -89,7 +42,7 @@ public:
      */
     virtual void PrintHelp() const = 0;
 
-    template <class optionsClass, class = std::enable_if_t<std::is_base_of_v<ConversionOptionsInterface<optionsClass>, optionsClass>>>
+    template <class optionsClass /*, class = std::enable_if_t<detail::is_conversion_options_impl_v<optionsClass>>*/>
     static void PrintHelp()
     {
         PrintHelp(ConversionOptionsInterface<optionsClass>::GetTypeStatic());
@@ -100,16 +53,8 @@ public:
      */
     static void PrintHelp(ModuleType moduleType);
 
-    /*
-     * Get info about this type of conversion options
-     */
-    const ConversionOptionsInfo* GetConversionOptionsInfo() const
-    {
-        return Registrar::GetConversionOptionsInfo(GetType());
-    }
-
 protected:
-    friend class Registrar;
+    //friend class Registrar;
 
     std::string m_OutputFile;
 };

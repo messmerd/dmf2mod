@@ -7,6 +7,8 @@
 
 #include "utils.h"
 
+#include "config.h"
+
 #include <fstream>
 //#include <filesystem>
 
@@ -66,6 +68,33 @@ bool ModuleUtils::FileExists(const std::string& filename)
 {
     std::ifstream file(filename);
     return file.is_open();
+}
+
+// File utils which require Factory initialization
+
+ModuleType ModuleUtils::GetTypeFromFilename(const std::string& filename)
+{
+    std::string ext = ModuleUtils::GetFileExtension(filename);
+    return GetTypeFromFileExtension(ext);
+}
+
+ModuleType ModuleUtils::GetTypeFromFileExtension(const std::string& extension)
+{
+    if (extension.empty())
+        return ModuleType::NONE;
+
+    for (const auto& [type, info] : Factory<Module>::Info())
+    {
+        if (static_cast<Info<Module> const*>(info)->fileExtension == extension)
+            return type;
+    }
+
+    return ModuleType::NONE;
+}
+
+std::string ModuleUtils::GetExtensionFromType(ModuleType moduleType)
+{
+    return static_cast<Info<Module> const*>(Factory<Module>::GetInfo(moduleType))->fileExtension;
 }
 
 // Command-line arguments and options utils

@@ -10,14 +10,14 @@
         dmf2mod [option]
 */
 
-#include "dmf2mod.h"
+#include "config.h"
 
 #include <string>
 #include <iostream>
 #include <iomanip>
 
 #include "utils.h"
-#include "config.h"
+#include "version.h"
 
 using namespace d2m;
 
@@ -42,7 +42,7 @@ static void PrintHelp(const std::string& executable, ModuleType moduleType);
 
 int main(int argc, char *argv[])
 {
-    Registrar::RegisterModules();
+    TopLevelFactory::Initialize();
 
     auto args = ModuleUtils::GetArgsAsVector(argc, argv);
 
@@ -55,7 +55,7 @@ int main(int argc, char *argv[])
     if (operationType == OperationType::Info)
         return 0;
 
-    ConversionOptionsPtr options = ConversionOptions::Create(io.OutputType);
+    ConversionOptionsPtr options = Factory<ConversionOptions>::Create(io.OutputType);
     if (!options)
     {
         std::cerr << "ERROR: Failed to create ConversionOptionsBase-derived object for the module type '" << ModuleUtils::GetFileExtension(io.OutputFile) 

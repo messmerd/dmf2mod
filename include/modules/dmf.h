@@ -53,7 +53,7 @@ struct PatternMetadata<DMF>
     std::string name;
 };
 
-MODULE_DECLARE(DMF, DMFConversionOptions)
+///MODULE_DECLARE(DMF, DMFConversionOptions)
 
 namespace dmf {
 

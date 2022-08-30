@@ -33,12 +33,6 @@ using namespace d2m;
 using namespace d2m::dmf;
 // DO NOT use any module namespace other than d2m::dmf
 
-
-// The Info object cannot be set as constexpr in the class template like Builder, because each class buildable by the factory will be defining it differently.
-template<> Info<DMF> EnableFactory<DMF, ModuleBase>::m_Info = {};
-template<> Info<DMFConversionOptions> EnableFactory<DMFConversionOptions, ConversionOptionsBase>::m_Info = {};
-
-
 // Define module info
 ///MODULE_DEFINE(DMF, DMFConversionOptions, ModuleType::DMF, "Deflemask", "dmf", {})
 
@@ -153,7 +147,7 @@ void DMF::ImportRaw(const std::string& filename)
     if (verbose)
         std::cout << "Starting to import the DMF file...\n";
 
-    if (Registrar::GetTypeFromFilename(filename) != ModuleType::DMF)
+    if (ModuleUtils::GetTypeFromFilename(filename) != ModuleType::DMF)
     {
         throw ModuleException(ModuleException::Category::Import, DMF::ImportError::UnspecifiedError, "Input file has the wrong file extension.\nPlease use a DMF file.");
     }

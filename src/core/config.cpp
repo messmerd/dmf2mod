@@ -5,17 +5,21 @@
 using namespace d2m;
 
 template<>
-void Factory<ConversionOptionsBase>::InitializeImpl()
+void Factory<ConversionOptions>::InitializeImpl()
 {
     Clear();
-    Factory<ConversionOptionsBase>::Register<ModuleType::DMF, DMFConversionOptions>();
-    Factory<ConversionOptionsBase>::Register<ModuleType::MOD, MODConversionOptions>();
+    Factory<ConversionOptions>::Register<ModuleType::DMF, DMFConversionOptions>();
+    Factory<ConversionOptions>::Register<ModuleType::MOD, MODConversionOptions>();
 }
 
 template<>
-void Factory<ModuleBase>::InitializeImpl()
+void Factory<Module>::InitializeImpl()
 {
     Clear();
-    Register<ModuleType::DMF, DMF>();
-    Register<ModuleType::MOD, MOD>();
+
+    Info<Module> dmf { ModuleType::DMF, "Deflemask", "dmf" };
+    Register<DMF>(dmf);
+
+    Info<Module> mod { ModuleType::MOD, "ProTracker", "mod" };
+    Register<MOD>(mod);
 }

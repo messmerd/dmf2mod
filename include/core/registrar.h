@@ -32,7 +32,6 @@ namespace d2m {
 template<class T> class Factory;
 
 namespace detail {
-
     struct EnableFactoryBase {};
     struct EnableSubfactoriesBase {};
     struct EnableReflectionBase {};
@@ -40,13 +39,14 @@ namespace detail {
     // With C++20 concepts, these won't be needed
     template<class T> using get_subclasses = typename T::subclasses_t;
     template<class T> using get_subclasses_or_void = std::experimental::detected_or_t<void, detail::get_subclasses, T>;
+    template<class T> constexpr bool factory_enabled_v = std::is_base_of_v<EnableFactoryBase, T>;
     template<class T> constexpr bool subfactories_enabled_v = std::is_base_of_v<EnableSubfactoriesBase, T>;
     template<class T> constexpr bool reflection_enabled_v = std::is_base_of_v<EnableReflectionBase, T>;
 } // namespace detail
 
 
 template <class...Sub>
-struct EnableSubfactories : public EnableSubfactoriesBase
+struct EnableSubfactories : public detail::EnableSubfactoriesBase
 {
     using subclasses_t = std::tuple<Sub...>;
 };
@@ -74,8 +74,6 @@ struct InfoBase
 // Static data for a factory-enabled class; Can specialize this
 template <class T>
 struct Info : public InfoBase {};
-
-
 
 
 template <class BaseClass> // BaseClass would be ModuleBase, ConversionOptionsBase, etc.
@@ -158,7 +156,7 @@ public:
         return Factory<std::tuple_element_t<Index, subclasses_t>>::Create(moduleType);
     }
 
-    static const std::map<ModuleType, InfoBase const*>& Info() { return m_Info; }
+    static const std::map<ModuleType, InfoBase const*>& TypeInfo() { return m_Info; }
 
     template<class Type>
     static ModuleType GetEnumFromType()
@@ -171,26 +169,36 @@ public:
 
 protected:
 
-    template <ModuleType eT, class T>
+    template<ModuleType eT, class T>
     static void Register()
     {
-        // TODO: Enable if T inherits from EnableFactory?
+        static_assert(detail::factory_enabled_v<T>, "Cannot register a class which does not inherit from EnableFactory");
+        static_assert(std::is_base_of_v<InfoBase, Info<BaseClass>>, "Info<BaseClass> must derive from InfoBase");
 
         m_Builders[eT] = Builder<T>{};
-        m_Info[eT] = d2m::Info<T>{};
+        m_Info[eT] = Info<BaseClass>{};
         m_Info[eT]->moduleType = eT;
         m_TypeToEnum[typeid(T)] = eT;
     }
 
-    template <ModuleType eT, class T>
-    static void Register(d2m::Info<T>&& info)
+    template<class T>
+    static void Register(Info<BaseClass>&& info)
     {
-        // TODO: Enable if T inherits from EnableFactory?
+        static_assert(detail::factory_enabled_v<T>, "Cannot register a class which does not inherit from EnableFactory");
+        static_assert(std::is_base_of_v<InfoBase, Info<BaseClass>>, "Info<BaseClass> must derive from InfoBase");
+
+        const ModuleType eT = info.moduleType;
 
         m_Builders[eT] = Builder<T>{};
         m_Info[eT] = std::move(info);
         m_Info[eT]->moduleType = eT;
         m_TypeToEnum[typeid(T)] = eT;
+    }
+
+    template<class T>
+    static void Register(const Info<BaseClass>& info)
+    {
+        Register<T>(std::move(info));
     }
 
     static void Clear()
@@ -249,7 +257,7 @@ struct ReflectionImpl : public Base
 
 // Inherit this class using CRTP to enable factory for any class
 template <class Derived, class Base>
-class EnableFactory : public EnableFactoryBase, public std::conditional_t<detail::reflection_enabled_v<Base>, detail::ReflectionImpl<Derived, Base>, Base> // See note above
+class EnableFactory : public detail::EnableFactoryBase, public std::conditional_t<detail::reflection_enabled_v<Base>, ReflectionImpl<Derived, Base>, Base> // See note above
 {
     static_assert(std::is_base_of_v<InfoBase, Info<Derived>>, "Info<Derived> must inherit from InfoBase");
     static_assert(std::is_base_of_v<IBuilder<Base>, Builder<Derived, Base>>, "Builder<Derived, Base> must inherit from IBuilder<Base>");

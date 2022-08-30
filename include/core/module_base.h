@@ -27,7 +27,7 @@ struct Info<ModuleBase> : public InfoBase
 };
 
 // Base class for all module types (DMF, MOD, XM, etc.)
-class ModuleBase : public EnableSubfactories<ConversionOptionsBase>
+class ModuleBase : public EnableSubfactories<ConversionOptionsBase>, public EnableReflection
 {
 protected:
 

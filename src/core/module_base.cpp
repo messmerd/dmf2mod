@@ -10,6 +10,7 @@
 
 using namespace d2m;
 
+/*
 const std::shared_ptr<const OptionDefinitionCollection>& ModuleBase::GetOptionDefinitions() const
 {
     return ConversionOptionsBase::GetDefinitions(GetType());
@@ -19,3 +20,4 @@ const std::shared_ptr<const OptionDefinitionCollection>& ModuleBase::GetOptionDe
 {
     return ConversionOptionsBase::GetDefinitions(moduleType);
 }
+*/

@@ -155,7 +155,7 @@ OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutput
     {
         if (args[1] == "--help")
         {
-            PrintHelp(args[0], Registrar::GetTypeFromFileExtension(args[2]));
+            PrintHelp(args[0], ModuleUtils::GetTypeFromFileExtension(args[2]));
             return OperationType::Info;
         }
 
@@ -182,7 +182,7 @@ OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutput
         // Get input file
         if (ModuleUtils::FileExists(args[2]))
         {
-            if (Registrar::GetTypeFromFilename(args[2]) != ModuleType::NONE)
+            if (ModuleUtils::GetTypeFromFilename(args[2]) != ModuleType::NONE)
             {
                 inputFile = args[2];
             }
@@ -201,7 +201,7 @@ OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutput
         // Get output file
         if (ModuleUtils::GetFileExtension(args[1]).empty())
         {
-            if (Registrar::GetTypeFromFileExtension(args[1]) != ModuleType::NONE)
+            if (ModuleUtils::GetTypeFromFileExtension(args[1]) != ModuleType::NONE)
             {
                 const size_t dotPos = inputFile.rfind('.');
                 if (dotPos == 0 || dotPos + 1 >= inputFile.size())
@@ -222,7 +222,7 @@ OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutput
         else
         {
             outputFile = args[1];
-            if (Registrar::GetTypeFromFilename(args[1]) == ModuleType::NONE)
+            if (ModuleUtils::GetTypeFromFilename(args[1]) == ModuleType::NONE)
             {
                 std::cerr << "ERROR: '" << ModuleUtils::GetFileExtension(args[1]) << "' is not a valid module type.\n";
                 return OperationType::Error;
@@ -236,9 +236,9 @@ OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutput
         }
 
         inputOutputInfo.InputFile = inputFile;
-        inputOutputInfo.InputType = Registrar::GetTypeFromFilename(inputFile);
+        inputOutputInfo.InputType = ModuleUtils::GetTypeFromFilename(inputFile);
         inputOutputInfo.OutputFile = outputFile;
-        inputOutputInfo.OutputType = Registrar::GetTypeFromFilename(outputFile);
+        inputOutputInfo.OutputType = ModuleUtils::GetTypeFromFilename(outputFile);
 
         if (inputOutputInfo.InputType == inputOutputInfo.OutputType)
         {

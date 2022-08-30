@@ -83,7 +83,7 @@ ModuleType ModuleUtils::GetTypeFromFileExtension(const std::string& extension)
     if (extension.empty())
         return ModuleType::NONE;
 
-    for (const auto& [type, info] : Factory<Module>::Info())
+    for (const auto& [type, info] : Factory<Module>::TypeInfo())
     {
         if (static_cast<Info<Module> const*>(info)->fileExtension == extension)
             return type;

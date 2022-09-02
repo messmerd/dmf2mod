@@ -10,4 +10,4 @@
 using namespace d2m;
 
 // Non-specialized class template data member values:
-template <class T> const ConversionOptionsInfo ConversionOptionsInterface<T>::m_Info = {};
+///template <class T> const ConversionOptionsInfo ConversionOptionsInterface<T>::m_Info = {};

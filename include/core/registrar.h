@@ -25,6 +25,10 @@
 #include <type_traits>
 #include <experimental/type_traits>
 #include <exception>
+#include <typeindex>
+#include <utility>
+
+#include <iostream> // temporary
 
 namespace d2m {
 
@@ -52,31 +56,30 @@ struct EnableSubfactories : public detail::EnableSubfactoriesBase
 };
 
 
-struct BuilderBase {};
-
 template <class BaseType>
-struct IBuilder : public BuilderBase
+struct BuilderBase
 {
     virtual std::shared_ptr<BaseType> Build() const = 0;
 };
 
-template <class DerivedType, class BaseType>
-struct Builder : public IBuilder<BaseType>
+// Builds an instance of a factory-enabled class; Can specialize this, but it must inherit from BuilderBase.
+template <class Derived, class Base>
+struct Builder : public BuilderBase<Base>
 {
-    std::shared_ptr<BaseType> Build() const override { return std::make_shared<DerivedType>(); };
+    std::shared_ptr<Base> Build() const override { return std::make_shared<Derived>(); };
 };
 
 struct InfoBase
 {
-    ModuleType moduleType = ModuleType::NONE;
+    TypeEnum type = TypeInvalid;
 };
 
-// Static data for a factory-enabled class; Can specialize this
+// Static data for a factory-enabled class; Can specialize this, but it must inherit from InfoBase.
 template <class T>
 struct Info : public InfoBase {};
 
 
-template <class BaseClass> // BaseClass would be ModuleBase, ConversionOptionsBase, etc.
+template <class Base>
 class Factory
 {
 private:
@@ -89,116 +92,135 @@ private:
     Factory& operator=(const Factory&) = delete;
     Factory& operator=(Factory&&) = delete;
 
-    // If BaseClass defines subclasses, subclasses_t = the subclasses, else subclasses_t = void.
-    using subclasses_t = detail::get_subclasses_or_void<BaseClass>;
-    static void InitializeImpl(); // Declaration. Registrars will have to define their own.
+    // If Base defines subclasses, subclasses_t = the subclasses, else subclasses_t = void.
+    using subclasses_t = detail::get_subclasses_or_void<Base>;
+    static void InitializeImpl(); // Declaration. Factories will have to implement their own.
 
 public:
 
     static void Initialize()
     {
-        std::cout << "In Factory<" << typeid(BaseClass).name() << ">::Initialize()\n";
         if (m_Initialized)
             return;
 
         InitializeImpl();
 
-        if constexpr (detail::subfactories_enabled_v<BaseClass>)
+        if constexpr (detail::subfactories_enabled_v<Base>)
         {
-            std::cout << "--Factory has subclasses\n";
-            auto indexes = std::make_index_sequence<std::tuple_size_v<subclasses_t>>{};
-            Initialize(indexes); // Calls Initialize for each class in subclasses_t
-            std::cout << "--Initialized the subclass factories.\n";
+            // Calls Initialize for each class in subclasses_t
+            InitializeSubclasses<std::make_index_sequence<std::tuple_size_v<subclasses_t>>{}>();
         }
-        else
-        {
-            std::cout << "--Factory<"<< typeid(BaseClass).name() << "> does not have subclasses\n";
-        }
+
         m_Initialized = true;
     }
 
-    static std::shared_ptr<BaseClass> Create(ModuleType moduleType)
+    static std::shared_ptr<Base> Create(TypeEnum classType)
     {
         if (!m_Initialized)
-            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(BaseClass).name()));
-        if (m_Builders.find(moduleType) != m_Builders.end())
-            return static_cast<IBuilder<BaseClass> const*>(m_Builders.at(moduleType))->Build();
-        throw std::runtime_error("Factory is not initialized for ModuleType '" + std::to_string(static_cast<int>(moduleType)) + ".");
+            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(Base).name()));
+        if (m_Builders.find(classType) != m_Builders.end())
+            return m_Builders.at(classType)->Build();
+        throw std::runtime_error("Factory is not initialized for TypeEnum '" + std::to_string(static_cast<int>(classType)) + ".");
         return nullptr;
     }
 
-    static InfoBase const* GetInfo(ModuleType moduleType)
+    static Info<Base> const* GetInfo(TypeEnum classType)
     {
         if (!m_Initialized)
-            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(BaseClass).name()));
-        if (m_Info.find(moduleType) != m_Info.end())
-            return m_Info.at(moduleType);
-        throw std::runtime_error("Factory is not initialized for ModuleType '" + std::to_string(static_cast<int>(moduleType)) + ".");
+            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(Base).name()));
+        if (m_Info.find(classType) != m_Info.end())
+            return m_Info.at(classType).get();
+        throw std::runtime_error("Factory is not initialized for TypeEnum '" + std::to_string(static_cast<int>(classType)) + ".");
         return nullptr;
     }
 
-    template <class T, class = std::enable_if_t<std::is_base_of_v<BaseClass, T>>>
-    static std::shared_ptr<T> Create()
-    {
-        return std::make_shared<T>();
-    }
-
-    //template <class T>
-    //static Info<T> const* GetInfo();
-
-    template<size_t Index>
-    static auto CreateSubclass(ModuleType moduleType)
+    template <class Derived, class = std::enable_if_t<detail::factory_enabled_v<Derived>>>
+    static std::shared_ptr<Derived> Create()
     {
         if (!m_Initialized)
-            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(BaseClass).name()));
-        static_assert(detail::subfactories_enabled_v<BaseClass>, "Base class must inherit from EnableSubfactories");
-        static_assert(Index < std::tuple_size_v<subclasses_t>, "Out of range of subclasses_t tuple");
-        return Factory<std::tuple_element_t<Index, subclasses_t>>::Create(moduleType);
+            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(Base).name()));
+        static TypeEnum classType = GetEnumFromType<Derived>();
+        return std::static_pointer_cast<Derived>(Create(classType));
     }
 
-    static const std::map<ModuleType, InfoBase const*>& TypeInfo() { return m_Info; }
+    template <class Derived, class = std::enable_if_t<detail::factory_enabled_v<Derived>>>
+    static Info<Base> const* GetInfo()
+    {
+        if (!m_Initialized)
+            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(Base).name()));
+        static TypeEnum classType = GetEnumFromType<Derived>();
+        return GetInfo(classType);
+    }
 
+    template<size_t SubclassIndex>
+    static auto CreateSubclass(TypeEnum classType)
+    {
+        if (!m_Initialized)
+            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(Base).name()));
+        static_assert(detail::subfactories_enabled_v<Base>, "Base class must inherit from EnableSubfactories");
+        static_assert(SubclassIndex < std::tuple_size_v<subclasses_t>, "Out of range of subclasses_t tuple");
+        return Factory<std::tuple_element_t<SubclassIndex, subclasses_t>>::Create(classType);
+    }
+
+    static const std::map<TypeEnum, std::unique_ptr<const Info<Base>>>& TypeInfo() { return m_Info; }
+
+    static std::vector<TypeEnum> GetInitializedTypes()
+    {
+        std::vector<ModuleType> vec;
+        for (const auto& mapPair : m_Builders)
+        {
+            vec.push_back(mapPair.first);
+        }
+        return vec;
+    }
+
+    // TODO: Use factory_enabled_v
     template<class Type>
-    static ModuleType GetEnumFromType()
+    static TypeEnum GetEnumFromType()
     {
-        const auto& type = typeid(Type);
+        if (!m_Initialized)
+            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(Base).name()));
+        const auto& type = std::type_index(typeid(Type));
         if (m_TypeToEnum.find(type) != m_TypeToEnum.end())
             return m_TypeToEnum.at(type);
-        throw std::runtime_error("Enum does not exist for type, or Factory has not been initialized");
+        throw std::runtime_error("Factory is not initialized for Type '" + std::string(typeid(Type).name()) + ".");
     }
 
-protected:
+private:
 
-    template<ModuleType eT, class T>
+    template<TypeEnum eT, class T>
     static void Register()
     {
         static_assert(detail::factory_enabled_v<T>, "Cannot register a class which does not inherit from EnableFactory");
-        static_assert(std::is_base_of_v<InfoBase, Info<BaseClass>>, "Info<BaseClass> must derive from InfoBase");
+        static_assert(std::is_base_of_v<InfoBase, Info<Base>>, "Info<Base> must derive from InfoBase");
+        static_assert(std::is_base_of_v<BuilderBase<Base>, Builder<T, Base>>, "Builder<Derived, Base> must derive from BuilderBase<Base>");
 
-        m_Builders[eT] = Builder<T>{};
-        m_Info[eT] = Info<BaseClass>{};
-        m_Info[eT]->moduleType = eT;
-        m_TypeToEnum[typeid(T)] = eT;
+        m_Builders[eT] = std::make_unique<const Builder<T, Base>>();
+        auto temp = std::make_unique<Info<Base>>();
+        temp->type = eT;
+        m_Info[eT] = std::move(temp);
+        m_TypeToEnum[std::type_index(typeid(T))] = eT;
     }
 
     template<class T>
-    static void Register(Info<BaseClass>&& info)
+    static void Register(Info<Base>&& info)
     {
         static_assert(detail::factory_enabled_v<T>, "Cannot register a class which does not inherit from EnableFactory");
-        static_assert(std::is_base_of_v<InfoBase, Info<BaseClass>>, "Info<BaseClass> must derive from InfoBase");
+        static_assert(std::is_base_of_v<InfoBase, Info<Base>>, "Info<Base> must derive from InfoBase");
+        static_assert(std::is_base_of_v<BuilderBase<Base>, Builder<T, Base>>, "Builder<Derived, Base> must derive from BuilderBase<Base>");
 
-        const ModuleType eT = info.moduleType;
+        const TypeEnum eT = info.type;
 
-        m_Builders[eT] = Builder<T>{};
-        m_Info[eT] = std::move(info);
-        m_Info[eT]->moduleType = eT;
-        m_TypeToEnum[typeid(T)] = eT;
+        m_Builders[eT] = std::make_unique<const Builder<T, Base>>();
+        m_Info[eT] = std::make_unique<const Info<Base>>(std::move(info));
+        m_TypeToEnum[std::type_index(typeid(T))] = eT;
     }
 
     template<class T>
-    static void Register(const Info<BaseClass>& info)
+    static void Register(const Info<Base>& info)
     {
-        Register<T>(std::move(info));
+        auto temp = info;
+        Register<T>(std::move(temp));
     }
 
     static void Clear()
@@ -208,28 +230,27 @@ protected:
         m_Initialized = false;
     }
 
-private:
-
     template<std::size_t...Is>
-    static auto Initialize(std::index_sequence<Is...>)
+    static auto InitializeSubclasses()
     {
         ( ( Factory<std::tuple_element_t<Is, subclasses_t>>::Initialize()), ... );
     }
 
 private:
 
-    static std::map<ModuleType, BuilderBase const*> m_Builders;
-    static std::map<ModuleType, InfoBase*> m_Info;
-    static std::map<std::type_info, ModuleType> m_TypeToEnum;
+    static std::map<TypeEnum, std::unique_ptr<const BuilderBase<Base>>> m_Builders; // NOTE: m_Builders can map to a non-template class instead if there are any compilation issues
+    static std::map<TypeEnum, std::unique_ptr<const Info<Base>>> m_Info;            // NOTE: m_Info can map to InfoBase const* instead if there are any compilation issues
+    static std::map<std::type_index, TypeEnum> m_TypeToEnum;
     static bool m_Initialized;
 };
 
 
 // If a base inherits this using CRTP, derived classes will have knowledge about themselves after Factory initialization
+template<class Base>
 struct EnableReflection : public detail::EnableReflectionBase
 {
-    virtual ModuleType GetType() const = 0;
-    virtual InfoBase const* GetInfo() const = 0;
+    virtual TypeEnum GetType() const = 0;
+    virtual Info<Base> const* GetInfo() const = 0;
 };
 
 
@@ -243,12 +264,12 @@ struct EnableReflection : public detail::EnableReflectionBase
 template<class Derived, class Base>
 struct ReflectionImpl : public Base
 {
-    ModuleType GetType() const override
+    TypeEnum GetType() const override
     {
-        static ModuleType moduleType = Factory<Base>::GetEnumForType<Derived>();
-        return moduleType;
+        static TypeEnum classType = Factory<Base>::template GetEnumFromType<Derived>();
+        return classType;
     }
-    InfoBase const* GetInfo() const override
+    Info<Base> const* GetInfo() const override
     {
         return Factory<Base>::GetInfo(GetType());
     }
@@ -260,7 +281,7 @@ template <class Derived, class Base>
 class EnableFactory : public detail::EnableFactoryBase, public std::conditional_t<detail::reflection_enabled_v<Base>, ReflectionImpl<Derived, Base>, Base> // See note above
 {
     static_assert(std::is_base_of_v<InfoBase, Info<Derived>>, "Info<Derived> must inherit from InfoBase");
-    static_assert(std::is_base_of_v<IBuilder<Base>, Builder<Derived, Base>>, "Builder<Derived, Base> must inherit from IBuilder<Base>");
+    static_assert(std::is_base_of_v<BuilderBase<Base>, Builder<Derived, Base>>, "Builder<Derived, Base> must inherit from BuilderBase<Base>");
 };
 
 

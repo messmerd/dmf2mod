@@ -21,19 +21,19 @@ template <class Derived>
 class ConversionOptionsInterface : public EnableFactory<Derived, ConversionOptionsBase>
 {
 protected:
-    friend class Registrar;
 
+    ConversionOptionsInterface() = default;
     ConversionOptionsInterface(const ConversionOptionsInterface&) = default;
     ConversionOptionsInterface(ConversionOptionsInterface&&) = default;
 
     void PrintHelp() const override
     {
-        ConversionOptionsBase::PrintHelp(GetType());
+        ConversionOptionsBase::PrintHelp(this->GetType());
     }
 
 private:
 
-    static const ConversionOptionsInfo m_Info;
+    ///static const ConversionOptionsInfo m_Info;
 };
 
 } // namespace d2m

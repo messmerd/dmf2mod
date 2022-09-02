@@ -5,7 +5,7 @@
     WebAssembly backend for dmf2mod.
 */
 
-#include "dmf2mod.h"
+#include "config.h"
 #include "utils.h"
 
 #include <emscripten/emscripten.h>
@@ -43,7 +43,7 @@ static void SetStatusType(bool isError);
 
 int main()
 {
-    Registrar::RegisterModules();
+    Initialize();
 
     // Initialize global options (for web app, user won't provide them)
     GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Force).SetValue(true);
@@ -62,12 +62,10 @@ int main()
  */
 std::vector<int> GetAvailableModulesWrapper()
 {
-    std::vector<int> ret;
-    for (const auto& val : Registrar::GetAvailableModules())
-    {
-        ret.push_back(static_cast<int>(val));
-    }
-    return ret;
+    std::vector<int> intVec;
+    auto enumVec = Factory<Module>::GetInitializedTypes();
+    std::transform(enumVec.begin(), enumVec.end(), intVec.begin(), [](ModuleType m){ return static_cast<int>(m); });
+    return intVec;
 }
 
 /*
@@ -75,7 +73,7 @@ std::vector<int> GetAvailableModulesWrapper()
  */
 std::string GetExtensionFromTypeWrapper(int moduleType)
 {
-    return Registrar::GetExtensionFromType(static_cast<ModuleType>(moduleType));
+    return ModuleUtils::GetExtensionFromType(static_cast<ModuleType>(moduleType));
 }
 
 /*
@@ -83,13 +81,13 @@ std::string GetExtensionFromTypeWrapper(int moduleType)
  */
 std::vector<OptionDefinitionWrapper> GetOptionDefinitionsWrapper(int moduleType)
 {
-    auto options = Module::GetOptionDefinitions(static_cast<ModuleType>(moduleType));
+    auto options = Factory<ConversionOptions>::GetInfo(static_cast<ModuleType>(moduleType))->optionDefinitions;
     std::vector<OptionDefinitionWrapper> ret;
 
-    if (!options)
+    if (options.Count() == 0)
         return ret;
 
-    for (const auto& mapPair : options->GetIdMap())
+    for (const auto& mapPair : options.GetIdMap())
     {
         ret.push_back(WrapOptionDefinition(mapPair.second));
     }
@@ -104,7 +102,7 @@ std::vector<OptionDefinitionWrapper> GetOptionDefinitionsWrapper(int moduleType)
 bool ModuleImport(std::string filename)
 {
     SetStatusType(true);
-    if (Registrar::GetTypeFromFilename(filename) == ModuleType::NONE)
+    if (ModuleUtils::GetTypeFromFilename(filename) == ModuleType::NONE)
     {
         std::cerr << "The input file is not recognized as a supported module type.\n\n";
         return true;
@@ -153,7 +151,7 @@ bool ModuleConvert(std::string outputFilename, const std::vector<OptionWrapper>&
         return true; // Same type; No conversion necessary
 
     SetStatusType(true);
-    const auto moduleType = Registrar::GetTypeFromFilename(outputFilename);
+    const auto moduleType = ModuleUtils::GetTypeFromFilename(outputFilename);
     if (moduleType == ModuleType::NONE)
     {
         std::cerr << "The output file is not recognized as a supported module type.\n\n";
@@ -161,7 +159,7 @@ bool ModuleConvert(std::string outputFilename, const std::vector<OptionWrapper>&
     }
 
     // Create conversion options object
-    ConversionOptionsPtr options = ConversionOptions::Create(moduleType);
+    ConversionOptionsPtr options = Factory<ConversionOptions>::Create(moduleType);
     if (!options)
     {
         std::cerr << "Error occurred when creating ConversionOptions object. Likely a registration issue.\n\n";

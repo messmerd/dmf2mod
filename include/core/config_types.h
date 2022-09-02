@@ -14,6 +14,12 @@ enum class ModuleType
     MOD
 };
 
+// Factory implementation expects a "TypeEnum"
+using TypeEnum = ModuleType;
+inline constexpr TypeEnum TypeInvalid = ModuleType::NONE;
+
+////// The following is not necessary to have in this header, and may be defined later on //////
+
 // Forward declares
 class ModuleBase;
 class ConversionOptionsBase;

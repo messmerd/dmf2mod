@@ -30,6 +30,7 @@ set(CORE_SOURCES
     ${SRC}/core/registrar.cpp
     ${SRC}/core/options.cpp
     ${SRC}/core/global_options.cpp
+    ${SRC}/core/config.cpp
 )
 
 set(MODULE_SOURCES

@@ -39,7 +39,7 @@ struct Row<MOD>
     unsigned EffectValue;
 };
 
-MODULE_DECLARE(MOD, MODConversionOptions)
+//MODULE_DECLARE(MOD, MODConversionOptions)
 
 namespace mod {
 
@@ -362,7 +362,7 @@ private:
 
     void ImportRaw(const std::string& filename) override;
     void ExportRaw(const std::string& filename) override;
-    void ConvertRaw(const Module* input) override;
+    void ConvertRaw(const ModulePtr& input) override;
 
     // Conversion from DMF:
     void ConvertFromDMF(const DMF& dmf);

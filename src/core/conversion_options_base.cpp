@@ -13,9 +13,9 @@ using namespace d2m;
 
 void ConversionOptionsBase::PrintHelp(ModuleType moduleType)
 {
-    const auto& definitions = GetDefinitions(moduleType);
+    const auto& definitions = Factory<ConversionOptions>::GetInfo(moduleType)->optionDefinitions;
 
-    std::string name = Module::GetModuleInfo(moduleType)->m_FileExtension;
+    std::string name = Factory<Module>::GetInfo(moduleType)->fileExtension;
     if (name.empty())
         return;
 
@@ -24,7 +24,7 @@ void ConversionOptionsBase::PrintHelp(ModuleType moduleType)
         c = toupper(c);
     }
 
-    if (!definitions || definitions->Count() == 0)
+    if (definitions.Count() == 0)
     {
         std::cout << name << " files have no conversion options.\n";
         return;
@@ -32,5 +32,5 @@ void ConversionOptionsBase::PrintHelp(ModuleType moduleType)
 
     std::cout << name << " Options:\n";
 
-    definitions->PrintHelp();
+    definitions.PrintHelp();
 }

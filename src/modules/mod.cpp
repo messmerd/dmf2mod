@@ -74,7 +74,7 @@ void MOD::ImportRaw(const std::string& filename)
     throw NotImplementedException();
 }
 
-void MOD::ConvertRaw(const Module* input)
+void MOD::ConvertRaw(const ModulePtr& input)
 {
     if (!input)
     {
@@ -84,12 +84,12 @@ void MOD::ConvertRaw(const Module* input)
     switch (input->GetType())
     {
         case ModuleType::DMF:
-            ConvertFromDMF(*(input->Cast<DMF>()));
+            ConvertFromDMF(*(std::static_pointer_cast<DMF>(input)));
             break;
         // Add other input types here if support is added
         default:
             // Unsupported input type for conversion to MOD
-            throw MODException(ModuleException::Category::Convert, ModuleException::ConvertError::UnsupportedInputType, input->GetModuleInfo()->GetFileExtension());
+            throw MODException(ModuleException::Category::Convert, ModuleException::ConvertError::UnsupportedInputType, input->GetInfo()->fileExtension);
     }
 }
 
@@ -526,6 +526,7 @@ std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned le
 void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
 {
     auto& modData = GetData();
+    const auto options = std::static_pointer_cast<MODConversionOptions>(GetOptions());
 
     unsigned initialTempo, initialSpeed; // Together these will set the initial BPM
     DMFConvertInitialBPM(dmf, initialTempo, initialSpeed);
@@ -541,7 +542,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
         modData.SetRow(0, 0, 0, tempoRow);
 
         // Set initial speed
-        if (GetOptions()->GetTempoType() != MODConversionOptions::TempoType::EffectCompatibility)
+        if (options->GetTempoType() != MODConversionOptions::TempoType::EffectCompatibility)
         {
             Row<MOD> speedRow;
             speedRow.SampleNumber = 0;
@@ -564,7 +565,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
         amigaFilterRow.SampleNumber = 0;
         amigaFilterRow.SamplePeriod = 0;
         amigaFilterRow.EffectCode = EffectCode::SetFilter;
-        amigaFilterRow.EffectValue = !GetOptions()->GetOption(MODOptionEnum::AmigaFilter).GetValue<bool>();
+        amigaFilterRow.EffectValue = !options->GetOption(MODOptionEnum::AmigaFilter).GetValue<bool>();
         modData.SetRow(3, 0, 0, amigaFilterRow);
 
         // All other channel rows in the pattern are already zeroed out so nothing needs to be done for them
@@ -665,7 +666,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
 
 PriorityEffectsMap MOD::DMFConvertEffects(const Row<DMF>& row, State& state)
 {
-    const auto& options = GetOptions();
+    const auto options = std::static_pointer_cast<MODConversionOptions>(GetOptions());
     auto& channelState = state.channel[state.global.channel];
     auto& persistentEffects = channelState.persistentEffects;
 
@@ -1269,7 +1270,8 @@ void MOD::DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed)
 
     const double desiredBPM = dmf.GetBPM();
 
-    if (GetOptions()->GetTempoType() == MODConversionOptions::TempoType::EffectCompatibility)
+    const auto options = std::static_pointer_cast<MODConversionOptions>(GetOptions());
+    if (options->GetTempoType() == MODConversionOptions::TempoType::EffectCompatibility)
     {
         tempo = static_cast<unsigned>(desiredBPM * 2);
         speed = 6;

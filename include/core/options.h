@@ -179,7 +179,7 @@ public:
 
     OptionDefinitionCollection() {};
     OptionDefinitionCollection(const OptionDefinitionCollection& other);
-    OptionDefinitionCollection(std::initializer_list<OptionDefinition> options);
+    OptionDefinitionCollection(const std::initializer_list<OptionDefinition>& options);
 
     size_t Count() const;
 

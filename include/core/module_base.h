@@ -27,9 +27,11 @@ struct Info<ModuleBase> : public InfoBase
 };
 
 // Base class for all module types (DMF, MOD, XM, etc.)
-class ModuleBase : public EnableSubfactories<ConversionOptionsBase>, public EnableReflection
+class ModuleBase : public EnableReflection<ModuleBase>, public std::enable_shared_from_this<ModuleBase>
 {
 protected:
+
+    friend struct BuilderBase<ModuleBase>;
 
     ModuleBase() = default;
     virtual ~ModuleBase() = default;
@@ -127,7 +129,7 @@ public:
         try
         {
             // Perform the conversion
-            output->ConvertRaw(this);
+            output->ConvertRaw(shared_from_this());
         }
         catch (ModuleException& e)
         {
@@ -167,9 +169,20 @@ protected:
 
     virtual void ImportRaw(const std::string& filename) = 0;
     virtual void ExportRaw(const std::string& filename) = 0;
-    virtual void ConvertRaw(const Module* input) = 0;
+    virtual void ConvertRaw(const ModulePtr& input) = 0;
+
+    template<class T, std::enable_if_t<std::is_base_of_v<ModuleBase, T>, bool> = true>
+    std::shared_ptr<T> Cast() const
+    {
+        return std::static_pointer_cast<T>(shared_from_this());
+    }
+
+    ConversionOptionsPtr GetOptions() const { return m_Options; }
 
     Status m_Status;
+
+private:
+
     ConversionOptionsPtr m_Options;
 };
 

@@ -25,12 +25,26 @@ namespace d2m {
 class ConversionOptionsBase;
 template <typename T> class ConversionOptionsInterface;
 
-// Base class for conversion options
-class ConversionOptionsBase : public OptionCollection
+
+// Specialized Info class for ConversionOptionsBase-derived classes
+template<>
+struct Info<ConversionOptionsBase> : public InfoBase
 {
-public:
+    OptionDefinitionCollection optionDefinitions;
+};
+
+
+// Base class for conversion options
+class ConversionOptionsBase : public OptionCollection, public EnableReflection<ConversionOptionsBase>
+{
+protected:
+
+    friend struct BuilderBase<ConversionOptionsBase>;
+
     ConversionOptionsBase() = default; // See ConversionOptionsInterface constructor
     virtual ~ConversionOptionsBase() = default;
+
+public:
 
     /*
      * Get the filename of the output file. Returns empty string if error occurred.

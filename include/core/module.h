@@ -33,7 +33,6 @@ protected:
     inline ModuleData<Derived>& GetData() { return m_Data; }
     inline ModuleGlobalData<Derived>& GetGlobalData() { return GetData().GlobalData(); }
 
-
 private:
 
     //static const ModuleInfo m_Info;     // Info inherent to every module of type Derived

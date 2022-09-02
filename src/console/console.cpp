@@ -42,7 +42,7 @@ static void PrintHelp(const std::string& executable, ModuleType moduleType);
 
 int main(int argc, char *argv[])
 {
-    TopLevelFactory::Initialize();
+    Initialize();
 
     auto args = ModuleUtils::GetArgsAsVector(argc, argv);
 

@@ -292,7 +292,7 @@ public:
 private:
     void ImportRaw(const std::string& filename) override;
     void ExportRaw(const std::string& filename) override;
-    void ConvertRaw(const Module* input) override;
+    void ConvertRaw(const ModulePtr& input) override;
 
     using Reader = StreamReader<zstr::ifstream, Endianness::Little>;
 

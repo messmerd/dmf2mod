@@ -260,7 +260,7 @@ void DMF::ExportRaw(const std::string& filename)
     throw NotImplementedException{};
 }
 
-void DMF::ConvertRaw(const Module* input)
+void DMF::ConvertRaw(const ModulePtr& input)
 {
     // Not implemented
     throw NotImplementedException{};

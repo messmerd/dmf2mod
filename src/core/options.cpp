@@ -172,7 +172,7 @@ OptionDefinitionCollection::OptionDefinitionCollection(const OptionDefinitionCol
     }
 }
 
-OptionDefinitionCollection::OptionDefinitionCollection(std::initializer_list<OptionDefinition> options)
+OptionDefinitionCollection::OptionDefinitionCollection(const std::initializer_list<OptionDefinition>& options)
 {
     // Initialize collection + mappings
     m_IdOptionsMap.clear();

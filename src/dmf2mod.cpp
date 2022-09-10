@@ -27,7 +27,7 @@ void Factory<ConversionOptions>::InitializeImpl()
     Clear();
 
     Register<ModuleType::DMF, DMFConversionOptions>();
-    Register<MODConversionOptions>(ModuleType::MOD, std::move(MODOptions));
+    Register<ModuleType::MOD, MODConversionOptions>(std::move(MODOptions));
 }
 
 template<>
@@ -35,8 +35,8 @@ void Factory<Module>::InitializeImpl()
 {
     Clear();
 
-    Register<DMF>(ModuleType::DMF, "Deflemask", "dmf");
-    Register<MOD>(ModuleType::MOD, "ProTracker", "mod");
+    Register<ModuleType::DMF, DMF>("Deflemask", "dmf");
+    Register<ModuleType::MOD, MOD>("ProTracker", "mod");
 }
 
 void d2m::Initialize()

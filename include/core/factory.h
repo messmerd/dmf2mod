@@ -181,10 +181,10 @@ private:
         m_TypeToEnum[std::type_index(typeid(T))] = eT;
     }
 
-    template<class T, typename... Args>
-    static void Register(Args&&... infoArgs)
+    template<TypeEnum eT, class T, typename... Args>
+    static inline void Register(Args&&... infoArgs)
     {
-        Register<T>(Info<Base>{ std::forward<Args>(infoArgs)... });
+        Register<T>(Info<Base>{ { eT }, std::forward<Args>(infoArgs)... });
     }
 
     static void Clear()

@@ -53,8 +53,6 @@ struct PatternMetadata<DMF>
     std::string name;
 };
 
-///MODULE_DECLARE(DMF, DMFConversionOptions)
-
 namespace dmf {
 
 static const int DMFNoInstrument = -1;

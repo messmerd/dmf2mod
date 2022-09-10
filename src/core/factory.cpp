@@ -1,10 +1,10 @@
 /*
-    module.cpp
+    factory.cpp
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    See module.h.
+    See factory.h.
 */
 
-#include "module.h"
+#include "factory.h"
 
 using namespace d2m;

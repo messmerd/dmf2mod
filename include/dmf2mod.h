@@ -7,8 +7,14 @@
 
 #pragma once
 
-// Include module and conversion options definitions, registrar, etc.
-#include "core/module.h"
+#include "factory.h"
 
-// Include headers for all the supported modules
-#include "all_modules.h"
+#include "dmf.h"
+#include "mod.h"
+
+namespace d2m {
+
+// Call this before using the dmf2mod library
+void Initialize();
+
+} // namespace d2m

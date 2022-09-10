@@ -33,9 +33,6 @@ using namespace d2m;
 using namespace d2m::dmf;
 // DO NOT use any module namespace other than d2m::dmf
 
-// Define module info
-///MODULE_DEFINE(DMF, DMFConversionOptions, ModuleType::DMF, "Deflemask", "dmf", {})
-
 #define DMF_FILE_VERSION_MIN 17 // DMF files as old as version 17 (0x11) are supported
 #define DMF_FILE_VERSION_MAX 26 // DMF files as new as version 26 (0x1a) are supported
 

@@ -39,8 +39,6 @@ struct Row<MOD>
     unsigned EffectValue;
 };
 
-//MODULE_DECLARE(MOD, MODConversionOptions)
-
 namespace mod {
 
 // MOD effects:

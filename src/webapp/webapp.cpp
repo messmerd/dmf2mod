@@ -5,7 +5,7 @@
     WebAssembly backend for dmf2mod.
 */
 
-#include "config.h"
+#include "dmf2mod.h"
 #include "utils.h"
 
 #include <emscripten/emscripten.h>

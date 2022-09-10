@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include "registrar.h"
+#include "factory.h"
 
 #include <string>
 #include <vector>

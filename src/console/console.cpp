@@ -10,7 +10,7 @@
         dmf2mod [option]
 */
 
-#include "config.h"
+#include "dmf2mod.h"
 
 #include <string>
 #include <iostream>

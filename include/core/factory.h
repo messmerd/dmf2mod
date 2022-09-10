@@ -1,14 +1,8 @@
 /*
-    registrar.h
+    factory.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Declares the Registrar class, which registers all the available 
-    modules at runtime, provides factory methods for creating Module and 
-    ConversionOptions objects, and provides helper methods for retrieving 
-    info about registered modules.
-
-    All changes needed to add support for new module types are done within 
-    this header file, its cpp file by the same name, and all_modules.h.
+    Implementation of the factory pattern.
 */
 
 #pragma once
@@ -24,11 +18,9 @@
 #include <variant>
 #include <type_traits>
 #include <experimental/type_traits>
-#include <exception>
+#include <stdexcept>
 #include <typeindex>
 #include <utility>
-
-#include <iostream> // temporary
 
 namespace d2m {
 
@@ -37,28 +29,18 @@ template<class T> class Factory;
 
 namespace detail {
     struct EnableFactoryBase {};
-    struct EnableSubfactoriesBase {};
     struct EnableReflectionBase {};
 
     // With C++20 concepts, these won't be needed
-    template<class T> using get_subclasses = typename T::subclasses_t;
-    template<class T> using get_subclasses_or_void = std::experimental::detected_or_t<void, detail::get_subclasses, T>;
     template<class T> constexpr bool factory_enabled_v = std::is_base_of_v<EnableFactoryBase, T>;
-    template<class T> constexpr bool subfactories_enabled_v = std::is_base_of_v<EnableSubfactoriesBase, T>;
     template<class T> constexpr bool reflection_enabled_v = std::is_base_of_v<EnableReflectionBase, T>;
 } // namespace detail
-
-
-template <class...Sub>
-struct EnableSubfactories : public detail::EnableSubfactoriesBase
-{
-    using subclasses_t = std::tuple<Sub...>;
-};
 
 
 template <class BaseType>
 struct BuilderBase
 {
+    virtual ~BuilderBase() = default;
     virtual std::shared_ptr<BaseType> Build() const = 0;
 };
 
@@ -68,6 +50,7 @@ struct Builder : public BuilderBase<Base>
 {
     std::shared_ptr<Base> Build() const override { return std::make_shared<Derived>(); };
 };
+
 
 struct InfoBase
 {
@@ -92,9 +75,8 @@ private:
     Factory& operator=(const Factory&) = delete;
     Factory& operator=(Factory&&) = delete;
 
-    // If Base defines subclasses, subclasses_t = the subclasses, else subclasses_t = void.
-    using subclasses_t = detail::get_subclasses_or_void<Base>;
-    static void InitializeImpl(); // Declaration. Factories will have to implement their own.
+    // Declaration. Factories will have to implement their own.
+    static void InitializeImpl();
 
 public:
 
@@ -104,13 +86,6 @@ public:
             return;
 
         InitializeImpl();
-
-        if constexpr (detail::subfactories_enabled_v<Base>)
-        {
-            // Calls Initialize for each class in subclasses_t
-            InitializeSubclasses<std::make_index_sequence<std::tuple_size_v<subclasses_t>>{}>();
-        }
-
         m_Initialized = true;
     }
 
@@ -150,16 +125,6 @@ public:
             throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(Base).name()));
         static TypeEnum classType = GetEnumFromType<Derived>();
         return GetInfo(classType);
-    }
-
-    template<size_t SubclassIndex>
-    static auto CreateSubclass(TypeEnum classType)
-    {
-        if (!m_Initialized)
-            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(Base).name()));
-        static_assert(detail::subfactories_enabled_v<Base>, "Base class must inherit from EnableSubfactories");
-        static_assert(SubclassIndex < std::tuple_size_v<subclasses_t>, "Out of range of subclasses_t tuple");
-        return Factory<std::tuple_element_t<SubclassIndex, subclasses_t>>::Create(classType);
     }
 
     static const std::map<TypeEnum, std::unique_ptr<const Info<Base>>>& TypeInfo() { return m_Info; }
@@ -216,11 +181,10 @@ private:
         m_TypeToEnum[std::type_index(typeid(T))] = eT;
     }
 
-    template<class T>
-    static void Register(const Info<Base>& info)
+    template<class T, typename... Args>
+    static void Register(Args&&... infoArgs)
     {
-        auto temp = info;
-        Register<T>(std::move(temp));
+        Register<T>(Info<Base>{ std::forward<Args>(infoArgs)... });
     }
 
     static void Clear()
@@ -230,19 +194,20 @@ private:
         m_Initialized = false;
     }
 
-    template<std::size_t...Is>
-    static auto InitializeSubclasses()
-    {
-        ( ( Factory<std::tuple_element_t<Is, subclasses_t>>::Initialize()), ... );
-    }
-
 private:
 
-    static std::map<TypeEnum, std::unique_ptr<const BuilderBase<Base>>> m_Builders; // NOTE: m_Builders can map to a non-template class instead if there are any compilation issues
-    static std::map<TypeEnum, std::unique_ptr<const Info<Base>>> m_Info;            // NOTE: m_Info can map to InfoBase const* instead if there are any compilation issues
+    static std::map<TypeEnum, std::unique_ptr<const BuilderBase<Base>>> m_Builders;
+    static std::map<TypeEnum, std::unique_ptr<const Info<Base>>> m_Info;
     static std::map<std::type_index, TypeEnum> m_TypeToEnum;
     static bool m_Initialized;
 };
+
+
+// Initialize static members
+template<class Base> std::map<ModuleType, std::unique_ptr<const BuilderBase<Base>>> Factory<Base>::m_Builders{};
+template<class Base> std::map<ModuleType, std::unique_ptr<const Info<Base>>> Factory<Base>::m_Info{};
+template<class Base> std::map<std::type_index, ModuleType> Factory<Base>::m_TypeToEnum{};
+template<class Base> bool Factory<Base>::m_Initialized = false;
 
 
 // If a base inherits this using CRTP, derived classes will have knowledge about themselves after Factory initialization

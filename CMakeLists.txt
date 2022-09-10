@@ -22,15 +22,12 @@ set(WEB_APP_SOURCES
 
 set(CORE_SOURCES
     ${SRC}/dmf2mod.cpp
-    ${SRC}/core/module.cpp
-    ${SRC}/core/module_base.cpp
     ${SRC}/core/conversion_options.cpp
-    ${SRC}/core/conversion_options_base.cpp
-    ${SRC}/core/status.cpp
-    ${SRC}/core/registrar.cpp
-    ${SRC}/core/options.cpp
+    ${SRC}/core/factory.cpp
     ${SRC}/core/global_options.cpp
-    ${SRC}/core/config.cpp
+    ${SRC}/core/module.cpp
+    ${SRC}/core/options.cpp
+    ${SRC}/core/status.cpp
 )
 
 set(MODULE_SOURCES

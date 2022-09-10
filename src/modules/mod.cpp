@@ -27,21 +27,7 @@ using namespace d2m;
 using namespace d2m::mod;
 // DO NOT use any module namespace other than d2m::mod
 
-// Define the command-line options that MOD accepts:
 using MODOptionEnum = MODConversionOptions::OptionEnum;
-auto MODOptions = CreateOptionDefinitions(
-{
-    /* Type  / Option id                    / Full name    / Short / Default   / Possib. vals          / Description */
-    {OPTION, MODOptionEnum::AmigaFilter,    "amiga",       '\0',   false,                              "Enables the Amiga filter"},
-    {OPTION, MODOptionEnum::Arpeggio,       "arp",         '\0',   false,                              "Allow arpeggio effects"},
-    {OPTION, MODOptionEnum::Portamento,     "port",        '\0',   false,                              "Allow portamento up/down effects"},
-    {OPTION, MODOptionEnum::Port2Note,      "port2note",   '\0',   false,                              "Allow portamento to note effects"},
-    {OPTION, MODOptionEnum::Vibrato,        "vib",         '\0',   false,                              "Allow vibrato effects"},
-    {OPTION, MODOptionEnum::TempoType,      "tempo",       '\0',   "accuracy", {"accuracy", "compat"}, "Prioritize tempo accuracy or compatibility with effects"},
-});
-
-// Register module info
-//MODULE_DEFINE(MOD, MODConversionOptions, ModuleType::MOD, "ProTracker", "mod", MODOptions)
 
 static std::vector<int8_t> GenerateSquareWaveSample(unsigned dutyCycle, unsigned length);
 static std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned length);

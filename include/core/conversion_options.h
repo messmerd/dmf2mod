@@ -57,20 +57,12 @@ public:
      */
     virtual void PrintHelp() const = 0;
 
-    template <class optionsClass /*, class = std::enable_if_t<detail::is_conversion_options_impl_v<optionsClass>>*/>
-    static void PrintHelp()
-    {
-        PrintHelp(ConversionOptionsInterface<optionsClass>::GetTypeStatic());
-    }
-
     /*
      * Prints help message for the options of the given module type
      */
     static void PrintHelp(ModuleType moduleType);
 
 protected:
-    //friend class Registrar;
-
     std::string m_OutputFile;
 };
 
@@ -81,9 +73,13 @@ class ConversionOptionsInterface : public EnableFactory<Derived, ConversionOptio
 {
 protected:
 
-    ConversionOptionsInterface() = default;
-    ConversionOptionsInterface(const ConversionOptionsInterface&) = default;
-    ConversionOptionsInterface(ConversionOptionsInterface&&) = default;
+    ConversionOptionsInterface()
+    {
+        OptionCollection::SetDefinitions(&(this->GetInfo()->optionDefinitions));
+    }
+
+    ConversionOptionsInterface(const ConversionOptionsInterface&) = delete;
+    ConversionOptionsInterface(ConversionOptionsInterface&&) = delete;
 
     void PrintHelp() const override
     {
@@ -91,8 +87,6 @@ protected:
     }
 
 private:
-
-    ///static const ConversionOptionsInfo m_Info;
 };
 
 } // namespace d2m

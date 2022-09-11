@@ -213,10 +213,10 @@ public:
     Option() : m_Definitions(nullptr), m_Id(-1) {}
 
     // Construct with definitions defined elsewhere
-    Option(const std::shared_ptr<const OptionDefinitionCollection>& definitions, int id);
+    Option(OptionDefinitionCollection const* definitions, int id);
 
     // Construct with value. The definitions are defined elsewhere
-    Option(const std::shared_ptr<const OptionDefinitionCollection>& definitions, int id, value_t value);
+    Option(OptionDefinitionCollection const* definitions, int id, value_t value);
 
     void SetValue(value_t& value);
     void SetValue(value_t&& value);
@@ -243,15 +243,14 @@ public:
         return m_ExplicitlyProvided;
     }
 
-    const OptionDefinition* GetDefinition() const;
+    OptionDefinition const* GetDefinition() const;
 
 private:
 
     // Rather than making a copy of definition for each Option, it instead will point to definitions defined elsewhere + an id.
-    // This will work well for both definitions from the ConversionOptionsStatic class and custom definitions used by frontends.
-    // std::shared_ptr<OptionDefinition> is not used to avoid the complications of having to use shared_ptr with each individual 
-    // OptionDefinition.
-    std::shared_ptr<const OptionDefinitionCollection> m_Definitions;
+    // This will work well for both definitions from the Info struct and custom definitions used by frontends.
+    // TODO: Use OptionDefinition instead? Use std::shared_ptr?
+    OptionDefinitionCollection const* m_Definitions;
     int m_Id;
 
     value_t m_Value;
@@ -271,12 +270,12 @@ public:
     using value_t = OptionDefinition::value_t;
 
     OptionCollection();
-    OptionCollection(const std::shared_ptr<const OptionDefinitionCollection>& definitions);
+    OptionCollection(OptionDefinitionCollection const* definitions);
 
     // Access to definitions
 
-    void SetDefinitions(const std::shared_ptr<const OptionDefinitionCollection>& definitions);
-    const std::shared_ptr<const OptionDefinitionCollection>& GetDefinitions() const { return m_Definitions; }
+    void SetDefinitions(OptionDefinitionCollection const* definitions);
+    OptionDefinitionCollection const* GetDefinitions() const { return m_Definitions; }
 
     // Access to collection
 
@@ -310,7 +309,7 @@ public:
     void SetValuesToDefault();
 
 private:
-    std::shared_ptr<const OptionDefinitionCollection> m_Definitions;
+    OptionDefinitionCollection const* m_Definitions;
 
     std::map<int, Option> m_OptionsMap;
 };

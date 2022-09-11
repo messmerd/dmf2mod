@@ -15,8 +15,8 @@
 
 namespace d2m {
 
-// Class containing miscellaneous Module-related static methods
-class ModuleUtils
+// Class containing miscellaneous helpful static methods
+class Utils
 {
 public:
     // File utils

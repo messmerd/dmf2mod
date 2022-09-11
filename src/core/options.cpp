@@ -2,7 +2,7 @@
     options.cpp
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Defines Option, OptionCollection, OptionDefinition, and OptionDefinitionCollection, 
+    Defines Option, OptionCollection, OptionDefinition, and OptionDefinitionCollection,
     which are used when working with command-line options.
 */
 
@@ -166,7 +166,7 @@ OptionDefinitionCollection::OptionDefinitionCollection(const OptionDefinitionCol
 
         const std::string name = moduleOption->GetName();
         m_NameOptionsMap[name] = moduleOption;
-        
+
         const char shortName = moduleOption->GetShortName();
         m_ShortNameOptionsMap[shortName] = moduleOption;
     }
@@ -398,7 +398,7 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
      * -f=true
      * -f 3
      * 
-     * Command-line options passed in with with double-quotes around 
+     * Command-line options passed in with with double-quotes around
      *  them do not have double-quotes here.
      * Arguments are checked against option definitions for a match
      *  and to determine the type (bool, int, double, or string).
@@ -446,7 +446,7 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
     for (int i = 0; i < static_cast<int>(args.size()); i++)
     {
         auto& arg = args[i];
-        ModuleUtils::StringTrimBothEnds(arg);
+        Utils::StringTrimBothEnds(arg);
         if (arg.empty())
         {
             args.erase(args.begin() + i);
@@ -570,7 +570,7 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
                         // Skip unrecognized options
                         if (!tempDef)
                             continue;
-                        
+
                         if (tempDef->GetValueType() != OptionDefinition::BOOL)
                         {
                             // Error: When multiple short flags are strung together, all of them must be boolean-typed options
@@ -640,11 +640,11 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
         if (equalsPos != std::string::npos) // Value is after the '='
         {
             valueStr = arg.substr(equalsPos + 1);
-            
+
             // Set the value
             if (SetValue(valueStr.c_str(), def))
                 return true; // Error occurred
-            
+
             // Erase argument since it has been consumed
             args.erase(args.begin() + i);
             i--; // Adjust for item just erased
@@ -660,7 +660,7 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
             {
                 // The presence of a bool argument means its value is true. Unless '=' is present, no value is expected to follow.
                 //  So unlike other types, "--foobar false" would not be valid, but "--foobar=false" is.
-                
+
                 // Set the value
                 SetValue("1", def);
 
@@ -727,7 +727,7 @@ bool ModuleOptionUtils::ConvertToValue(const std::string& valueStr, OptionDefini
                 valueStrLower[i] = tolower(valueStrLower[i]);
                 ++i;
             }
-            
+
             if (valueStrLower == "0")
                 returnVal = false;
             else if (valueStrLower == "false")

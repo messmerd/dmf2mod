@@ -1,4 +1,10 @@
-// dm2mod version info
+/*
+    version.h
+    Written by Dalton Messmer <messmer.dalton@gmail.com>.
+
+    dmf2mod version info
+*/
+
 #define DMF2MOD_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
 #define DMF2MOD_VERSION_MINOR @PROJECT_VERSION_MINOR@
 #define DMF2MOD_VERSION_PATCH @PROJECT_VERSION_PATCH@

@@ -40,12 +40,11 @@ class ConversionOptionsBase : public OptionCollection, public EnableReflection<C
 {
 protected:
 
-    friend struct BuilderBase<ConversionOptionsBase>;
-
     ConversionOptionsBase() = default; // See ConversionOptionsInterface constructor
-    virtual ~ConversionOptionsBase() = default;
 
 public:
+
+    virtual ~ConversionOptionsBase() = default;
 
     /*
      * Get the filename of the output file. Returns empty string if error occurred.
@@ -63,6 +62,7 @@ public:
     static void PrintHelp(ModuleType moduleType);
 
 protected:
+
     std::string m_OutputFile;
 };
 
@@ -86,7 +86,9 @@ protected:
         ConversionOptionsBase::PrintHelp(this->GetType());
     }
 
-private:
+public:
+
+    virtual ~ConversionOptionsInterface() = default;
 };
 
 } // namespace d2m

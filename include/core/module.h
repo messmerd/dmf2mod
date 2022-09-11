@@ -44,10 +44,7 @@ class ModuleBase : public EnableReflection<ModuleBase>, public std::enable_share
 {
 protected:
 
-    friend struct BuilderBase<ModuleBase>;
-
     ModuleBase() = default;
-    virtual ~ModuleBase() = default;
 
     // TODO: Use this
     enum class ExportState
@@ -56,6 +53,8 @@ protected:
     };
 
 public:
+
+    virtual ~ModuleBase() = default;
 
     /*
      * Create and import a new module given a filename. Module type is inferred from the file extension.
@@ -131,7 +130,13 @@ private:
 template <class Derived>
 class ModuleInterface : public EnableFactory<Derived, ModuleBase>
 {
+protected:
+
+    ModuleInterface() = default;
+
 public:
+
+    virtual ~ModuleInterface() = default;
 
     inline const ModuleData<Derived>& GetData() const { return m_Data; }
     inline const ModuleGlobalData<Derived>& GetGlobalData() const { return GetData().GlobalData(); }
@@ -146,8 +151,7 @@ protected:
 
 private:
 
-    //static const ModuleInfo m_Info;     // Info inherent to every module of type Derived
-    ModuleData<Derived> m_Data;         // Song information for a particular module file
+    ModuleData<Derived> m_Data; // Song information for a particular module file
 };
 
 } // namespace d2m

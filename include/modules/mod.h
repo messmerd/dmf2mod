@@ -2,8 +2,7 @@
     mod.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Declares a ModuleInterface-derived class for ProTracker's
-    MOD files.
+    Declares all classes used for ProTracker's MOD files.
 */
 
 #pragma once
@@ -17,7 +16,9 @@
 
 namespace d2m {
 
-// Declare module
+///////////////////////////////////////////////////////////
+// Setup template specializations used by MOD
+///////////////////////////////////////////////////////////
 
 class MOD;
 
@@ -38,6 +39,10 @@ struct Row<MOD>
     unsigned EffectCode;
     unsigned EffectValue;
 };
+
+///////////////////////////////////////////////////////////
+// mod namespace
+///////////////////////////////////////////////////////////
 
 namespace mod {
 
@@ -195,7 +200,7 @@ struct State
         unsigned order;      // The current pattern matrix row in DMF
         unsigned patternRow; // The current pattern row in DMF?
     } global;
-    
+
     ChannelState channel[4];
     ChannelState channelCopy[4];
 
@@ -267,6 +272,10 @@ struct State
 
 } // namespace mod
 
+///////////////////////////////////////////////////////////
+// MOD primary classes
+///////////////////////////////////////////////////////////
+
 class MODException : public ModuleException
 {
 public:
@@ -281,8 +290,16 @@ private:
 
 class MODConversionOptions : public ConversionOptionsInterface<MODConversionOptions>
 {
-public:
+private:
+
+    // Only allow the Factory to construct this class
+    friend class Builder<MODConversionOptions, ConversionOptionsBase>;
+
     MODConversionOptions() = default;
+
+public:
+
+    // Factory requires destructor to be public
     ~MODConversionOptions() = default;
 
     enum class OptionEnum
@@ -315,13 +332,18 @@ private:
 
 class MOD : public ModuleInterface<MOD>
 {
-public:
+private:
 
-    using options_t = MODConversionOptions;
+    // Only allow the Factory to construct this class
+    friend class Builder<MOD, ModuleBase>;
 
     MOD();
-    ~MOD() = default;
     void CleanUp() {};
+
+public:
+
+    // Factory requires destructor to be public
+    ~MOD() = default;
 
     enum class ImportError {Success=0};
     enum class ImportWarning {};
@@ -351,7 +373,7 @@ public:
         WaveDownsample,
         MultipleEffects
     };
-    
+
     static constexpr unsigned VolumeMax = 64u; // Yes, there are 65 different values for the volume
 
 private:

@@ -1,3 +1,10 @@
+/*
+    global_options.cpp
+    Written by Dalton Messmer <messmer.dalton@gmail.com>.
+
+    See global_options.h
+*/
+
 #include "global_options.h"
 
 using namespace d2m;

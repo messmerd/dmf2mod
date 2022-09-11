@@ -334,12 +334,4 @@ private:
 
 };
 
-/*
-    Helper function that allows an OptionDefinitionCollection to be easily created and passed to MODULE_DEFINE
-*/
-inline const std::shared_ptr<OptionDefinitionCollection> CreateOptionDefinitions(const std::initializer_list<OptionDefinition>& optionsDefinitions)
-{
-    return std::make_shared<OptionDefinitionCollection>(optionsDefinitions);
-}
-
 } // namespace d2m

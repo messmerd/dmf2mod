@@ -7,8 +7,6 @@
 
 #pragma once
 
-#include <memory>
-
 namespace d2m {
 
 // Add all supported modules to this enum

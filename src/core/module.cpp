@@ -2,7 +2,7 @@
     module.cpp
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    See module.h.
+    See module.h
 */
 
 #include "module.h"
@@ -12,7 +12,7 @@ using namespace d2m;
 
 ModulePtr ModuleBase::CreateAndImport(const std::string& filename)
 {
-    const ModuleType type = ModuleUtils::GetTypeFromFilename(filename);
+    const ModuleType type = Utils::GetTypeFromFilename(filename);
     if (type == ModuleType::NONE)
         return nullptr;
 

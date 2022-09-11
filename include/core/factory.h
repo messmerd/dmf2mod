@@ -30,24 +30,32 @@ namespace detail {
     struct EnableFactoryBase {};
     struct EnableReflectionBase {};
 
-    // With C++20 concepts, these won't be needed
     template<class T> constexpr bool factory_enabled_v = std::is_base_of_v<EnableFactoryBase, T>;
     template<class T> constexpr bool reflection_enabled_v = std::is_base_of_v<EnableReflectionBase, T>;
 } // namespace detail
 
 
-template <class BaseType>
-struct BuilderBase
+template <class Base>
+class BuilderBase
 {
+public:
+    friend class Factory<Base>; // Only the factory can use BuilderBase
     virtual ~BuilderBase() = default;
-    virtual std::shared_ptr<BaseType> Build() const = 0;
+protected:
+    BuilderBase() = default;
+    virtual std::shared_ptr<Base> Build() const = 0;
 };
 
-// Builds an instance of a factory-enabled class; Can specialize this, but it must inherit from BuilderBase.
+// Builds an instance of a factory-enabled class; Can specialize this, but it must inherit from BuilderBase and Factory<Base> must have access to its members.
 template <class Derived, class Base>
-struct Builder : public BuilderBase<Base>
+class Builder : public BuilderBase<Base>
 {
-    std::shared_ptr<Base> Build() const override { return std::make_shared<Derived>(); };
+    // NOTE: Derived must have a default constructor accessible by this class and also must have a public destructor.
+
+    friend class Factory<Base>; // Only the factory can use Builder
+
+    // Default constructs an object of Derived wrapped in a shared_ptr. std::make_shared cannot be used for classes with a non-public constructor even if Builder is a friend.
+    std::shared_ptr<Base> Build() const override { return std::shared_ptr<Derived>(new Derived{}); };
 };
 
 
@@ -138,8 +146,7 @@ public:
         return vec;
     }
 
-    // TODO: Use factory_enabled_v
-    template<class Type>
+    template<class Type, class = std::enable_if_t<detail::factory_enabled_v<Type>>>
     static TypeEnum GetEnumFromType()
     {
         if (!m_Initialized)
@@ -183,7 +190,7 @@ private:
     template<TypeEnum eT, class T, typename... Args>
     static inline void Register(Args&&... infoArgs)
     {
-        Register<T>(Info<Base>{ { eT }, std::forward<Args>(infoArgs)... });
+        Register<T>(Info<Base>{ InfoBase{ eT }, std::forward<Args>(infoArgs)... });
     }
 
     static void Clear()
@@ -219,11 +226,11 @@ struct EnableReflection : public detail::EnableReflectionBase
 
 
 /*
- * If a base class inherits from EnableReflection, EnableReflection will declare virtual methods which must be implemented
- * in a derived class. One of the derived classes will be EnableFactory. EnableFactory must know whether to implement the
+ * If a base class inherits from EnableReflection, EnableReflection will declare pure virtual methods which must be implemented
+ * in a derived class. One of the derived classes will be EnableFactory. EnableFactory must know whether to implement the pure
  * virtual methods or not, and this depends on whether the base class inherits from EnableReflection. In order to conditionally
  * implement these methods, EnableFactory uses std::conditional_t to inherit from either Base or ReflectionImpl<Derived, Base>.
- * ReflectionImpl<Derived, Base> implements the virtual methods.
+ * ReflectionImpl<Derived, Base> implements the pure virtual methods.
  */
 template<class Derived, class Base>
 struct ReflectionImpl : public Base
@@ -247,6 +254,5 @@ class EnableFactory : public detail::EnableFactoryBase, public std::conditional_
     static_assert(std::is_base_of_v<InfoBase, Info<Derived>>, "Info<Derived> must inherit from InfoBase");
     static_assert(std::is_base_of_v<BuilderBase<Base>, Builder<Derived, Base>>, "Builder<Derived, Base> must inherit from BuilderBase<Base>");
 };
-
 
 } // namespace d2m

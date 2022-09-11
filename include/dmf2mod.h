@@ -2,7 +2,7 @@
     dmf2mod.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Include this header for access to dmf2mod core functionality.
+    Include this header for access to dmf2mod core functionality
 */
 
 #pragma once

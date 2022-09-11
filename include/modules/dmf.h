@@ -2,8 +2,7 @@
     dmf.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Declares a ModuleInterface-derived class for Deflemask's 
-    DMF files.
+    Declares all classes used for Deflemask's DMF files.
 */
 
 #pragma once
@@ -17,7 +16,9 @@
 
 namespace d2m {
 
-// Declare module
+///////////////////////////////////////////////////////////
+// Setup template specializations used by DMF
+///////////////////////////////////////////////////////////
 
 class DMF;
 
@@ -52,6 +53,10 @@ struct PatternMetadata<DMF>
 {
     std::string name;
 };
+
+///////////////////////////////////////////////////////////
+// dmf namespace
+///////////////////////////////////////////////////////////
 
 namespace dmf {
 
@@ -136,13 +141,13 @@ struct FMOps
     uint8_t rs;
     uint8_t dt;
     uint8_t d2r;
-    
+
     union
     {
         uint8_t SSGMode;
         uint8_t egs; // EG-S in SMS OPLL / NES VRC7. 0 if OFF; 8 if ON.
     };
-    
+
     uint8_t dam, dvb, egt, ksl, sus, vib, ws, ksr; // Exclusive to DMF version 18 (0x12) and older
 };
 
@@ -182,13 +187,13 @@ struct Instrument
         struct
         {
             uint8_t numOperators;
-            
+
             union
             {
                 uint8_t alg;
                 uint8_t sus; // SMS OPLL / NES VRC7 exclusive
             };
-            
+
             uint8_t fb;
             uint8_t opllPreset; // SMS OPLL / NES VRC7 exclusive
 
@@ -200,7 +205,7 @@ struct Instrument
                     uint8_t dc, dm; // SMS OPLL / NES VRC7 exclusive
                 };
             };
-            
+
             FMOps ops[4];
         } fm;
     };
@@ -225,10 +230,22 @@ namespace GameBoyChannel
 
 } // namespace dmf
 
+///////////////////////////////////////////////////////////
+// DMF primary classes
+///////////////////////////////////////////////////////////
+
 class DMFConversionOptions : public ConversionOptionsInterface<DMFConversionOptions>
 {
-public:
+private:
+
+    // Only allow the Factory to construct this class
+    friend class Builder<DMFConversionOptions, ConversionOptionsBase>;
+
     DMFConversionOptions() = default;
+
+public:
+
+    // Factory requires destructor to be public
     ~DMFConversionOptions() = default;
 };
 
@@ -254,10 +271,18 @@ public:
 
     static const dmf::System& Systems(SystemType systemType);
 
-public:
+private:
+
+    // Only allow the Factory to construct this class
+    friend class Builder<DMF, ModuleBase>;
+
     DMF();
-    ~DMF();
     void CleanUp();
+
+public:
+
+    // Factory requires destructor to be public
+    ~DMF();
 
     ////////////
 

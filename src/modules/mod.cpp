@@ -2,8 +2,7 @@
     mod.cpp
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Implements a ModuleInterface-derived class for ProTracker's
-    MOD files.
+    Defines all classes used for ProTracker's MOD files.
 
     Several limitations apply in order to export. For example,
     for DMF-->MOD, the DMF file must use the Game Boy system,
@@ -127,11 +126,10 @@ void MOD::ConvertFromDMF(const DMF& dmf)
 
     modGlobalData.title = dmfData.GlobalData().title;
     if (modGlobalData.title.size() > 20)
-        modGlobalData.title.resize(20);
+        modGlobalData.title.resize(20); // Don't pad with spaces b/c exporting to WAV in ProTracker will keep those spaces in the exported file name
 
     modGlobalData.author = dmfData.GlobalData().author;
-    if (modGlobalData.author.size() > 22)
-        modGlobalData.author.resize(22); // Author will be displayed in 1st sample; sample names have 22 character limit
+    modGlobalData.author.resize(22, ' '); // Author will be displayed in 1st sample; sample names have 22 character limit
 
     ///////////////// CONVERT SAMPLE INFO
 
@@ -247,7 +245,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
 
                 // TODO: More state-related stuff could be extracted from DMFConvertNote and put into separate 
                 //  method so that I don't have to copy code from it to put here.
-                
+
                 // Convert note - Note cut effect
                 auto sampleChangeEffects = modEffects.equal_range(EffectPrioritySampleChange);
                 if (sampleChangeEffects.first != sampleChangeEffects.second) // If sample change occurred (duty cycle, wave, or note cut effect)
@@ -321,7 +319,7 @@ void MOD::DMFSampleSplittingAndAssignment(SampleMap& sampleMap, const DMFSampleN
 {
     // This method determines whether a DMF sample will need to be split into low, middle, or high ranges in MOD, 
     //  then assigns MOD sample numbers, sample lengths, etc.
-    
+
     mod_sample_id_t currentMODSampleId = 1; // Sample #0 is special in ProTracker
 
     // Only the samples we need will be in this map (+ the silent sample possibly)
@@ -345,7 +343,7 @@ void MOD::DMFSampleSplittingAndAssignment(SampleMap& sampleMap, const DMFSampleN
     }
 
     m_TotalMODSamples = currentMODSampleId - 1; // Set the number of MOD samples that will be needed. (minus sample #0 which is special)
-    
+
     // TODO: Check if there are too many samples needed here, and throw exception if so
 }
 
@@ -353,7 +351,7 @@ void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap)
 {
     // Fill out information needed to define a MOD sample
     m_Samples.clear();
-    
+
     for (const auto& [dmfSampleId, sampleMapper] : sampleMap)
     {
         const int totalNoteRanges = sampleMapper.GetNumMODSamples();
@@ -434,7 +432,7 @@ void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap)
             // Pad name with zeros
             while (si.name.size() < 22)
                 si.name += " ";
-            
+
             m_Samples[si.id] = si;
         }
     }
@@ -446,7 +444,7 @@ std::vector<int8_t> GenerateSquareWaveSample(unsigned dutyCycle, unsigned length
     sample.assign(length, 0);
 
     uint8_t duty[] = {1, 2, 4, 6};
-    
+
     // This loop creates a square wave with the correct length and duty cycle:
     for (unsigned i = 1; i <= length; i++)
     {
@@ -950,7 +948,7 @@ static inline int16_t GetNewDMFVolume(int16_t dmfRowVol, const ChannelState& sta
 void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const Row<DMF>& row, PriorityEffectsMap& modEffects)
 {
     ChannelState& chanState = state.channel[state.global.channel];
-    
+
     // Determine what the volume should be for this channel
     const int16_t newChanVol = GetNewDMFVolume(row.volume, chanState);
 
@@ -1073,7 +1071,7 @@ Note MOD::DMFConvertNote(State& state, const Row<DMF>& row, const MOD::SampleMap
         period = 0;
         return modNote;
     }
-    
+
     // Convert note - Note OFF
     if (NoteIsOff(dmfNote)) // Note OFF. Use silent sample and handle effects.
     {
@@ -1085,7 +1083,7 @@ Note MOD::DMFConvertNote(State& state, const Row<DMF>& row, const MOD::SampleMap
     }
 
     // Note is playing
-    
+
     // If we are on the NOISE channel, dmfSampleId will go unused
     dmf_sample_id_t dmfSampleId = state.global.channel == dmf::GameBoyChannel::WAVE ? chanState.wavetable + 4 : chanState.dutyCycle;
     
@@ -1094,7 +1092,7 @@ Note MOD::DMFConvertNote(State& state, const Row<DMF>& row, const MOD::SampleMap
         if (sampleMap.count(dmfSampleId) > 0)
         {
             const DMFSampleMapper& sampleMapper = sampleMap.at(dmfSampleId);
-            
+
             DMFSampleMapper::NoteRange noteRange;
             modNote = sampleMapper.GetMODNote(GetNote(dmfNote), noteRange);
 
@@ -1119,7 +1117,7 @@ Note MOD::DMFConvertNote(State& state, const Row<DMF>& row, const MOD::SampleMap
         sampleId = samplerMapper.GetMODSampleId(chanState.noteRange);
 
         chanState.sampleChanged = false; // Just changed the sample, so resetting this for next time.
-        
+
         // If a volume change effect isn't already present
         if (modEffects.find(EffectPriority::EffectPriorityVolumeChange) == modEffects.end())
         {
@@ -1173,7 +1171,7 @@ Row<MOD> MOD::DMFApplyNoteAndEffect(State& state, const PriorityEffectsMap& modE
     else // There are effect(s) which need to be applied
     {
         bool effectUsed = false; // Whether an effect has been chosen to be used for this channel's effect slot
-    
+
         // If a pat break or jump is used
         if (modEffects.find(EffectPriorityStructureRelated) != modEffects.end())
         {
@@ -1303,7 +1301,7 @@ void MOD::DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed)
     {
         if (3 * 32.0 / d > desiredBPM || desiredBPM > 3 * 255.0 / d)
             continue; // Not even possible with this speed value
-        
+
         for (unsigned n = 32; n <= 255; n++)
         {
             const double bpm = 3.0 * (double)n / d;
@@ -1660,7 +1658,7 @@ void MOD::ExportSampleInfo(std::ofstream& fout) const
     for (const auto& mapPair : m_Samples)
     {
         const auto& sample = mapPair.second;
-        
+
         if (sample.name.size() > 22)
             throw std::length_error("Sample name must be 22 characters or less");
 
@@ -1680,7 +1678,7 @@ void MOD::ExportSampleInfo(std::ofstream& fout) const
         fout.put(sample.repeatLength >> 9); // Sample repeat length byte 0
         fout.put(sample.repeatLength >> 1); // Sample repeat length byte 1
     }
-    
+
     // The remaining samples are blank:
     for (int i = m_TotalMODSamples; i < 31; i++)
     {

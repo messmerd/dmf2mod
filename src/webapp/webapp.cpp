@@ -73,7 +73,7 @@ std::vector<int> GetAvailableModulesWrapper()
  */
 std::string GetExtensionFromTypeWrapper(int moduleType)
 {
-    return ModuleUtils::GetExtensionFromType(static_cast<ModuleType>(moduleType));
+    return Utils::GetExtensionFromType(static_cast<ModuleType>(moduleType));
 }
 
 /*
@@ -102,7 +102,7 @@ std::vector<OptionDefinitionWrapper> GetOptionDefinitionsWrapper(int moduleType)
 bool ModuleImport(std::string filename)
 {
     SetStatusType(true);
-    if (ModuleUtils::GetTypeFromFilename(filename) == ModuleType::NONE)
+    if (Utils::GetTypeFromFilename(filename) == ModuleType::NONE)
     {
         std::cerr << "The input file is not recognized as a supported module type.\n\n";
         return true;
@@ -151,7 +151,7 @@ bool ModuleConvert(std::string outputFilename, const std::vector<OptionWrapper>&
         return true; // Same type; No conversion necessary
 
     SetStatusType(true);
-    const auto moduleType = ModuleUtils::GetTypeFromFilename(outputFilename);
+    const auto moduleType = Utils::GetTypeFromFilename(outputFilename);
     if (moduleType == ModuleType::NONE)
     {
         std::cerr << "The output file is not recognized as a supported module type.\n\n";

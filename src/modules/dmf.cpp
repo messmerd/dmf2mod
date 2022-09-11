@@ -2,10 +2,9 @@
     dmf.cpp
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Implements a ModuleInterface-derived class for Deflemask's 
-    DMF files.
+    Defines all classes used for Deflemask's DMF files.
 
-    DMF file support was written according to the specs at 
+    DMF file support was written according to the specs at
     http://www.deflemask.com/DMF_SPECS.txt.
 */
 
@@ -13,7 +12,7 @@
 #include "utils/utils.h"
 #include "utils/hash.h"
 
-// For inflating .dmf files so that they can be read
+// For inflating DMF files so that they can be read
 #include <zlib.h>
 #include <zconf.h>
 
@@ -33,8 +32,8 @@ using namespace d2m;
 using namespace d2m::dmf;
 // DO NOT use any module namespace other than d2m::dmf
 
-#define DMF_FILE_VERSION_MIN 17 // DMF files as old as version 17 (0x11) are supported
-#define DMF_FILE_VERSION_MAX 26 // DMF files as new as version 26 (0x1a) are supported
+static constexpr uint8_t DMF_FILE_VERSION_MIN = 17; // DMF files as old as version 17 (0x11) are supported
+static constexpr uint8_t DMF_FILE_VERSION_MAX = 26; // DMF files as new as version 26 (0x1a) are supported
 
 // Information about all the systems Deflemask supports
 static const std::map<DMF::SystemType, System> DMFSystems =
@@ -107,7 +106,7 @@ void DMF::CleanUp()
         delete[] m_Instruments;
         m_Instruments = nullptr;
     }
-    
+
     delete[] m_WavetableSizes;
     m_WavetableSizes = nullptr;
 
@@ -121,7 +120,7 @@ void DMF::CleanUp()
         delete[] m_WavetableValues;
         m_WavetableValues = nullptr;
     }
-    
+
     if (m_PCMSamples)
     {
         for (int sample = 0; sample < m_TotalPCMSamples; sample++) 
@@ -144,7 +143,7 @@ void DMF::ImportRaw(const std::string& filename)
     if (verbose)
         std::cout << "Starting to import the DMF file...\n";
 
-    if (ModuleUtils::GetTypeFromFilename(filename) != ModuleType::DMF)
+    if (Utils::GetTypeFromFilename(filename) != ModuleType::DMF)
     {
         throw ModuleException(ModuleException::Category::Import, DMF::ImportError::UnspecifiedError, "Input file has the wrong file extension.\nPlease use a DMF file.");
     }
@@ -189,7 +188,7 @@ void DMF::ImportRaw(const std::string& filename)
             errorMsg += "       Dmf2mod needs to be updated to support this newer version.";
         else
             errorMsg += "       You can convert older DMF files to a supported version by opening them in a newer version of DefleMask and then saving them.";
-        
+
         throw ModuleException(ModuleException::Category::Import, DMF::ImportError::UnspecifiedError, errorMsg);
     }
     else if (verbose)
@@ -202,7 +201,7 @@ void DMF::ImportRaw(const std::string& filename)
     }
 
     ///////////////// SYSTEM SET
-    
+
     m_System = GetSystem(fin.ReadInt());
 
     if (verbose)
@@ -391,7 +390,7 @@ Instrument DMF::LoadInstrument(Reader& fin, DMF::SystemType systemType)
             // Volume macro
             inst.std.volEnvSize = fin.ReadInt();
             inst.std.volEnvValue = new int32_t[inst.std.volEnvSize];
-            
+
             for (int i = 0; i < inst.std.volEnvSize; i++)
             {
                 // 4 bytes, little-endian
@@ -406,7 +405,7 @@ Instrument DMF::LoadInstrument(Reader& fin, DMF::SystemType systemType)
             // Volume macro
             inst.std.volEnvSize = fin.ReadInt();
             inst.std.volEnvValue = new int32_t[inst.std.volEnvSize];
-            
+
             for (int i = 0; i < inst.std.volEnvSize; i++)
             {
                 // 4 bytes, little-endian
@@ -420,7 +419,7 @@ Instrument DMF::LoadInstrument(Reader& fin, DMF::SystemType systemType)
         // Arpeggio macro
         inst.std.arpEnvSize = fin.ReadInt();
         inst.std.arpEnvValue = new int32_t[inst.std.arpEnvSize];
-        
+
         for (int i = 0; i < inst.std.arpEnvSize; i++)
         {
             // 4 bytes, little-endian
@@ -435,7 +434,7 @@ Instrument DMF::LoadInstrument(Reader& fin, DMF::SystemType systemType)
         // Duty/Noise macro
         inst.std.dutyNoiseEnvSize = fin.ReadInt();
         inst.std.dutyNoiseEnvValue = new int32_t[inst.std.dutyNoiseEnvSize];
-        
+
         for (int i = 0; i < inst.std.dutyNoiseEnvSize; i++)
         {
             // 4 bytes, little-endian
@@ -448,7 +447,7 @@ Instrument DMF::LoadInstrument(Reader& fin, DMF::SystemType systemType)
         // Wavetable macro
         inst.std.wavetableEnvSize = fin.ReadInt();
         inst.std.wavetableEnvValue = new int32_t[inst.std.wavetableEnvSize];
-        
+
         for (int i = 0; i < inst.std.wavetableEnvSize; i++)
         {
             // 4 bytes, little-endian
@@ -475,7 +474,7 @@ Instrument DMF::LoadInstrument(Reader& fin, DMF::SystemType systemType)
             inst.std.c64ToFilter = fin.ReadInt();
             inst.std.c64VolMacroToFilterCutoffEn = fin.ReadInt();
             inst.std.c64UseFilterValuesFromInst = fin.ReadInt();
-            
+
             // Filter globals
             inst.std.c64FilterResonance = fin.ReadInt();
             inst.std.c64FilterCutoff = fin.ReadInt();
@@ -550,7 +549,7 @@ Instrument DMF::LoadInstrument(Reader& fin, DMF::SystemType systemType)
                     const uint8_t opllPreset = fin.ReadInt();
                     if (i == 0)
                         inst.fm.opllPreset = opllPreset;
-                    
+
                     inst.fm.ops[i].ksr = fin.ReadInt();
                     inst.fm.ops[i].vib = fin.ReadInt();
                     inst.fm.ops[i].ksl = fin.ReadInt();
@@ -595,7 +594,7 @@ Instrument DMF::LoadInstrument(Reader& fin, DMF::SystemType systemType)
 void DMF::LoadWavetablesData(Reader& fin)
 {
     m_TotalWavetables = fin.ReadInt();
-    
+
     m_WavetableSizes = new uint32_t[m_TotalWavetables];
     m_WavetableValues = new uint32_t*[m_TotalWavetables];
 
@@ -788,7 +787,7 @@ void DMF::GetBPM(unsigned& numerator, unsigned& denominator) const
     {
         globalTick = m_ModuleInfo.framesMode ? 60 : 50; // NTSC (60 Hz) or PAL (50 Hz)
     }
-    
+
     // Experimentally determined equation for BPM:
     numerator = 15 * globalTick;
     denominator = GetTicksPerRowPair();

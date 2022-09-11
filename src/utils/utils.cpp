@@ -18,20 +18,20 @@ using namespace d2m;
 
 std::string Utils::GetBaseNameFromFilename(const std::string& filename)
 {
-    return std::filesystem::path{filename}.stem();
+    return std::filesystem::path{filename}.stem().string();
 }
 
 std::string Utils::ReplaceFileExtension(const std::string& filename, const std::string& newFileExtension)
 {
     // newFileExtension may or may not contain a dot
-    return std::filesystem::path{filename}.replace_extension(newFileExtension);
+    return std::filesystem::path{filename}.replace_extension(newFileExtension).string();
 }
 
 std::string Utils::GetFileExtension(const std::string& filename)
 {
-    auto temp = std::filesystem::path{filename}.extension();
-    if (!temp.empty())
-        return temp.string().substr(1); // Remove "."
+    auto ext = std::filesystem::path{filename}.extension();
+    if (!ext.empty())
+        return ext.string().substr(1); // Remove "."
     return "";
 }
 
@@ -44,7 +44,7 @@ bool Utils::FileExists(const std::string& filename)
 
 ModuleType Utils::GetTypeFromFilename(const std::string& filename)
 {
-    std::string ext = Utils::GetFileExtension(filename);
+    const std::string ext = Utils::GetFileExtension(filename);
     return GetTypeFromFileExtension(ext);
 }
 

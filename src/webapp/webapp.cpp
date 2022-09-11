@@ -2,7 +2,7 @@
     webapp.cpp
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    WebAssembly backend for dmf2mod.
+    A dmf2mod wrapper for WebAssembly.
 */
 
 #include "dmf2mod.h"
@@ -47,6 +47,7 @@ int main()
 
     // Initialize global options (for web app, user won't provide them)
     GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Force).SetValue(true);
+    GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Verbose).SetValue(false);
 
     return 0;
 }
@@ -63,8 +64,8 @@ int main()
 std::vector<int> GetAvailableModulesWrapper()
 {
     std::vector<int> intVec;
-    auto enumVec = Factory<Module>::GetInitializedTypes();
-    std::transform(enumVec.begin(), enumVec.end(), intVec.begin(), [](ModuleType m){ return static_cast<int>(m); });
+    const std::vector<TypeEnum> enumVec = Factory<Module>::GetInitializedTypes();
+    std::transform(enumVec.cbegin(), enumVec.cend(), std::back_inserter(intVec), [](TypeEnum m){ return static_cast<int>(m); });
     return intVec;
 }
 

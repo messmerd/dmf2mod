@@ -13,7 +13,7 @@
 
 namespace d2m {
 
-enum class NotePitch : uint16_t
+enum class NotePitch : uint8_t
 {
     C=0,
     CS,
@@ -33,39 +33,40 @@ namespace NoteTypes
 {
     enum { EmptyType, NoteType, OffType }; // The order is important
     struct Empty {};
-    struct Note
+    struct alignas(1) Note
     {
-        NotePitch pitch;
-        uint16_t octave;
+        NotePitch pitch : 4;
+        uint8_t octave : 4;
 
-        //Note(NotePitch pitch, uint16_t octave) : pitch(pitch), octave(octave) {}
+        constexpr Note() : pitch(NotePitch::C), octave(0) {}
+        constexpr Note(NotePitch pitch, uint8_t octave) : pitch(pitch), octave(octave) {}
 
-        bool operator>(const Note& rhs) const
+        bool operator>(Note rhs) const
         {
-            return (this->octave << 4) + static_cast<uint16_t>(this->pitch) > (rhs.octave << 4) + static_cast<uint16_t>(rhs.pitch);
+            return (this->octave << 4) + static_cast<uint8_t>(this->pitch) > (rhs.octave << 4) + static_cast<uint8_t>(rhs.pitch);
         }
 
-        bool operator>=(const Note& rhs) const
+        bool operator>=(Note rhs) const
         {
-            return (this->octave << 4) + static_cast<uint16_t>(this->pitch) >= (rhs.octave << 4) + static_cast<uint16_t>(rhs.pitch);
+            return (this->octave << 4) + static_cast<uint8_t>(this->pitch) >= (rhs.octave << 4) + static_cast<uint8_t>(rhs.pitch);
         }
 
-        bool operator<(const Note& rhs) const
+        bool operator<(Note rhs) const
         {
-            return (this->octave << 4) + static_cast<uint16_t>(this->pitch) < (rhs.octave << 4) + static_cast<uint16_t>(rhs.pitch);
+            return (this->octave << 4) + static_cast<uint8_t>(this->pitch) < (rhs.octave << 4) + static_cast<uint8_t>(rhs.pitch);
         }
 
-        bool operator<=(const Note& rhs) const
+        bool operator<=(Note rhs) const
         {
-            return (this->octave << 4) + static_cast<uint16_t>(this->pitch) <= (rhs.octave << 4) + static_cast<uint16_t>(rhs.pitch);
+            return (this->octave << 4) + static_cast<uint8_t>(this->pitch) <= (rhs.octave << 4) + static_cast<uint8_t>(rhs.pitch);
         }
 
-        bool operator==(const Note& rhs) const
+        bool operator==(Note rhs) const
         {
             return this->octave == rhs.octave && this->pitch == rhs.pitch;
         }
 
-        bool operator!=(const Note& rhs) const
+        bool operator!=(Note rhs) const
         {
             return this->octave != rhs.octave || this->pitch != rhs.pitch;
         }
@@ -76,16 +77,16 @@ namespace NoteTypes
 using NoteSlot = std::variant<NoteTypes::Empty, NoteTypes::Note, NoteTypes::Off>;
 using Note = NoteTypes::Note; // For convenience
 
-inline bool NoteIsEmpty(const NoteSlot& note) { return note.index() == NoteTypes::EmptyType; }
-inline bool NoteHasPitch(const NoteSlot& note) { return note.index() == NoteTypes::NoteType; }
-inline bool NoteIsOff(const NoteSlot& note) { return note.index() == NoteTypes::OffType; }
-inline Note& GetNote(NoteSlot& note)
+inline constexpr bool NoteIsEmpty(const NoteSlot& note) { return note.index() == NoteTypes::EmptyType; }
+inline constexpr bool NoteHasPitch(const NoteSlot& note) { return note.index() == NoteTypes::NoteType; }
+inline constexpr bool NoteIsOff(const NoteSlot& note) { return note.index() == NoteTypes::OffType; }
+inline constexpr const Note& GetNote(const NoteSlot& note)
 {
     assert(NoteHasPitch(note) && "NoteSlot variant must be using the Note alternative");
     return std::get<Note>(note);
 }
 
-inline const Note& GetNote(const NoteSlot& note)
+inline constexpr Note& GetNote(NoteSlot& note)
 {
     assert(NoteHasPitch(note) && "NoteSlot variant must be using the Note alternative");
     return std::get<Note>(note);
@@ -96,7 +97,7 @@ inline int GetNoteRange(const Note& low, const Note& high)
     // Returns range in semitones. Assumes high >= low.
     // Range is inclusive on both ends.
 
-    return (high.octave - low.octave) * 12 + (static_cast<uint16_t>(high.pitch) - static_cast<uint16_t>(low.pitch)) + 1;
+    return (high.octave - low.octave) * 12 + (static_cast<uint8_t>(high.pitch) - static_cast<uint8_t>(low.pitch)) + 1;
 }
 
 } // namespace d2m

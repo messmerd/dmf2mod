@@ -293,7 +293,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
                     // Get lowest/highest notes
                     if (sampleIdLowestHighestNotesMap.count(sampleId) == 0) // 1st time
                     {
-                        sampleIdLowestHighestNotesMap[sampleId] = std::pair<Note, Note>(dmfNote, dmfNote);
+                        sampleIdLowestHighestNotesMap[sampleId] = { dmfNote, dmfNote };
                     }
                     else
                     {
@@ -1354,7 +1354,7 @@ mod_sample_id_t DMFSampleMapper::Init(dmf_sample_id_t dmfSampleId, mod_sample_id
     const Note& highestNote = dmfNoteRange.second;
 
     // Note ranges always start on a C, so get nearest C note (in downwards direction):
-    const Note lowestNoteNearestC = Note{NotePitch::C, (uint16_t)lowestNote.octave}; // DMF note
+    const Note lowestNoteNearestC = Note{NotePitch::C, lowestNote.octave}; // DMF note
 
     // Get the number of MOD samples needed
     const int range = GetNoteRange(lowestNoteNearestC, highestNote);
@@ -1370,9 +1370,9 @@ mod_sample_id_t DMFSampleMapper::Init(dmf_sample_id_t dmfSampleId, mod_sample_id
     // Initializing for 3 MOD samples is always the same:
     if (m_NumMODSamples == 3)
     {
-        m_RangeStart.push_back({NotePitch::C, (uint16_t)0});
-        m_RangeStart.push_back({NotePitch::C, (uint16_t)2});
-        m_RangeStart.push_back({NotePitch::C, (uint16_t)5});
+        m_RangeStart.push_back(Note{NotePitch::C, 0});
+        m_RangeStart.push_back(Note{NotePitch::C, 2});
+        m_RangeStart.push_back(Note{NotePitch::C, 5});
         m_ModSampleLengths[0] = 256;
         m_ModSampleLengths[1] = 64;
         m_ModSampleLengths[2] = 8;
@@ -1458,7 +1458,7 @@ mod_sample_id_t DMFSampleMapper::Init(dmf_sample_id_t dmfSampleId, mod_sample_id
     // Set Range Start and Sample Length for 2nd MOD sample (if it exists):
     if (m_NumMODSamples == 2)
     {
-        m_RangeStart.push_back({NotePitch::C, uint16_t(lowestPossibleRangeStart.octave + 3)});
+        m_RangeStart.push_back({NotePitch::C, uint8_t(lowestPossibleRangeStart.octave + 3)});
         m_ModSampleLengths[1] = rangeStartOctaveToSampleLengthMap[m_RangeStart[1].octave];
 
         // For whatever reason, wave samples need to be transposed down one octave to match their sound in Deflemask

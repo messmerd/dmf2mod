@@ -672,7 +672,7 @@ Row<DMF> DMF::LoadPatternRow(Reader& fin, uint8_t effectsColumnsCount)
     Row<DMF> row;
 
     const uint16_t tempPitch = fin.ReadInt<false, 2>();
-    uint16_t tempOctave = fin.ReadInt<false, 2>();
+    uint8_t tempOctave = fin.ReadInt<false, 2>(); // Upper byte is unused to this conversion is okay
 
     switch (tempPitch)
     {

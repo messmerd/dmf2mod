@@ -11,73 +11,110 @@
 
 #include <cstddef>
 #include <unordered_map>
+#include <set>
+#include <optional>
 
 namespace d2m {
 
+// A unique identifier for wavetables, duty cycles, samples, etc.
+using sound_index_t = size_t;
+
 template<class ModuleClass>
-class ModuleGeneratedDataDefault
+class ModuleGeneratedDataStorageDefault
 {
 protected:
-    ModuleGeneratedDataDefault() = default;
-    virtual ~ModuleGeneratedDataDefault() = default;
+    ModuleGeneratedDataStorageDefault() = default;
+    virtual ~ModuleGeneratedDataStorageDefault() = default;
+
+protected:
+
+    // All data types, wrapped with std::optional
+    using state_t = std::optional<ModuleState<ModuleClass>>;
+    using sound_index_note_extremes_t = std::optional<std::unordered_map<sound_index_t, std::pair<Note, Note>>>;
+    using channel_note_extremes_t = std::optional<std::unordered_map<channel_index_t, std::pair<Note, Note>>>;
+    using note_off_used_t = std::optional<bool>;
+    using sound_indexes_used_t = std::optional<std::set<sound_index_t>>;
+
+    // data_t is a required type alias. Must be a std::tuple of the above data types in the order that they appear in DataEnum.
+    using data_t = std::tuple<state_t, sound_index_note_extremes_t, channel_note_extremes_t, note_off_used_t, sound_indexes_used_t>;
+
+    // Stores all the generated data
+    data_t data_;
 
 public:
 
-    // A unique identifier for wavetables, duty cycles, samples, etc.
-    using sound_index_t = size_t;
+    // Required enum. Variant values must correspond to the element indexes in data_t, and in the same order.
+    enum class DataEnum : size_t
+    {
+        kState,
+        kSoundIndexNoteExtremes,
+        kChannelNoteExtremes,
+        kNoteOffUsed,
+        kSoundIndexesUsed,
+        //kDuplicateOrders,
+        kCount
+    };
 
-    const ModuleState<ModuleClass>& GetState() const { return state_; }
-    ModuleState<ModuleClass>& GetState() { return state_; }
+    // Not necessary, but could be used for potential performance improvements when calling Generate()
+    //  by only generating the data which is needed.
+    enum DataFlags : size_t
+    {
+        kFlagAll                    = 0, // 0 as a template parameter to Generate() means calculate all generated data
+        kFlagState                  = 1,
+        kFlagSoundIndexNoteExtremes = 2,
+        kFlagChannelNoteExtremes    = 4,
+        kFlagNoteOffUsed            = 8,
+        kFlagSoundIndexesUsed       = 16,
+        //kFlagDuplicateOrders        = 32,
+    };
+};
+
+
+template<class ModuleClass>
+class ModuleGeneratedDataStorage : public ModuleGeneratedDataStorageDefault<ModuleClass>
+{
+public:
+    using DataEnum = typename ModuleGeneratedDataStorageDefault<ModuleClass>::DataEnum;
+};
+
+// Implements methods for the Module's generated data storage
+template<class ModuleClass>
+class ModuleGeneratedDataMethods : public ModuleGeneratedDataStorage<ModuleClass>
+{
+public:
+    ModuleGeneratedDataMethods() = delete;
+    ModuleGeneratedDataMethods(ModuleClass const* moduleClass) : module_class_(moduleClass) {}
+
+    using storage_t = ModuleGeneratedDataStorage<ModuleClass>;
+    using storage_default_t = typename ModuleGeneratedDataMethods<ModuleClass>::ModuleGeneratedDataStorageDefault<ModuleClass>;
+    static constexpr size_t data_count_ = storage_t::kCount;
+
+    const auto& GetState() const { return std::get<storage_t::kState>(storage_t::data_); }
+    auto& GetState() { return std::get<storage_t::kState>(storage_t::data_); }
+
+    template<typename storage_default_t::DataEnum I>
+    const auto& Get() const { return std::get<I>(storage_t::data_); }
+    template<typename storage_default_t::DataEnum I>
+    auto& Get() { return std::get<I>(storage_t::data_); }
+
+    // Each Module implements their own
+    template<size_t DataFlagsT>
+    size_t Generate();
 
     inline uint32_t GetPos(uint16_t order, uint16_t row) const { return (order << 16) | row; };
     inline std::pair<order_index_t, row_index_t> GetPos(uint32_t pos) const { return { pos >> 16, pos & 0x00FF }; };
 
 private:
-    // Generated data storage
-
-    std::unordered_map<sound_index_t, std::pair<Note, Note>> sound_index_note_extremes_;
-    std::unordered_map<channel_index_t, std::pair<Note, Note>> channel_note_extremes_;
-
-    enum DataFlags : size_t
-    {
-        kSoundIndexNoteExtremes = 1,
-        kChannelNoteExtremes    = 2,
-        kNoteOffUsed            = 8,
-        kSoundIndexesUsed       = 32,
-        kDuplicateOrders        = 64,
-    };
-
-
-    /*
-     * Generated data for Module class A is intended to be used by Module classes B, C, and D
-     * which call methods on A's GeneratedData object to get the info they need for the conversion.
-     * Each type of generated data should be associated with a unique flag enum.
-     * These flag enums can be combined together by calling code to make a request for which
-     * generated data the calling code requires using the GeneratedData object's Generate method,
-     * and the GeneratedData object will return a flag enum indicating which data it was able to
-     * generate. This can be more efficient if the calling code does not need expensive data to be
-     * available. And some kinds of data can be efficiently obtained in the same big For loop.
-     * Could use if-constexpr to enable the collection of different data using the DataFlag template
-     * parameter. After the data is generated, getting it can be done with:
-     *     std::optional<DataFlagSpecificDataObject> data = Get<MyDataFlag>();
-     * If Generate was not called first (or there was an error calling it), the data associated with
-     * the data flag will be lazily calculated.
-     * 
-     * Again, a Module class's generated data will primarily be used by *other* Module classes.
-     * There is going to be generated data implemented by and calculated by class A which is only
-     * really useful to one other Module class B, but only A should have to know the details of how the
-     * information is calculated. This does feel less modular, but it the right thing to do as far as
-     * abstraction goes - which is more important. I can't be completely modular anyway, and it isn't
-     * super important - it's mainly to avoid any shotgun surgery anti-patterns.
-     */
-
-    ModuleState<ModuleClass> state_;
-
+    ModuleClass const* module_class_;
 };
 
-
+// Can specialize this, but it must also inherit from ModuleGeneratedDataMethods<ModuleClass>
 template<class ModuleClass>
-class ModuleGeneratedData : public ModuleGeneratedDataDefault<ModuleClass> {};
-
+class ModuleGeneratedData : public ModuleGeneratedDataMethods<ModuleClass>
+{
+public:
+    // Inherit constructors
+    using ModuleGeneratedDataMethods<ModuleClass>::ModuleGeneratedDataMethods;
+};
 
 } // namespace d2m

@@ -58,6 +58,15 @@ public:
     virtual ~ModuleBase() = default;
 
     /*
+     * Cast ModulePtr to std::shared_ptr<T> where T is the derived Module class
+     */
+    template<class T, std::enable_if_t<std::is_base_of_v<ModuleBase, T>, bool> = true>
+    std::shared_ptr<T> Cast() const
+    {
+        return std::static_pointer_cast<T>(shared_from_this());
+    }
+
+    /*
      * Create and import a new module given a filename. Module type is inferred from the file extension.
      * Returns pointer to the module or nullptr if a module registration error occurred.
      */
@@ -111,12 +120,6 @@ protected:
     virtual void ExportRaw(const std::string& filename) = 0;
     virtual void ConvertRaw(const ModulePtr& input) = 0;
 
-    template<class T, std::enable_if_t<std::is_base_of_v<ModuleBase, T>, bool> = true>
-    std::shared_ptr<T> Cast() const
-    {
-        return std::static_pointer_cast<T>(shared_from_this());
-    }
-
     ConversionOptionsPtr GetOptions() const { return m_Options; }
 
     Status m_Status;
@@ -128,12 +131,12 @@ private:
 
 
 // All module classes must derive from this using CRTP
-template <class Derived>
+template<class Derived>
 class ModuleInterface : public EnableFactory<Derived, ModuleBase>
 {
 protected:
 
-    ModuleInterface() = default;
+    ModuleInterface() : m_GeneratedData(std::make_shared<ModuleGeneratedData<Derived>>(static_cast<Derived const*>(this))) {}
 
 public:
 
@@ -141,7 +144,7 @@ public:
 
     inline const ModuleData<Derived>& GetData() const { return m_Data; }
     inline const ModuleGlobalData<Derived>& GetGlobalData() const { return GetData().GlobalData(); }
-    inline const ModuleGeneratedData<Derived>& GetGeneratedData() const { return m_GeneratedData; }
+    inline const std::shared_ptr<ModuleGeneratedData<Derived>>& GetGeneratedData() const { return m_GeneratedData; }
 
     std::string GetTitle() const override { return GetGlobalData().title; }
     std::string GetAuthor() const override { return GetGlobalData().author; }
@@ -150,12 +153,16 @@ protected:
 
     inline ModuleData<Derived>& GetData() { return m_Data; }
     inline ModuleGlobalData<Derived>& GetGlobalData() { return GetData().GlobalData(); }
-    inline ModuleGeneratedData<Derived>& GetGeneratedData() { return m_GeneratedData; }
+    inline std::shared_ptr<ModuleGeneratedData<Derived>>& GetGeneratedData() { return m_GeneratedData; }
 
 private:
 
-    ModuleData<Derived> m_Data; // Song information for a particular module file
-    ModuleGeneratedData<Derived> m_GeneratedData; // Information about a module file which must be calculated
+    // Song information for a particular module file
+    ModuleData<Derived> m_Data;
+
+    // Information about a module file which must be calculated.
+    // Cannot be stored directly because other Modules need to modify its contents without modifying the Module
+    std::shared_ptr<ModuleGeneratedData<Derived>> m_GeneratedData;
 };
 
 } // namespace d2m

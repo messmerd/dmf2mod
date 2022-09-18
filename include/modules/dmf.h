@@ -31,6 +31,8 @@ namespace dmf {
         int16_t code;
         int16_t value;
     };
+
+    size_t GenerateDataImpl(DMF const* dmf, ModuleGeneratedDataMethods<DMF>* data);
 }
 
 template<>
@@ -93,6 +95,16 @@ private:
     tempo_t tempo_;
 };
 
+template<> template<size_t DataFlagsT>
+size_t ModuleGeneratedDataMethods<DMF>::Generate()
+{
+    /*
+     * Currently there's only one method implemented which calculates all generated data.
+     * The DataFlagsT parameter is ignored, but with some if-constexpr's, it could be used to
+     * call methods that generate only the data which is requested.
+     */
+    return dmf::GenerateDataImpl(module_class_, this);
+}
 
 ///////////////////////////////////////////////////////////
 // dmf namespace

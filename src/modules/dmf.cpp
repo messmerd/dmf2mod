@@ -839,3 +839,8 @@ int DMF::GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const NoteSlot& n
     constexpr double lowestPeriod = GetPeriod({NotePitch::C, 2}); // C-2
     return static_cast<int>(std::max(std::ceil((lowestPeriod - GetPeriod(GetNote(note))) / ((ticksPerRowPair / 2.0) * portDownParam)), 1.0));
 }
+
+size_t dmf::GenerateDataImpl(DMF const* dmf, ModuleGeneratedDataMethods<DMF>* data)
+{
+    return 0; // Not impl yet
+}

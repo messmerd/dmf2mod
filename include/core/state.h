@@ -90,11 +90,10 @@ using state_data_t = typename state_vec_elem_t<I, StateT>::second_type;
 
 } // namespace detail
 
-class StateReaderBase {};
 
-// Allows easy, efficient reading/traversal of GlobalState
+// Allows easy, efficient reading/traversal of GlobalState/ChannelState
 template<class StateT>
-class StateReader : public StateReaderBase
+class StateReader
 {
 public:
     StateReader(StateT const* state) : state_(state), cur_pos_(0), cur_indexes_{} {}
@@ -166,10 +165,8 @@ template<class T> using ChannelStateReader = StateReader<ChannelState<T>>;
 // MODULE STATE
 ///////////////////////////////////////////////////////////
 
-class ModuleStateBase {};
-
 template<class ModuleClass>
-class ModuleState : public ModuleStateBase
+class ModuleState
 {
 public:
     void Initialize(unsigned numChannels)
@@ -181,7 +178,7 @@ public:
     std::shared_ptr<GlobalStateReader<ModuleClass>> GetGlobalReader() const { return std::make_shared<GlobalStateReader<ModuleClass>>(&global_state_); }
 
     // Creates and returns a ChannelStateReader for the given channel. The reader is valid only for as long as ModuleState is valid.
-    std::shared_ptr<ChannelStateReader<ModuleClass>> GetChannelReader(unsigned channel) const { return std::make_shared<ChannelStateReader<ModuleClass>>(&channel_states_[channel]); }
+    std::shared_ptr<ChannelStateReader<ModuleClass>> GetChannelReader(channel_index_t channel) const { return std::make_shared<ChannelStateReader<ModuleClass>>(&channel_states_[channel]); }
 
 private:
     GlobalState<ModuleClass> global_state_;

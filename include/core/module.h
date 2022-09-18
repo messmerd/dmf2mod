@@ -12,6 +12,7 @@
 #include "conversion_options.h"
 #include "status.h"
 #include "data.h"
+#include "generated_data.h"
 #include "note.h"
 #include "global_options.h"
 
@@ -140,6 +141,7 @@ public:
 
     inline const ModuleData<Derived>& GetData() const { return m_Data; }
     inline const ModuleGlobalData<Derived>& GetGlobalData() const { return GetData().GlobalData(); }
+    inline const ModuleGeneratedData<Derived>& GetGeneratedData() const { return m_GeneratedData; }
 
     std::string GetTitle() const override { return GetGlobalData().title; }
     std::string GetAuthor() const override { return GetGlobalData().author; }
@@ -148,10 +150,12 @@ protected:
 
     inline ModuleData<Derived>& GetData() { return m_Data; }
     inline ModuleGlobalData<Derived>& GetGlobalData() { return GetData().GlobalData(); }
+    inline ModuleGeneratedData<Derived>& GetGeneratedData() { return m_GeneratedData; }
 
 private:
 
     ModuleData<Derived> m_Data; // Song information for a particular module file
+    ModuleGeneratedData<Derived> m_GeneratedData; // Information about a module file which must be calculated
 };
 
 } // namespace d2m

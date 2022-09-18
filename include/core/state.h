@@ -1,8 +1,8 @@
 /*
-    states.h
+    state.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Defines GlobalState, ChannelState, and StateReader
+    Defines GlobalState, ChannelState, StateReader, and ModuleState
 */
 
 #pragma once
@@ -12,6 +12,7 @@
 #include <vector>
 #include <tuple>
 #include <array>
+#include <memory>
 
 namespace d2m {
 
@@ -36,7 +37,7 @@ struct TempoNode
 ///////////////////////////////////////////////////////////
 
 // Global data that all modules are expected to implement. Specialize this to add supported global state data.
-template<ModuleType eT>
+template<class ModuleClass>
 class GlobalState
 {
     enum GlobalStateEnum
@@ -50,7 +51,7 @@ class GlobalState
 ///////////////////////////////////////////////////////////
 
 // Per-channel data that all modules are expected to implement. Specialize this to add supported per-channel state data.
-template<ModuleType eT>
+template<class ModuleClass>
 class ChannelState
 {
     enum ChannelStateEnum
@@ -158,50 +159,33 @@ private:
 };
 
 // Type aliases for convenience
-template<ModuleType eT> using GlobalStateReader = StateReader<GlobalState<eT>>;
-template<ModuleType eT> using ChannelStateReader = StateReader<ChannelState<eT>>;
+template<class T> using GlobalStateReader = StateReader<GlobalState<T>>;
+template<class T> using ChannelStateReader = StateReader<ChannelState<T>>;
 
+///////////////////////////////////////////////////////////
+// MODULE STATE
+///////////////////////////////////////////////////////////
 
-// Temporarily putting an implementation here for testing purposes:
+class ModuleStateBase {};
 
-template<>
-class GlobalState<ModuleType::DMF>
+template<class ModuleClass>
+class ModuleState : public ModuleStateBase
 {
 public:
-    enum GlobalStateEnum
+    void Initialize(unsigned numChannels)
     {
-        kTempo,
-        kCount // Required
-    };
-
-    using tempo_t = std::vector<std::pair<global_pos_t, TempoNode>>;
-
-    // A data_t tuple is required for every GlobalState/ChannelState specialization
-    // element indexes coorespond to GlobalStateEnum variants
-    using data_t = std::tuple<tempo_t>;
-
-    // Returns a mutable reference to state data at index I
-    template<size_t I>
-    detail::state_vec_t<I, GlobalState<ModuleType::DMF>>& GetMut()
-    {
-        if constexpr (I == kTempo)
-            return tempo_;
-        throw std::out_of_range{""};
+        channel_states_.resize(numChannels);
     }
 
-    // Returns an immutable reference to state data at index I
-    template<size_t I>
-    const detail::state_vec_t<I, GlobalState<ModuleType::DMF>>& Get() const
-    {
-        if constexpr (I == kTempo)
-            return tempo_;
-        throw std::out_of_range{""};
-    }
+    // Creates and returns a GlobalStateReader. The reader is valid only for as long as ModuleState is valid.
+    std::shared_ptr<GlobalStateReader<ModuleClass>> GetGlobalReader() const { return std::make_shared<GlobalStateReader<ModuleClass>>(&global_state_); }
+
+    // Creates and returns a ChannelStateReader for the given channel. The reader is valid only for as long as ModuleState is valid.
+    std::shared_ptr<ChannelStateReader<ModuleClass>> GetChannelReader(unsigned channel) const { return std::make_shared<ChannelStateReader<ModuleClass>>(&channel_states_[channel]); }
 
 private:
-
-    tempo_t tempo_;
+    GlobalState<ModuleClass> global_state_;
+    std::vector<ChannelState<ModuleClass>> channel_states_;
 };
-
 
 } // namespace d2m

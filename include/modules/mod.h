@@ -23,7 +23,7 @@ namespace d2m {
 class MOD;
 
 template<>
-struct ModuleGlobalData<MOD> : public ModuleGlobalDataGeneric<DataStorageType::ORC>
+struct ModuleGlobalData<MOD> : public ModuleGlobalDataDefault<DataStorageType::ORC>
 {
     // In the future, we'll be able to detect when a MOD module
     // was created with dmf2mod, which will help when converting
@@ -167,7 +167,7 @@ using PriorityEffectsMap = std::multimap<mod::EffectPriority, mod::Effect>;
 
 // The current square wave duty cycle, note volume, and other information that the 
 //      tracker stores for each channel while playing a tracker file.
-struct ChannelState
+struct ChannelStateOld
 {
     enum PORTDIR
     {
@@ -201,8 +201,8 @@ struct State
         unsigned patternRow; // The current pattern row in DMF?
     } global;
 
-    ChannelState channel[4];
-    ChannelState channelCopy[4];
+    ChannelStateOld channel[4];
+    ChannelStateOld channelCopy[4];
 
     Row<MOD> channelRows[4];
 
@@ -238,7 +238,7 @@ struct State
             channel[i].noteRange = DMFSampleMapper::NoteRange::First; // Which MOD sample note range is currently being used
             channel[i].persistentEffects = {};
             channel[i].rowsUntilPortAutoOff = -1; // -1 = port not on; 0 = need to turn port off; >0 = rows until port auto off
-            channel[i].portDirection = ChannelState::PORT_UP;
+            channel[i].portDirection = ChannelStateOld::PORT_UP;
             channel[i].portParam = 0;
             channel[i].currentNote = {};
 

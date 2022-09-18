@@ -30,7 +30,7 @@ using MODOptionEnum = MODConversionOptions::OptionEnum;
 
 static std::vector<int8_t> GenerateSquareWaveSample(unsigned dutyCycle, unsigned length);
 static std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned length);
-static int16_t GetNewDMFVolume(int16_t dmfRowVol, const ChannelState& state);
+static int16_t GetNewDMFVolume(int16_t dmfRowVol, const ChannelStateOld& state);
 
 static std::string GetWarningMessage(MOD::ConvertWarning warning, const std::string& info = "");
 
@@ -215,7 +215,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
             {
                 state.global.patternRow = patRow;
 
-                ChannelState& chanState = state.channel[chan];
+                ChannelStateOld& chanState = state.channel[chan];
 
                 const auto& chanRow = dmf.GetData().GetRow(chan, patMatRow, patRow);
 
@@ -686,7 +686,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const Row<DMF>& row, State& state)
             else if (NoteHasPitch(row.note))
             {
                 // Reset the time until port effects automatically turn off
-                if (channelState.portDirection == ChannelState::PORT_UP)
+                if (channelState.portDirection == ChannelStateOld::PORT_UP)
                     channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortUpAutoOff(state.global.ticksPerRowPair, row.note, channelState.portParam);
                 else
                     channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortDownAutoOff(state.global.ticksPerRowPair, row.note, channelState.portParam);
@@ -729,7 +729,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const Row<DMF>& row, State& state)
                 persistentEffects.emplace(EffectPriorityPortUp, Effect{EffectCode::PortUp, (uint16_t)dmfEffect.value});
                 if (channelState.rowsUntilPortAutoOff == -1)
                     channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortUpAutoOff(state.global.ticksPerRowPair, NoteHasPitch(row.note) ? row.note : channelState.currentNote, dmfEffect.value);
-                channelState.portDirection = ChannelState::PORT_UP;
+                channelState.portDirection = ChannelStateOld::PORT_UP;
                 channelState.portParam = dmfEffect.value;
                 break;
             }
@@ -747,7 +747,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const Row<DMF>& row, State& state)
                 persistentEffects.emplace(EffectPriorityPortDown, Effect{EffectCode::PortDown, (uint16_t)dmfEffect.value});
                 if (channelState.rowsUntilPortAutoOff == -1)
                     channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortDownAutoOff(state.global.ticksPerRowPair, NoteHasPitch(row.note) ? row.note : channelState.currentNote, dmfEffect.value);
-                channelState.portDirection = ChannelState::PORT_DOWN;
+                channelState.portDirection = ChannelStateOld::PORT_DOWN;
                 channelState.portParam = dmfEffect.value;
                 break;
             }
@@ -853,7 +853,7 @@ void MOD::DMFUpdateStatePre(const DMF& dmf, State& state, const PriorityEffectsM
 {
     // This method updates Structure and Sample Change state info.
 
-    ChannelState& chanState = state.channel[state.global.channel];
+    ChannelStateOld& chanState = state.channel[state.global.channel];
 
     // Update structure-related state info
 
@@ -922,7 +922,7 @@ void MOD::DMFUpdateStatePre(const DMF& dmf, State& state, const PriorityEffectsM
     }
 }
 
-static inline int16_t GetNewDMFVolume(int16_t dmfRowVol, const ChannelState& state)
+static inline int16_t GetNewDMFVolume(int16_t dmfRowVol, const ChannelStateOld& state)
 {
     if (state.channel != dmf::GameBoyChannel::WAVE)
         return dmfRowVol == dmf::DMFNoVolume ? state.volume : dmfRowVol;
@@ -947,7 +947,7 @@ static inline int16_t GetNewDMFVolume(int16_t dmfRowVol, const ChannelState& sta
 
 void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const Row<DMF>& row, PriorityEffectsMap& modEffects)
 {
-    ChannelState& chanState = state.channel[state.global.channel];
+    ChannelStateOld& chanState = state.channel[state.global.channel];
 
     // Determine what the volume should be for this channel
     const int16_t newChanVol = GetNewDMFVolume(row.volume, chanState);
@@ -1041,7 +1041,7 @@ Note MOD::DMFConvertNote(State& state, const Row<DMF>& row, const MOD::SampleMap
     if (state.global.channel == dmf::GameBoyChannel::NOISE)
         return modNote;
 
-    ChannelState& chanState = state.channel[state.global.channel];
+    ChannelStateOld& chanState = state.channel[state.global.channel];
 
     // Convert note - Note cut effect // TODO: Move this to UpdateStatePre()?
     auto sampleChangeEffects = modEffects.equal_range(EffectPrioritySampleChange);

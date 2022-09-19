@@ -843,7 +843,129 @@ int DMF::GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const NoteSlot& n
     return static_cast<int>(std::max(std::ceil((lowestPeriod - GetPeriod(GetNote(note))) / ((ticksPerRowPair / 2.0) * portDownParam)), 1.0));
 }
 
-size_t dmf::GenerateDataImpl(DMF const* dmf, ModuleGeneratedDataMethods<DMF>* data)
+size_t dmf::GenerateDataImpl(DMF const* dmf, ModuleGeneratedDataMethods<DMF>* genData)
 {
-    return 0; // Not impl yet
+    if (!dmf || !genData)
+        return 0;
+
+    // Currently can only generate data for the Game Boy system
+    if (dmf->GetSystem().type != System::Type::GameBoy)
+        return 0;
+
+    genData->GetState() = ModuleState<DMF>{}; // Give generated data a state object
+    auto& stateData = genData->GetState().value();
+    stateData.Initialize(dmf->GetSystem().channels);
+
+    auto globalState = stateData.GetGlobalReaderWriter();
+    //using state_data_t = GlobalStateReaderWriter<DMF>::state_data_t;
+
+    const auto& data = dmf->GetData();
+    for (channel_index_t channel = 0; channel < data.GetNumChannels(); ++channel)
+    {
+        auto channelState = stateData.GetChannelReaderWriter(channel);
+        for (order_index_t order = 0; order < data.GetNumOrders(); ++order)
+        {
+            for (row_index_t row = 0; row < data.GetNumRows(); ++row)
+            {
+                const auto& rowData = data.GetRow(channel, order, row);
+
+                /*
+
+                // If just arrived at jump destination:
+                if (static_cast<int>(dmfOrder) == state.global.jumpDestination && row == 0 && state.global.suspended)
+                {
+                    // Restore state copies
+                    state.Restore();
+                }
+
+                PriorityEffectsMap modEffects;
+                //mod_sample_id_t modSampleId = 0;
+                //uint16_t period = 0;
+
+                if (channel == static_cast<channel_index_t>(dmf::GameBoyChannel::NOISE))
+                {
+                    modEffects = DMFConvertEffects_NoiseChannel(chanRow);
+                    DMFUpdateStatePre(dmf, state, modEffects);
+                    continue;
+                }
+
+                modEffects = DMFConvertEffects(chanRow, state);
+                DMFUpdateStatePre(dmf, state, modEffects);
+                DMFGetAdditionalEffects(dmf, state, chanRow, modEffects);
+
+                //DMFConvertNote(state, chanRow, sampleMap, modEffects, modSampleId, period);
+
+                // TODO: More state-related stuff could be extracted from DMFConvertNote and put into separate 
+                //  method so that I don't have to copy code from it to put here.
+
+                // Convert note - Note cut effect
+                auto sampleChangeEffects = modEffects.equal_range(EffectPrioritySampleChange);
+                if (sampleChangeEffects.first != sampleChangeEffects.second) // If sample change occurred (duty cycle, wave, or note cut effect)
+                {
+                    for (auto& iter = sampleChangeEffects.first; iter != sampleChangeEffects.second; )
+                    {
+                        Effect& modEffect = iter->second;
+                        if (modEffect.effect == EffectCode::CutSample && modEffect.value == 0) // Note cut
+                        {
+                            // Silent sample is needed
+                            if (sampleMap.count(-1) == 0)
+                                sampleMap[-1] = {};
+
+                            chanState.notePlaying = false;
+                            chanState.currentNote = {};
+                            iter = modEffects.erase(iter); // Consume the effect
+                        }
+                        else
+                        {
+                            // Only increment if an element wasn't erased
+                            ++iter;
+                        }
+                    }
+                }
+
+                // Convert note - Note OFF
+                if (NoteIsOff(chanRow.note)) // Note OFF. Use silent sample and handle effects.
+                {
+                    chanState.notePlaying = false;
+                    chanState.currentNote = NoteTypes::Off{};
+                }
+
+                // A note on the SQ1, SQ2, or WAVE channels:
+                if (NoteHasPitch(chanRow.note) && chan != dmf::GameBoyChannel::NOISE)
+                {
+                    const Note& dmfNote = GetNote(chanRow.note);
+                    chanState.notePlaying = true;
+                    chanState.currentNote = chanRow.note;
+
+                    mod_sample_id_t sampleId = chan == dmf::GameBoyChannel::WAVE ? chanState.wavetable + 4 : chanState.dutyCycle;
+
+                    // Mark this square wave or wavetable as used
+                    sampleMap[sampleId] = {};
+
+                    // Get lowest/highest notes
+                    if (sampleIdLowestHighestNotesMap.count(sampleId) == 0) // 1st time
+                    {
+                        sampleIdLowestHighestNotesMap[sampleId] = { dmfNote, dmfNote };
+                    }
+                    else
+                    {
+                        auto& notePair = sampleIdLowestHighestNotesMap[sampleId];
+                        if (dmfNote > notePair.second)
+                        {
+                            // Found a new highest note
+                            notePair.second = dmfNote;
+                        }
+                        if (dmfNote < notePair.first)
+                        {
+                            // Found a new lowest note
+                            notePair.first = dmfNote;
+                        }
+                    }
+                }
+                */
+            }
+        }
+    }
+
+    return 0;
 }

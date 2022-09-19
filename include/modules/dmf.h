@@ -32,7 +32,7 @@ namespace dmf {
         int16_t value;
     };
 
-    size_t GenerateDataImpl(DMF const* dmf, ModuleGeneratedDataMethods<DMF>* data);
+    size_t GenerateDataImpl(DMF const* dmf, ModuleGeneratedDataMethods<DMF>* genData);
 }
 
 template<>
@@ -54,45 +54,6 @@ template<>
 struct PatternMetadata<DMF>
 {
     std::string name;
-};
-
-template<>
-class GlobalState<DMF>
-{
-public:
-    enum GlobalStateEnum
-    {
-        kTempo,
-        kCount // Required
-    };
-
-    using tempo_t = std::vector<std::pair<global_pos_t, TempoNode>>;
-
-    // A data_t tuple is required for every GlobalState/ChannelState specialization
-    // element indexes coorespond to GlobalStateEnum variants
-    using data_t = std::tuple<tempo_t>;
-
-    // Returns a mutable reference to state data at index I
-    template<size_t I>
-    detail::state_vec_t<I, GlobalState<DMF>>& GetMut()
-    {
-        if constexpr (I == kTempo)
-            return tempo_;
-        throw std::out_of_range{""};
-    }
-
-    // Returns an immutable reference to state data at index I
-    template<size_t I>
-    const detail::state_vec_t<I, GlobalState<DMF>>& Get() const
-    {
-        if constexpr (I == kTempo)
-            return tempo_;
-        throw std::out_of_range{""};
-    }
-
-private:
-
-    tempo_t tempo_;
 };
 
 template<> template<size_t DataFlagsT>

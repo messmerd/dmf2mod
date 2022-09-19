@@ -16,9 +16,6 @@
 
 namespace d2m {
 
-// A unique identifier for wavetables, duty cycles, samples, etc.
-using sound_index_t = size_t;
-
 template<class ModuleClass>
 class ModuleGeneratedDataStorageDefault
 {
@@ -28,7 +25,7 @@ protected:
 
 protected:
 
-    // All data types, wrapped with std::optional
+    // All data types, wrapped with std::optional (?)
     using state_t = std::optional<ModuleState<ModuleClass>>;
     using sound_index_note_extremes_t = std::optional<std::unordered_map<sound_index_t, std::pair<Note, Note>>>;
     using channel_note_extremes_t = std::optional<std::unordered_map<channel_index_t, std::pair<Note, Note>>>;
@@ -88,20 +85,17 @@ public:
     using storage_t = ModuleGeneratedDataStorage<ModuleClass>;
     static constexpr size_t data_count_ = static_cast<size_t>(storage_t::DataEnum::kCount);
 
-    const auto& GetState() const { return std::get<storage_t::DataEnum::kState>(storage_t::data_); }
-    auto& GetState() { return std::get<storage_t::DataEnum::kState>(storage_t::data_); }
+    const std::optional<ModuleState<ModuleClass>>& GetState() const { return std::get<(size_t)storage_t::DataEnum::kState>(storage_t::data_); }
+    std::optional<ModuleState<ModuleClass>>& GetState() { return std::get<(size_t)storage_t::DataEnum::kState>(storage_t::data_); }
 
     template<typename storage_t::DataEnum I>
-    const auto& Get() const { return std::get<I>(storage_t::data_); }
+    const auto& Get() const { return std::get<(size_t)I>(storage_t::data_); }
     template<typename storage_t::DataEnum I>
-    auto& Get() { return std::get<I>(storage_t::data_); }
+    auto& Get() { return std::get<(size_t)I>(storage_t::data_); }
 
     // Each Module implements their own
     template<size_t DataFlagsT>
     size_t Generate();
-
-    inline uint32_t GetPos(uint16_t order, uint16_t row) const { return (order << 16) | row; };
-    inline std::pair<order_index_t, row_index_t> GetPos(uint32_t pos) const { return { pos >> 16, pos & 0x00FF }; };
 
 private:
     ModuleClass const* module_class_;

@@ -77,7 +77,7 @@ public:
     using DataEnum = typename ModuleGeneratedDataStorageDefault<ModuleClass>::DataEnum;
 };
 
-// Implements methods for the Module's generated data storage
+// Implements methods for the Module's generated data storage - should not be specialized
 template<class ModuleClass>
 class ModuleGeneratedDataMethods : public ModuleGeneratedDataStorage<ModuleClass>
 {
@@ -86,15 +86,14 @@ public:
     ModuleGeneratedDataMethods(ModuleClass const* moduleClass) : module_class_(moduleClass) {}
 
     using storage_t = ModuleGeneratedDataStorage<ModuleClass>;
-    using storage_default_t = typename ModuleGeneratedDataMethods<ModuleClass>::ModuleGeneratedDataStorageDefault<ModuleClass>;
-    static constexpr size_t data_count_ = storage_t::kCount;
+    static constexpr size_t data_count_ = storage_t::DataEnum::kCount;
 
-    const auto& GetState() const { return std::get<storage_t::kState>(storage_t::data_); }
-    auto& GetState() { return std::get<storage_t::kState>(storage_t::data_); }
+    const auto& GetState() const { return std::get<storage_t::DataEnum::kState>(storage_t::data_); }
+    auto& GetState() { return std::get<storage_t::DataEnum::kState>(storage_t::data_); }
 
-    template<typename storage_default_t::DataEnum I>
+    template<typename storage_t::DataEnum I>
     const auto& Get() const { return std::get<I>(storage_t::data_); }
-    template<typename storage_default_t::DataEnum I>
+    template<typename storage_t::DataEnum I>
     auto& Get() { return std::get<I>(storage_t::data_); }
 
     // Each Module implements their own

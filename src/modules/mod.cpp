@@ -1714,15 +1714,17 @@ void MOD::ExportSampleInfo(std::ofstream& fout) const
 
 void MOD::ExportModuleInfo(std::ofstream& fout) const
 {
-    fout.put(GetData().GetNumOrders());   // Song length in patterns (not total number of patterns) 
-    fout.put(127);                        // 0x7F - Useless byte that has to be here
+    const uint8_t numOrders = static_cast<uint8_t>(GetData().GetNumOrders());
+
+    fout.put(numOrders); // Song length in patterns (not total number of patterns)
+    fout.put(127);       // 0x7F - Useless byte that has to be here
 
     // Pattern matrix (Each ProTracker pattern number is the same as its pattern matrix row number)
-    for (uint8_t patternId : GetData().PatternMatrixRef())
+    for (pattern_index_t patternId : GetData().PatternMatrixRef())
     {
-        fout.put(patternId);
+        fout.put(static_cast<uint8_t>(patternId));
     }
-    for (uint8_t i = GetData().GetNumOrders(); i < 128; ++i)
+    for (uint8_t i = numOrders; i < 128; ++i)
     {
         fout.put(0);
     }

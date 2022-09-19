@@ -86,7 +86,7 @@ public:
     ModuleGeneratedDataMethods(ModuleClass const* moduleClass) : module_class_(moduleClass) {}
 
     using storage_t = ModuleGeneratedDataStorage<ModuleClass>;
-    static constexpr size_t data_count_ = storage_t::DataEnum::kCount;
+    static constexpr size_t data_count_ = static_cast<size_t>(storage_t::DataEnum::kCount);
 
     const auto& GetState() const { return std::get<storage_t::DataEnum::kState>(storage_t::data_); }
     auto& GetState() { return std::get<storage_t::DataEnum::kState>(storage_t::data_); }

@@ -208,9 +208,9 @@ namespace detail
         using PatternMetadataType = PatternMetadata<ModuleClass>;
         using PatternMetadataStorageType = std::vector<std::vector<PatternMetadataType>>; // [channel][pattern id]
 
-        inline uint8_t GetPatternId(channel_index_t channel, order_index_t order) const { return m_PatternMatrix[channel][order]; }
+        inline pattern_index_t GetPatternId(channel_index_t channel, order_index_t order) const { return m_PatternMatrix[channel][order]; }
         inline void SetPatternId(channel_index_t channel, order_index_t order, pattern_index_t patternId) { m_PatternMatrix[channel][order] = patternId; }
-        inline uint8_t GetNumPatterns(channel_index_t channel) const { return m_NumPatterns[channel]; }
+        inline pattern_index_t GetNumPatterns(channel_index_t channel) const { return m_NumPatterns[channel]; }
         inline void SetNumPatterns(channel_index_t channel, pattern_index_t numPatterns) { m_NumPatterns[channel] = numPatterns; }
         inline PatternType GetPattern(channel_index_t channel, order_index_t order) const { return m_Patterns[channel][GetPatternId(channel, order)]; }
         inline void SetPattern(channel_index_t channel, order_index_t order, PatternType&& pattern) { m_Patterns[channel][GetPatternId(channel, order)] = std::move(pattern); } // TODO: Deep copy?
@@ -224,7 +224,7 @@ namespace detail
         inline void SetPatternMetadata(channel_index_t channel, pattern_index_t patternId, const PatternMetadataType& patternMetadata) { m_PatternMetadata[channel][patternId] = patternMetadata; }
 
     protected:
-        PatternMatrixType m_PatternMatrix{};  // Stores patterns IDs for each channel and order in the pattern matrix
+        PatternMatrixType m_PatternMatrix{}; // Stores patterns IDs for each channel and order in the pattern matrix
         NumPatternsType m_NumPatterns{}; // Patterns per channel
         PatternStorageType m_Patterns{}; // [channel][pattern id]
         PatternMetadataStorageType m_PatternMetadata{}; // [channel][pattern id]
@@ -308,7 +308,7 @@ namespace detail
         inline void SetPatternMetadata(pattern_index_t patternId, const PatternMetadataType& patternMetadata) { m_PatternMetadata[patternId] = patternMetadata; }
 
     protected:
-        PatternMatrixType m_PatternMatrix{};  // Stores patterns IDs for each order in the pattern matrix
+        PatternMatrixType m_PatternMatrix{}; // Stores patterns IDs for each order in the pattern matrix
         NumPatternsType m_NumPatterns{}; // Number of patterns
         PatternStorageType m_Patterns{}; // [pattern id]
         PatternMetadataStorageType m_PatternMetadata{}; // [pattern id]

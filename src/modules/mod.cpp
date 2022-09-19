@@ -95,7 +95,7 @@ void MOD::ConvertFromDMF(const DMF& dmf)
 
     const auto& dmfData = dmf.GetData();
     auto& modData = GetData();
-    const unsigned numOrders = dmfData.GetNumOrders() + (unsigned)m_UsingSetupPattern;
+    const order_index_t numOrders = dmfData.GetNumOrders() + (order_index_t)m_UsingSetupPattern;
     if (numOrders > 64) // numOrders is 1 more than it actually is
     {
         throw MODException(ModuleException::Category::Convert, MOD::ConvertError::TooManyPatternMatrixRows);
@@ -106,7 +106,7 @@ void MOD::ConvertFromDMF(const DMF& dmf)
         throw MODException(ModuleException::Category::Convert, MOD::ConvertError::Over64RowPattern);
     }
 
-    unsigned numChannels = dmfData.GetNumChannels();
+    channel_index_t numChannels = dmfData.GetNumChannels();
     if (numChannels != 4)
     {
         throw ModuleException(ModuleException::Category::Convert, MOD::ConvertError::WrongChannelCount, "Wrong number of channels. There should be exactly 4.");
@@ -187,7 +187,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
     //   Keep a copy of the main state for each channel, and once it reaches the 
     //   jump destination, overwrite the current state with the copied state.
 
-    const dmf::ModuleInfo& moduleInfo = dmf.GetModuleInfo();
+    const auto& dmfData = dmf.GetData();
 
     // Assume that the Silent sample is always needed
     //  This is the easiest way to do things at the moment because a Note OFF may need to
@@ -201,26 +201,26 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
     // Most of the following nested for loop is copied from the export pattern data loop in DMFConvertPatterns.
     // I didn't want to do this, but I think having two of the same loop is the only simple way.
     // Loop through SQ1, SQ2, and WAVE channels:
-    for (int chan = static_cast<int>(dmf::GameBoyChannel::SQW1); chan <= static_cast<int>(dmf::GameBoyChannel::WAVE); chan++)
+    for (channel_index_t chan = static_cast<channel_index_t>(dmf::GameBoyChannel::SQW1); chan <= static_cast<channel_index_t>(dmf::GameBoyChannel::WAVE); chan++)
     {
         state.global.channel = chan;
 
         // Loop through Deflemask patterns
-        for (int patMatRow = 0; patMatRow < moduleInfo.totalRowsInPatternMatrix; patMatRow++)
+        for (order_index_t dmfOrder = 0; dmfOrder < dmfData.GetNumOrders(); dmfOrder++)
         {
-            state.global.order = patMatRow;
+            state.global.order = dmfOrder;
 
             // Row within pattern
-            for (unsigned patRow = 0; patRow < moduleInfo.totalRowsPerPattern; patRow++)
+            for (row_index_t dmfRow = 0; dmfRow < dmfData.GetNumRows(); dmfRow++)
             {
-                state.global.patternRow = patRow;
+                state.global.patternRow = dmfRow;
 
                 ChannelStateOld& chanState = state.channel[chan];
 
-                const auto& chanRow = dmf.GetData().GetRow(chan, patMatRow, patRow);
+                const auto& chanRow = dmf.GetData().GetRow(chan, dmfOrder, dmfRow);
 
                 // If just arrived at jump destination:
-                if (patMatRow == state.global.jumpDestination && patRow == 0 && state.global.suspended)
+                if (static_cast<int>(dmfOrder) == state.global.jumpDestination && dmfRow == 0 && state.global.suspended)
                 {
                     // Restore state copies
                     state.Restore();
@@ -230,7 +230,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
                 //mod_sample_id_t modSampleId = 0;
                 //uint16_t period = 0;
 
-                if (chan == static_cast<int>(dmf::GameBoyChannel::NOISE))
+                if (chan == static_cast<channel_index_t>(dmf::GameBoyChannel::NOISE))
                 {
                     modEffects = DMFConvertEffects_NoiseChannel(chanRow);
                     DMFUpdateStatePre(dmf, state, modEffects);
@@ -565,41 +565,39 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
     //   Keep a copy of the main state for each channel, and once it reaches the 
     //   jump destination, overwrite the current state with the copied state.
 
-    const int dmfTotalRowsInPatternMatrix = dmf.GetModuleInfo().totalRowsInPatternMatrix;
-    const unsigned dmfTotalRowsPerPattern = dmf.GetModuleInfo().totalRowsPerPattern;
+    const order_index_t dmfNumOrders = dmf.GetData().GetNumOrders();
+    const row_index_t dmfNumRows = dmf.GetData().GetNumRows();
 
     // Loop through ProTracker pattern matrix rows (corresponds to DMF pattern numbers):
-    for (int patMatRow = 0; patMatRow < dmfTotalRowsInPatternMatrix; patMatRow++)
+    for (order_index_t dmfOrder = 0; dmfOrder < dmfNumOrders; dmfOrder++)
     {
-        state.global.order = patMatRow;
-
-        // patMatRow is in DMF pattern matrix rows, not MOD
+        state.global.order = dmfOrder;
 
         // Loop through rows in a pattern:
-        for (unsigned patRow = 0; patRow < dmfTotalRowsPerPattern; patRow++)
+        for (row_index_t dmfRow = 0; dmfRow < dmfNumRows; dmfRow++)
         {
-            state.global.patternRow = patRow;
+            state.global.patternRow = dmfRow;
             state.global.channelIndependentEffect = {EffectCode::NoEffectCode, EffectCode::NoEffectVal};
 
             // Use Pattern Break effect to allow for patterns that are less than 64 rows
-            if (dmfTotalRowsPerPattern < 64 && patRow + 1 == dmfTotalRowsPerPattern /*&& !stateSuspended*/)
+            if (dmfNumRows < 64 && dmfRow + 1 == dmfNumRows /*&& !stateSuspended*/)
                 state.global.channelIndependentEffect = {EffectCode::PatBreak, 0};
 
             // Clear channel rows
-            for (unsigned chan = 0; chan < modData.GetNumChannels(); chan++)
+            for (channel_index_t chan = 0; chan < modData.GetNumChannels(); chan++)
             {
                 state.channelRows[chan] = {};
             }
 
             // Loop through channels:
-            for (unsigned chan = 0; chan < modData.GetNumChannels(); chan++)
+            for (channel_index_t chan = 0; chan < modData.GetNumChannels(); chan++)
             {
                 state.global.channel = chan;
 
-                const auto& chanRow = dmf.GetData().GetRow(chan, patMatRow, patRow);
+                const auto& chanRow = dmf.GetData().GetRow(chan, dmfOrder, dmfRow);
 
                 // If just arrived at jump destination:
-                if (patMatRow == state.global.jumpDestination && patRow == 0 && state.global.suspended)
+                if (dmfOrder == state.global.jumpDestination && dmfRow == 0 && state.global.suspended)
                 {
                     // Restore state copies
                     state.Restore();
@@ -626,9 +624,9 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
             }
 
             // Set the channel rows for the current pattern row all at once
-            for (unsigned chan = 0; chan < GetData().GetNumChannels(); ++chan)
+            for (channel_index_t chan = 0; chan < modData.GetNumChannels(); ++chan)
             {
-                modData.SetRow(chan, patMatRow + (int)m_UsingSetupPattern, patRow, state.channelRows[chan]);
+                modData.SetRow(chan, dmfOrder + (order_index_t)m_UsingSetupPattern, dmfRow, state.channelRows[chan]);
             }
 
             // TODO: Better channel independent effects implementation
@@ -636,13 +634,13 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
         }
 
         // If the DMF has less than 64 rows per pattern, there will be extra MOD rows which will need to be blank; TODO: May not be needed
-        for (unsigned patRow = dmfTotalRowsPerPattern; patRow < 64; patRow++)
+        for (row_index_t dmfRow = dmfNumRows; dmfRow < 64; dmfRow++)
         {
             // Loop through channels:
-            for (unsigned chan = 0; chan < modData.GetNumChannels(); chan++)
+            for (channel_index_t chan = 0; chan < modData.GetNumChannels(); chan++)
             {
                 Row<MOD> tempRow = {0, 0, 0, 0};
-                modData.SetRow(chan, patMatRow + (int)m_UsingSetupPattern, patRow, tempRow);
+                modData.SetRow(chan, dmfOrder + (int)m_UsingSetupPattern, dmfRow, tempRow);
             }
         }
     }
@@ -693,7 +691,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const Row<DMF>& row, State& state)
             }
             else
             {
-                channelState.rowsUntilPortAutoOff--;
+                --channelState.rowsUntilPortAutoOff;
             }
         }
     }
@@ -871,10 +869,10 @@ void MOD::DMFUpdateStatePre(const DMF& dmf, State& state, const PriorityEffectsM
                 // Convert MOD destination value to DMF destination value:
                 const int dest = effectCode == dmf::EffectCode::PosJump ? effectValue - (int)m_UsingSetupPattern : state.global.order + 1;
 
-                if (dest < 0 || dest >= dmf.GetModuleInfo().totalRowsInPatternMatrix)
+                if (dest < 0 || dest >= static_cast<int>(dmf.GetData().GetNumOrders()))
                     throw std::invalid_argument("Invalid Position Jump or Pattern Break effect");
                 
-                if (dest >= (int)state.global.order) // If not a loop
+                if (dest >= static_cast<int>(state.global.order)) // If not a loop
                 {
                     state.Save(dest);
                 }
@@ -970,14 +968,14 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const Row<DMF>& 
 
     // TODO: Handle this outside of main loop in DMFConvertPatterns() for better performance
     // If we're at the very end of the song, in the 1st channel, and using the setup pattern
-    if (state.global.patternRow + 1 == dmf.GetModuleInfo().totalRowsPerPattern
-        && state.global.order + 1 == dmf.GetModuleInfo().totalRowsInPatternMatrix
+    if (state.global.patternRow + 1 == dmf.GetData().GetNumRows()
+        && state.global.order + 1 == dmf.GetData().GetNumOrders()
         && state.global.channel == dmf::GameBoyChannel::SQW1)
     {
         // Check whether DMF pattern row has any Pos Jump effects that loop back to earlier in the song
         bool hasLoopback = false;
-        unsigned loopbackToPattern = 0; // DMF pattern matrix row
-        for (int chan = 0; chan <= (int)dmf::GameBoyChannel::NOISE; chan++)
+        order_index_t loopbackToPattern = 0; // DMF pattern matrix row
+        for (channel_index_t chan = 0; chan <= (channel_index_t)dmf::GameBoyChannel::NOISE; chan++)
         {
             const Row<DMF>& tempChanRow = dmf.GetData().GetRow(chan, state.global.order, state.global.patternRow);
             for (const auto& effect : tempChanRow.effect)
@@ -985,7 +983,7 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const Row<DMF>& 
                 if (effect.code == dmf::EffectCode::PosJump && effect.value >= 0 && effect.value < (int)state.global.patternRow)
                 {
                     hasLoopback = true;
-                    loopbackToPattern = effect.value;
+                    loopbackToPattern = static_cast<order_index_t>(effect.value);
                     break;
                 }
             }
@@ -997,7 +995,7 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const Row<DMF>& 
         if (m_DataGenerated)
         {
             // Add Note OFF to the loopback point for any channels where the sound would carry over
-            for (int chan = 0; chan <= (int)dmf::GameBoyChannel::NOISE; chan++)
+            for (channel_index_t chan = 0; chan <= (channel_index_t)dmf::GameBoyChannel::NOISE; chan++)
             {
                 // If a note is playing on the last row before it loops, and the loopback point does not have a note playing:
                 if (chanState.notePlaying && !NoteHasPitch(dmf.GetData().GetRow(chan, loopbackToPattern, 0).note))
@@ -1737,9 +1735,9 @@ void MOD::ExportPatterns(std::ofstream& fout) const
     const auto& modData = GetData();
     for (const auto& pattern : modData.PatternsRef())
     {
-        for (unsigned row = 0; row < modData.GetNumRows(); ++row)
+        for (row_index_t row = 0; row < modData.GetNumRows(); ++row)
         {
-            for (unsigned channel = 0; channel < modData.GetNumChannels(); ++channel)
+            for (channel_index_t channel = 0; channel < modData.GetNumChannels(); ++channel)
             {
                 const Row<MOD>& rowData = pattern[row][channel];
                 // Sample number (upper 4b); sample period/effect param. (upper 4b)

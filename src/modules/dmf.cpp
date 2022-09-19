@@ -90,6 +90,9 @@ DMF::~DMF()
 
 void DMF::CleanUp()
 {
+    // TODO: This function is old and nearly unchanged from when dmf2mod was a C program.
+    //       Need to use RAII instead.
+
     // Free memory allocated for members
     if (m_Instruments)
     {
@@ -321,13 +324,13 @@ void DMF::LoadPatternMatrixValues(Reader& fin)
         m_ModuleInfo.totalRowsInPatternMatrix,
         m_ModuleInfo.totalRowsPerPattern);
 
-    std::map<std::pair<uint8_t, uint8_t>, std::string> channelPatternIdToPatternNameMap;
+    std::map<std::pair<channel_index_t, pattern_index_t>, std::string> channelPatternIdToPatternNameMap;
 
-    for (unsigned channel = 0; channel < moduleData.GetNumChannels(); ++channel)
+    for (channel_index_t channel = 0; channel < moduleData.GetNumChannels(); ++channel)
     {
-        for (unsigned order = 0; order < moduleData.GetNumOrders(); ++order)
+        for (order_index_t order = 0; order < moduleData.GetNumOrders(); ++order)
         {
-            const uint8_t patternId = fin.ReadInt();
+            const pattern_index_t patternId = fin.ReadInt();
             moduleData.SetPatternId(channel, order, patternId);
 
             // Version 1.1 introduces pattern names
@@ -632,15 +635,15 @@ void DMF::LoadPatternsData(Reader& fin)
     auto& moduleData = GetData();
     auto& channelMetadata = moduleData.ChannelMetadataRef();
 
-    std::unordered_set<std::pair<uint8_t, uint8_t>, PairHash> patternsVisited; // Storing channel/patternId pairs
+    std::unordered_set<std::pair<channel_index_t, pattern_index_t>, PairHash> patternsVisited; // Storing channel/patternId pairs
 
-    for (unsigned channel = 0; channel < moduleData.GetNumChannels(); ++channel)
+    for (channel_index_t channel = 0; channel < moduleData.GetNumChannels(); ++channel)
     {
         channelMetadata[channel].effectColumnsCount = fin.ReadInt();
 
-        for (unsigned order = 0; order < moduleData.GetNumOrders(); ++order)
+        for (order_index_t order = 0; order < moduleData.GetNumOrders(); ++order)
         {
-            const uint8_t patternId = moduleData.GetPatternId(channel, order);
+            const pattern_index_t patternId = moduleData.GetPatternId(channel, order);
 
             if (patternsVisited.count({channel, patternId}) > 0) // If pattern has been loaded previously
             {
@@ -659,7 +662,7 @@ void DMF::LoadPatternsData(Reader& fin)
                 patternsVisited.insert({channel, patternId});
             }
 
-            for (unsigned row = 0; row < moduleData.GetNumRows(); ++row)
+            for (row_index_t row = 0; row < moduleData.GetNumRows(); ++row)
             {
                 moduleData.SetRowById(channel, patternId, row, LoadPatternRow(fin, channelMetadata[channel].effectColumnsCount));
             }

@@ -161,8 +161,7 @@ struct System
 
     System() = default;
     System(Type type, uint8_t id, std::string name, uint8_t channels)
-        : type(type), id(id), name(name), channels(channels)
-    {}
+        : type(type), id(id), name(name), channels(channels) {}
 };
 
 struct VisualInfo
@@ -174,8 +173,8 @@ struct VisualInfo
 struct ModuleInfo
 {
     uint8_t timeBase, tickTime1, tickTime2, framesMode, usingCustomHZ, customHZValue1, customHZValue2, customHZValue3;
-    uint32_t totalRowsPerPattern;
-    uint8_t totalRowsInPatternMatrix;
+    uint32_t totalRowsPerPattern; // TODO: Should remove this eventually (duplicate w/ ModuleData)
+    uint8_t totalRowsInPatternMatrix; // (orders) TODO: Should remove this eventually (duplicate w/ ModuleData)
 };
 
 struct FMOps
@@ -336,8 +335,6 @@ public:
     // Factory requires destructor to be public
     ~DMF();
 
-    ////////////
-
     // Returns the initial BPM of the module
     void GetBPM(unsigned& numerator, unsigned& denominator) const;
     double GetBPM() const;
@@ -345,6 +342,7 @@ public:
     /*
      * In spite of what the Deflemask manual says, portamento effects are automatically turned off if they
      * stay on long enough without a new note being played. These methods help handle those edge cases.
+     * TODO: Remove these methods once Generated Data stuff is finished
      */
     int GetRowsUntilPortUpAutoOff(const NoteSlot& note, int portUpParam) const;
     static int GetRowsUntilPortUpAutoOff(unsigned ticksPerRowPair, const NoteSlot& note, int portUpParam);
@@ -357,14 +355,13 @@ public:
     }
 
     const dmf::System& GetSystem() const { return m_System; }
-    const dmf::VisualInfo& GetVisualInfo() const { return m_VisualInfo; }
-    const dmf::ModuleInfo& GetModuleInfo() const { return m_ModuleInfo; }
 
     uint8_t GetTotalWavetables() const { return m_TotalWavetables; }
-
     uint32_t** GetWavetableValues() const { return m_WavetableValues; }
     uint32_t GetWavetableValue(unsigned wavetable, unsigned index) const { return m_WavetableValues[wavetable][index]; }
+
 private:
+
     void ImportRaw(const std::string& filename) override;
     void ExportRaw(const std::string& filename) override;
     void ConvertRaw(const ModulePtr& input) override;

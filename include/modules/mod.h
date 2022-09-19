@@ -196,9 +196,9 @@ struct State
         int jumpDestination; // DMF pattern matrix row where you are jumping to. Not a loop.
         Effect channelIndependentEffect;
         unsigned ticksPerRowPair; // DMF's time_base * (speed_a + speed_b)
-        unsigned channel;    // The current channel in DMF or MOD
-        unsigned order;      // The current pattern matrix row in DMF
-        unsigned patternRow; // The current pattern row in DMF?
+        channel_index_t channel;    // The current channel in DMF or MOD
+        order_index_t order;      // The current pattern matrix row in DMF
+        pattern_index_t patternRow; // The current pattern row in DMF?
     } global;
 
     ChannelStateOld channel[4];

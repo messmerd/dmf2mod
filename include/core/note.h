@@ -32,7 +32,10 @@ enum class NotePitch : uint8_t
 namespace NoteTypes
 {
     enum { EmptyType, NoteType, OffType }; // The order is important
+
     struct Empty {};
+    constexpr inline bool operator==(const Empty&, const Empty&) { return true; };
+
     struct alignas(1) Note
     {
         NotePitch pitch : 4;
@@ -71,7 +74,9 @@ namespace NoteTypes
             return this->octave != rhs.octave || this->pitch != rhs.pitch;
         }
     };
+
     struct Off {};
+    constexpr inline bool operator==(const Off&, const Off&) { return true; };
 };
 
 using NoteSlot = std::variant<NoteTypes::Empty, NoteTypes::Note, NoteTypes::Off>;

@@ -9,6 +9,7 @@
 
 #include "config_types.h"
 #include "note.h"
+#include "effects.h"
 
 #include <vector>
 #include <tuple>
@@ -17,6 +18,7 @@
 #include <memory>
 #include <cstdint>
 #include <type_traits>
+#include <cassert>
 
 #include "gcem.hpp"
 
@@ -62,14 +64,16 @@ using wrapped_state_data_t = typename wrapped_state_data<T...>::type;
 // A unique identifier for wavetables, duty cycles, samples, etc.
 using sound_index_t = size_t;
 
-using volume_t = uint16_t;
-using panning_t = int16_t;
+using effect_val_xx_t = uint8_t;
+using effect_val_xxyy_t = std::pair<uint8_t, uint8_t>;
 
-struct tempo_t
+struct port_t
 {
-    uint16_t num;
-    uint16_t den;
+    enum Type { Up, Down, ToNote } type;
+    effect_val_xx_t value;
 };
+
+constexpr inline bool operator==(const port_t& lhs, const port_t& rhs) { return lhs.type == rhs.type && lhs.value == rhs.value; }
 
 ///////////////////////////////////////////////////////////
 // COMMON STATE DEFINITIONS
@@ -77,51 +81,93 @@ struct tempo_t
 
 struct GlobalStateCommonDefinition : public detail::state_definition_tag
 {
-    static constexpr int kCommonCount = 1; // # of variants in StateEnumCommon (remember to update this after changing the enum)
+    static constexpr int kCommonCount = 5; // # of variants in StateEnumCommon (remember to update this after changing the enum)
     static constexpr int kLowerBound = -kCommonCount;
 
     // Common state data have negative indexes
     enum StateEnumCommon
     {
         // Add additional variants here
-        kTempo=-1
+        kJumpDestination    =-5,
+        kTempo              =-4,
+        kSpeed              =-3,
+        kPatBreak           =-2,
+        kPosJump            =-1
         // StateEnum contains values >= 0
     };
 
     // Define common data types
-    using tempo_data_t = tempo_t;
+    using jump_dest_data_t = bool;
+    using tempo_data_t = effect_val_xx_t;
+    using speed_data_t = effect_val_xx_t;
+    using patbreak_data_t = effect_val_xx_t;
+    using posjump_data_t = effect_val_xx_t;
 
     // Lowest to highest
     using common_data_t = std::tuple<
-        tempo_data_t
+        jump_dest_data_t,
+        tempo_data_t,
+        speed_data_t,
+        patbreak_data_t,
+        posjump_data_t
         >;
 };
 
 struct ChannelStateCommonDefinition : public detail::state_definition_tag
 {
-    static constexpr int kCommonCount = 4; // # of variants in StateEnumCommon (remember to update this after changing the enum)
+    static constexpr int kCommonCount = 14; // # of variants in StateEnumCommon (remember to update this after changing the enum)
     static constexpr int kLowerBound = -kCommonCount;
 
     // Common state data have negative indexes
     enum StateEnumCommon
     {
         // Add additional variants here
-        kPanning=-4,
-        kVolume=-3,
-        kNoteSlot=-2,
-        kSoundIndex=-1
+        kNoteDelay          =-14,
+        kNoteCut            =-13,
+        kRetrigger          =-12,
+        kVolSlide           =-11,
+        kPanning            =-10,
+        kTremolo            =-9,
+        kVibratoVolSlide    =-8,
+        kPort2NoteVolSlide  =-7,
+        kVibrato            =-6,
+        kPort               =-5, // should this be split into port up, port down, and port2note?
+        kArp                =-4,
+        kVolume             =-3,
+        kNoteSlot           =-2,
+        kSoundIndex         =-1
         // StateEnum contains values >= 0
     };
 
     // Define common data types
-    using panning_data_t = panning_t;
-    using volume_data_t = volume_t;
+    using notedelay_data_t = effect_val_xx_t;
+    using notecut_data_t = effect_val_xx_t;
+    using retrigger_data_t = effect_val_xxyy_t;
+    using volslide_data_t = effect_val_xxyy_t;
+    using panning_data_t = effect_val_xx_t;
+    using tremolo_data_t = effect_val_xxyy_t;
+    using vibrato_volslide_data_t = effect_val_xxyy_t;
+    using port2note_volslide_data_t = effect_val_xxyy_t;
+    using vibrato_data_t = effect_val_xxyy_t;
+    using port_data_t = port_t;
+    using arp_data_t = effect_val_xxyy_t;
+    using volume_data_t = effect_val_xx_t;
     using noteslot_data_t = NoteSlot;
     using sound_index_data_t = sound_index_t;
 
     // Lowest to highest
     using common_data_t = std::tuple<
+        notedelay_data_t,
+        notecut_data_t,
+        retrigger_data_t,
+        volslide_data_t,
         panning_data_t,
+        tremolo_data_t,
+        vibrato_volslide_data_t,
+        port2note_volslide_data_t,
+        vibrato_data_t,
+        port_data_t,
+        arp_data_t,
         volume_data_t,
         noteslot_data_t,
         sound_index_data_t
@@ -163,8 +209,12 @@ public:
         return std::get<I + CommonDefT::kCommonCount>(data_);
     }
 
+    constexpr const data_t& GetInitialState() const { return initial_state_; }
+    constexpr data_t& GetInitialState() { return initial_state_; }
+
 private:
     data_wrapped_t data_; // Stores all state data
+    data_t initial_state_; // Default values which are used when nothing is specified
 };
 
 ///////////////////////////////////////////////////////////
@@ -267,14 +317,14 @@ public:
 
     // Get the specified state data (I) at the current read position
     template<int I>
-    constexpr const get_data_t<I>& Get() const
+    inline constexpr const get_data_t<I>& Get() const
     {
         return GetVec<I>().at(cur_indexes_[I]).second;
     }
 
     // Get the specified state data (I) at the specified read index (index)
     template<int I>
-    constexpr const get_data_t<I>& Get(size_t index) const
+    inline constexpr const get_data_t<I>& Get(size_t index) const
     {
         return GetVec<I>().at(index).second;
     }
@@ -283,34 +333,47 @@ public:
     template<int I>
     inline constexpr const get_data_wrapped_t<I>& GetVec() const
     {
+        assert(state_);
         return state_->template Get<I>();
+    }
+
+    // Gets the initial state
+    inline constexpr const data_t& GetInitialState() const
+    {
+        assert(state_);
+        return state_->GetInitialState();
     }
 
     // Returns a tuple of all the state values at the current read position
     data_t Copy() const
     {
         data_t retVal;
-        detail::copy_state_ctf<
-            enum_lower_bound_,
-            enum_upper_bound_>
-            (this, retVal, [this](auto& retValElem, const auto& val) constexpr
+        detail::copy_state_ctf<enum_lower_bound_, enum_upper_bound_>(this, retVal,
+            [this](auto& retValElem, const auto& val) constexpr
         {
             retValElem = val;
         });
         return retVal;
     }
 
-    // Advances read position to the next row in the state data; newPos should be the position after the last time this method was called.
-    void Next(pos_t newPos)
+    /*
+     * Advances the read position to the next row in the state data if needed; pos should be the current position.
+     * Call this method at the start of an inner loop before any the reading has been done for that iteration.
+     * If ReturnDeltas == true, returns an array of bools specifying which state values have changed since last iteration.
+     */
+    template<bool ReturnDeltas = false>
+    std::conditional_t<ReturnDeltas, std::array<bool, enum_total_count_>, void> SetReadPos(pos_t pos)
     {
-        cur_pos_ = newPos;
+        cur_pos_ = pos;
 
-        detail::next_state_ctf<enum_lower_bound_, enum_upper_bound_>(this, [this](const auto& vec, int N) constexpr
+        [[maybe_unused]] std::array<bool, enum_total_count_> deltas{}; // Will probably be optimized away if returnDeltas == false
+
+        detail::next_state_ctf<enum_lower_bound_, enum_upper_bound_>(this, [&, this](const auto& vec, int N) constexpr
         {
             size_t& index = cur_indexes_[N + enum_common_count_]; // Current index within state data for data type N
-            const size_t vec_size = vec.size();
+            const size_t vecSize = vec.size();
 
-            if (vec_size == 0 || index + 1 == vec_size)
+            if (vecSize == 0 || index + 1 == vecSize)
                 return; // No state data for data type N, or on last element in state data
 
             // There's a next state that we could potentially need to advance to
@@ -318,21 +381,43 @@ public:
             {
                 // Need to advance
                 ++index;
+
+                if constexpr (ReturnDeltas)
+                {
+                    // NOTE: If Set() is called with IgnoreDuplicates == true, delta could be true even if nothing changed.
+                    deltas[N + enum_common_count_] = true;
+                }
             }
         });
+
+        if constexpr (ReturnDeltas)
+            return deltas;
+        else
+            return;
     }
 
-    void Next(order_index_t order, row_index_t row)
+    /*
+     * Advances the read position to the next row in the state data if needed; pos should be the current position.
+     * Call this method at the start of an inner loop before any the reading has been done for that iteration.
+     * If ReturnDeltas == true, returns an array of bools specifying which state values have changed since last iteration.
+     */
+    template<bool ReturnDeltas = false>
+    inline std::conditional_t<ReturnDeltas, std::array<bool, enum_total_count_>, void> SetReadPos(order_index_t order, row_index_t row)
     {
-        Next(GetPos(order, row));
+        if constexpr (ReturnDeltas)
+            return SetReadPos<ReturnDeltas>(GetPos(order, row));
+        else
+            SetReadPos<ReturnDeltas>(GetPos(order, row));
     }
+
+    // Add this value to StateEnumCommon or StateEnum variants to get a zero-based index into an array such as the one returned by SetReadPos
+    constexpr inline int GetIndexOffset() const { return enum_common_count_; }
 
 protected:
 
     StateT* state_; // The state this reader is reading from
-    pos_t cur_pos_; // The current read position in terms of order and pattern row
+    pos_t cur_pos_; // The current read position in terms of order and pattern row. (The write position is the end of the state data vector)
     std::array<size_t, enum_total_count_> cur_indexes_; // array of state data vector indexes
-    // TODO: Add a "delta" array which keeps track of state data which recently changed
 };
 
 // Type aliases for convenience
@@ -347,16 +432,43 @@ namespace detail {
 
 // Compile-time for loop helper
 template<int start, class T, class Tuple, int... Is>
-void insert_state_ctf_helper(T* writer, Tuple& t, std::integer_sequence<int, Is...>)
+void insert_state_ctf_helper(T* writer, const Tuple& t, std::integer_sequence<int, Is...>)
 {
     (writer->template Set<start + Is>(std::get<Is>(t)), ...);
 }
 
 // Calls writer->Set() for each element in the tuple t
 template<int start, int end, class T, class Tuple>
-void insert_state_ctf(T* writer, Tuple& t)
+void insert_state_ctf(T* writer, const Tuple& t)
 {
     insert_state_ctf_helper<start>(writer, t, std::make_integer_sequence<int, gcem::abs(start) + end>{});
+}
+
+template<typename T>
+struct optional_state_data {};
+
+template<typename... Ts>
+struct optional_state_data<std::tuple<Ts...>>
+{
+    // type is a tuple with each Ts wrapped in std::optional
+    using type = std::tuple<std::optional<Ts>...>;
+};
+
+template<typename... T>
+using optional_state_data_t = typename optional_state_data<T...>::type;
+
+// Compile-time for loop helper
+template<int start, class T, class Tuple, int... Is>
+void optional_insert_state_ctf_helper(T* writer, const Tuple& t, std::integer_sequence<int, Is...>)
+{
+    ((std::get<Is>(t).has_value() ? writer->template Set<start + Is>(std::get<Is>(t).value()) : void(0)), ...);
+}
+
+// Calls writer->Set() for each element which has a value in the tuple of optionals t
+template<int start, int end, class T, class Tuple>
+void optional_insert_state_ctf(T* writer, const Tuple& t)
+{
+    optional_insert_state_ctf_helper<start>(writer, t, std::make_integer_sequence<int, gcem::abs(start) + end>{});
 }
 
 } // namespace detail
@@ -376,33 +488,107 @@ public:
     using typename R::StateEnum;
     template<int I> using get_data_t = typename R::template get_data_t<I>;
 
-    // Set the specified state data (I) at the current read/write position to val
-    template<int I>
-    void Set(const get_data_t<I>& val)
+    // Set the specified state data (I) at the current write position (the end of the vector) to val
+    template<int I, bool IgnoreDuplicates = false>
+    void Set(get_data_t<I>&& val)
     {
+        assert(R::state_);
         auto& vec = R::state_->template Get<I>();
-        size_t& index = R::cur_indexes_[I + R::enum_common_count_]; // Current index within state data for data type I
-        auto& vecElem = vec[index]; // Current vec element
+        auto& vecElem = vec.back(); // Current vec element (always the end when writing)
 
         // There can only be one state data value for a given pos_t, so we won't always be adding a new element to the vector
         if (vecElem.first != R::cur_pos_)
         {
-            vec.push_back({R::cur_pos_, val}); // Add new element
-            ++index; // Adjust current index
+            if constexpr (!IgnoreDuplicates)
+            {
+                // If the latest value in the state is the same
+                // as what we're trying to add to the state, don't add it
+                if (vecElem.second == val)
+                    return;
+            }
+
+            // Add new element
+            vec.push_back({R::cur_pos_, std::move(val)});
+
+            // Adjust current index
+            size_t& index = R::cur_indexes_[I + R::enum_common_count_]; // Current index within state data for data type I
+            ++index;
         }
         else
-            vecElem.second = val; // Update current element
+            vecElem.second = std::move(val); // Update current element
     }
 
-    // Inserts state data at current position (Use with Copy() in order to "resume" a state)
-    void Insert(data_t& allInnerData)
+    // Set the specified state data (I) at the current write position (the end of the vector) to val
+    template<int I, bool IgnoreDuplicates = false>
+    inline void Set(const get_data_t<I>& val)
     {
-        // Calls Set() for each element in allInnerData
-        detail::insert_state_ctf<R::enum_lower_bound_, R::enum_upper_bound_>(this, allInnerData);
+        get_data_t<I> valCopy = val;
+        Set<I, IgnoreDuplicates>(std::move(valCopy));
     }
 
-    void SetWritePos(pos_t pos) { R::cur_pos_ = pos; }
-    void SetWritePos(order_index_t order, row_index_t row) { R::cur_pos_ = GetPos(order, row); }
+    // For non-persistent state values. Next time SetWritePos is called, nextVal will automatically be set.
+    template<int I, bool IgnoreDuplicates = false>
+    inline void SetSingle(get_data_t<I>&& val, get_data_t<I>&& nextVal)
+    {
+        std::get<I + R::enum_common_count_>(next_vals_) = std::move(nextVal);
+        has_next_vals_ = true;
+        Set<I, IgnoreDuplicates>(std::move(val));
+    }
+
+    // For non-persistent state values. Next time SetWritePos is called, nextVal will automatically be set.
+    template<int I, bool IgnoreDuplicates = false>
+    inline void SetSingle(const get_data_t<I>& val, const get_data_t<I>& nextVal)
+    {
+        std::get<I + R::enum_common_count_>(next_vals_) = nextVal;
+        has_next_vals_ = true;
+        Set<I, IgnoreDuplicates>(val);
+    }
+
+    // Sets the initial state
+    void SetInitialState(data_t&& vals)
+    {
+        assert(R::state_);
+        R::state_->GetInitialState() = std::move(vals);
+    }
+
+    // Sets the initial state
+    inline void SetInitialState(const data_t& vals)
+    {
+        data_t valsCopy = vals;
+        SetInitialState(std::move(valsCopy));
+    }
+
+    // Inserts state data at current position. Use with Copy() in order to "resume" a state.
+    void Insert(const data_t& vals)
+    {
+        // Calls Set() for each element in vals
+        detail::insert_state_ctf<R::enum_lower_bound_, R::enum_upper_bound_>(this, vals);
+    }
+
+    // Call this at the start of an inner loop before Set() is called
+    void SetWritePos(pos_t pos)
+    {
+        R::cur_pos_ = pos;
+
+        // If SetSingle() was used, the next values are set here
+        if (has_next_vals_)
+        {
+            detail::optional_insert_state_ctf<R::enum_lower_bound_, R::enum_upper_bound_>(this, next_vals_);
+            next_vals_ = {}; // Clear the tuple and reset optionals
+            has_next_vals_ = false;
+        }
+    }
+
+    // Call this at the start of an inner loop before Set() is called
+    inline void SetWritePos(order_index_t order, row_index_t row)
+    {
+        SetWritePos(GetPos(order, row));
+    }
+
+private:
+
+    detail::optional_state_data_t<data_t> next_vals_;
+    bool has_next_vals_{false};
 };
 
 // Type aliases for convenience
@@ -419,14 +605,14 @@ struct StateReaders
     GlobalStateReader<ModuleClass> global_reader;
     std::vector<ChannelStateReader<ModuleClass>> channel_readers;
 
-    void Next(pos_t newPos)
+    void SetReadPos(pos_t newPos)
     {
-        global_reader.Next();
+        global_reader.SetReadPos();
         for (auto& temp : channel_readers)
-            temp.Next();
+            temp.SetReadPos();
     }
 
-    void Next(order_index_t order, row_index_t row) { Next(GetPos(order, row)); }
+    void SetReadPos(order_index_t order, row_index_t row) { SetReadPos(GetPos(order, row)); }
 
     void Reset()
     {
@@ -442,14 +628,14 @@ struct StateReaderWriters
     GlobalStateReaderWriter<ModuleClass> global_reader_writer;
     std::vector<ChannelStateReaderWriter<ModuleClass>> channel_reader_writers;
 
-    void Next(pos_t newPos)
+    void SetReadPos(pos_t newPos)
     {
-        global_reader_writer.Next();
+        global_reader_writer.SetReadPos();
         for (auto& temp : channel_reader_writers)
-            temp.Next();
+            temp.SetReadPos();
     }
 
-    void Next(order_index_t order, row_index_t row) { Next(GetPos(order, row)); }
+    void SetReadPos(order_index_t order, row_index_t row) { SetReadPos(GetPos(order, row)); }
 
     void SetWritePos(pos_t pos)
     {

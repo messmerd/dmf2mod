@@ -857,7 +857,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
 
     // Get reader/writers
     auto stateReaderWriters = stateData.GetReaderWriters();
-    //auto& globalState = stateReaderWriters->global_reader_writer;
+    auto& globalState = stateReaderWriters->global_reader_writer;
     auto& channelStates = stateReaderWriters->channel_reader_writers;
 
     // Initialize other generated data
@@ -866,7 +866,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
     auto& soundIndexNoteExtremes = genData.Get<DataEnum::kSoundIndexNoteExtremes>().emplace();
 
     // For convenience:
-    //using GlobalEnumCommon = GlobalState<DMF>::StateEnumCommon;
+    using GlobalEnumCommon = GlobalState<DMF>::StateEnumCommon;
     //using GlobalEnum = GlobalState<DMF>::StateEnum;
     using ChannelEnumCommon = ChannelState<DMF>::StateEnumCommon;
     //using ChannelEnum = ChannelState<DMF>::StateEnum;
@@ -893,7 +893,56 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                 {
                     // Restore state copies
                     channelState.Insert(channelStateCopy.value());
+                    globalState.SetSingle<GlobalEnumCommon::kJumpDestination>(true, false);
+                    stateSuspended = false;
                 }
+
+                // GLOBAL STATE
+                if (channel == 0) // Only do this the first time in the inner loop for this order/row
+                {
+                    // Right-most PosJumps and PatBreaks are the ones that take effect. TODO: Is this accurate behavior?
+                    int16_t posJump = -1, patBreak = -1, speed = -1, tempo = -1;
+
+                    // Want to check all channels to update the global state for this row
+                    for (channel_index_t channel2 = 0; channel2 < data.GetNumChannels(); ++channel2)
+                    {
+                        for (const auto& effect : rowData.effect)
+                        {
+                            switch (static_cast<CommonEffects>(effect.code))
+                            {
+                                case CommonEffects::PosJump:
+                                    posJump = effect.value;
+                                    break;
+                                case CommonEffects::PatBreak:
+                                    patBreak = effect.value;
+                                    break;
+                                case CommonEffects::Speed:
+                                    speed = effect.value;
+                                    break;
+                                case CommonEffects::Tempo:
+                                    tempo = effect.value;
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
+                    }
+
+                    // Set the global state if needed
+                    if (posJump >= 0)
+                        globalState.Set<GlobalEnumCommon::kPosJump>(posJump);
+                    if (patBreak >= 0)
+                        globalState.Set<GlobalEnumCommon::kPatBreak>(patBreak);
+                    if (speed >= 0)
+                        globalState.Set<GlobalEnumCommon::kSpeed>(speed);
+                    if (tempo >= 0)
+                        globalState.Set<GlobalEnumCommon::kTempo>(tempo);
+                }
+
+
+                /// TODO: CONVERT EFFECTS HERE
+
+                
 
                 /*
                 PriorityEffectsMap modEffects;
@@ -942,6 +991,11 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                 }
                 */
 
+                const NoteSlot& noteSlot = rowData.note;
+                if (!NoteIsEmpty(noteSlot)) // NoteTypes::Off should never appear in state data (but can in initial state)
+                    channelState.Set<ChannelEnumCommon::kNoteSlot, true>(noteSlot);
+
+                /*
                 // Convert note - Note OFF
                 if (NoteIsOff(rowData.note)) // Note OFF. Use silent sample and handle effects.
                 {
@@ -949,6 +1003,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                     //chanState.notePlaying = false;
                     //chanState.currentNote = NoteTypes::Off{};
                 }
+                */
 
                 // A note on the SQ1, SQ2, or WAVE channels:
                 if (NoteHasPitch(rowData.note) && channel != dmf::GameBoyChannel::NOISE)
@@ -956,7 +1011,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                     const Note& dmfNote = GetNote(rowData.note);
                     //chanState.notePlaying = true;
                     //chanState.currentNote = chanRow.note;
-                    channelState.Set<(int)ChannelEnumCommon::kNoteSlot>(rowData.note);
+                    channelState.Set<ChannelEnumCommon::kNoteSlot, true>(rowData.note);
 
                     // TODO:
                     sound_index_t soundIndex = 0;///channel == dmf::GameBoyChannel::WAVE ? chanState.wavetable + 4 : chanState.dutyCycle;
@@ -985,7 +1040,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                     }
                 }
 
-                // TODO: Would COR and ORC affect this?
+                // TODO: Would COR and ORC affect this? EDIT: Shouldn't matter as long as O comes before R?
             }
         }
     }

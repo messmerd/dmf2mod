@@ -30,8 +30,6 @@ protected:
 
     ModuleInterface() : m_GeneratedData(std::make_shared<ModuleGeneratedData<Derived>>(static_cast<Derived const*>(this))) {}
 
-    friend ModuleGeneratedDataMethods<Derived>;
-
 public:
 
     virtual ~ModuleInterface() = default;

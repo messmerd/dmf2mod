@@ -254,7 +254,9 @@ public:
     template<int I> using get_data_wrapped_t = std::tuple_element_t<I + enum_common_count_, data_wrapped_t>;
 
 public:
+    StateReader() : state_(nullptr), cur_pos_(0), cur_indexes_{} {}
     StateReader(StateT* state) : state_(state), cur_pos_(0), cur_indexes_{} {}
+    void AssignState(StateT* state) { state_ = state; }
 
     // Set current read position to the beginning of the Module's state data
     void Reset()
@@ -328,7 +330,7 @@ public:
 protected:
 
     StateT* state_; // The state this reader is reading from
-    global_pos_t cur_pos_; // The current read position in terms of order and pattern row
+    pos_t cur_pos_; // The current read position in terms of order and pattern row
     std::array<size_t, enum_total_count_> cur_indexes_; // array of state data vector indexes
     // TODO: Add a "delta" array which keeps track of state data which recently changed
 };
@@ -399,11 +401,73 @@ public:
         detail::insert_state_ctf<R::enum_lower_bound_, R::enum_upper_bound_>(this, allInnerData);
     }
 
+    void SetWritePos(pos_t pos) { R::cur_pos_ = pos; }
+    void SetWritePos(order_index_t order, row_index_t row) { R::cur_pos_ = GetPos(order, row); }
 };
 
 // Type aliases for convenience
 template<class T> using GlobalStateReaderWriter = StateReaderWriter<GlobalState<T>>;
 template<class T> using ChannelStateReaderWriter = StateReaderWriter<ChannelState<T>>;
+
+///////////////////////////////////////////////////////////
+// STATE READERS/WRITERS
+///////////////////////////////////////////////////////////
+
+template<class ModuleClass>
+struct StateReaders
+{
+    GlobalStateReader<ModuleClass> global_reader;
+    std::vector<ChannelStateReader<ModuleClass>> channel_readers;
+
+    void Next(pos_t newPos)
+    {
+        global_reader.Next();
+        for (auto& temp : channel_readers)
+            temp.Next();
+    }
+
+    void Next(order_index_t order, row_index_t row) { Next(GetPos(order, row)); }
+
+    void Reset()
+    {
+        global_reader.Reset();
+        for (auto& temp : channel_readers)
+            temp.Reset();
+    }
+};
+
+template<class ModuleClass>
+struct StateReaderWriters
+{
+    GlobalStateReaderWriter<ModuleClass> global_reader_writer;
+    std::vector<ChannelStateReaderWriter<ModuleClass>> channel_reader_writers;
+
+    void Next(pos_t newPos)
+    {
+        global_reader_writer.Next();
+        for (auto& temp : channel_reader_writers)
+            temp.Next();
+    }
+
+    void Next(order_index_t order, row_index_t row) { Next(GetPos(order, row)); }
+
+    void SetWritePos(pos_t pos)
+    {
+        global_reader_writer.SetWritePos(pos);
+        for (auto& temp : channel_reader_writers)
+            temp.SetWritePos(pos);
+    }
+
+    void SetWritePos(order_index_t order, row_index_t row) { SetWritePos(GetPos(order, row)); }
+
+    void Reset()
+    {
+        global_reader_writer.Reset();
+        for (auto& temp : channel_reader_writers)
+            temp.Reset();
+    }
+};
+
 
 ///////////////////////////////////////////////////////////
 // MODULE STATE
@@ -414,11 +478,18 @@ class ModuleState
 {
 public:
 
-    // Creates and returns a GlobalStateReader. The reader is valid only for as long as ModuleState is valid.
-    std::shared_ptr<GlobalStateReader<ModuleClass>> GetGlobalReader() const { return std::make_shared<GlobalStateReader<ModuleClass>>(&global_state_); }
-
-    // Creates and returns a ChannelStateReader for the given channel. The reader is valid only for as long as ModuleState is valid.
-    std::shared_ptr<ChannelStateReader<ModuleClass>> GetChannelReader(channel_index_t channel) const { return std::make_shared<ChannelStateReader<ModuleClass>>(&channel_states_[channel]); }
+    // Creates and returns a pointer to a StateReaders object. The readers are valid only for as long as ModuleState is valid.
+    std::shared_ptr<StateReaders<ModuleClass>> GetReaders() const
+    {
+        auto retVal = std::make_shared<StateReaders<ModuleClass>>();
+        retVal->global_reader.AssignState(&global_state_);
+        retVal->channel_readers.resize(channel_states_.size());
+        for (unsigned i = 0; i < channel_states_.size(); ++i)
+        {
+            retVal->channel_readers[i].AssignState(&channel_states_[i]);
+        }
+        return retVal;
+    }
 
 private:
 
@@ -427,11 +498,18 @@ private:
 
     void Initialize(unsigned numChannels) { channel_states_.resize(numChannels); }
 
-    // Creates and returns a GlobalStateReaderWriter. The reader/writer is valid only for as long as ModuleState is valid.
-    std::shared_ptr<GlobalStateReaderWriter<ModuleClass>> GetGlobalReaderWriter() { return std::make_shared<GlobalStateReaderWriter<ModuleClass>>(&global_state_); }
-
-    // Creates and returns a ChannelStateReaderWriter for the given channel. The reader/writer is valid only for as long as ModuleState is valid.
-    std::shared_ptr<ChannelStateReaderWriter<ModuleClass>> GetChannelReaderWriter(channel_index_t channel) { return std::make_shared<ChannelStateReaderWriter<ModuleClass>>(&channel_states_[channel]); }
+    // Creates and returns a pointer to a StateReaderWriters object. The reader/writers are valid only for as long as ModuleState is valid.
+    std::shared_ptr<StateReaderWriters<ModuleClass>> GetReaderWriters()
+    {
+        auto retVal = std::make_shared<StateReaderWriters<ModuleClass>>();
+        retVal->global_reader_writer.AssignState(&global_state_);
+        retVal->channel_reader_writers.resize(channel_states_.size());
+        for (unsigned i = 0; i < channel_states_.size(); ++i)
+        {
+            retVal->channel_reader_writers[i].AssignState(&channel_states_[i]);
+        }
+        return retVal;
+    }
 
 private:
     GlobalState<ModuleClass> global_state_;

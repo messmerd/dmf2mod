@@ -854,7 +854,11 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
     // Initialize state
     auto& stateData = genData.GetState().emplace();
     stateData.Initialize(GetSystem().channels);
-    auto globalState = stateData.GetGlobalReaderWriter();
+
+    // Get reader/writers
+    auto stateReaderWriters = stateData.GetReaderWriters();
+    //auto& globalState = stateReaderWriters->global_reader_writer;
+    auto& channelStates = stateReaderWriters->channel_reader_writers;
 
     // Initialize other generated data
     using DataEnum = ModuleGeneratedDataMethods<DMF>::DataEnum;
@@ -876,11 +880,12 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
     const auto& data = GetData();
     for (channel_index_t channel = 0; channel < data.GetNumChannels(); ++channel)
     {
-        auto& channelState = *stateData.GetChannelReaderWriter(channel);
+        auto& channelState = channelStates[channel];
         for (order_index_t order = 0; order < data.GetNumOrders(); ++order)
         {
             for (row_index_t row = 0; row < data.GetNumRows(); ++row)
             {
+                stateReaderWriters->SetWritePos(order, row);
                 const auto& rowData = data.GetRow(channel, order, row);
 
                 // If just arrived at jump destination:
@@ -979,6 +984,8 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                         }
                     }
                 }
+
+                // TODO: Would COR and ORC affect this?
             }
         }
     }

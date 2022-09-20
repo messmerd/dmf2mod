@@ -14,6 +14,7 @@
 #include <unordered_map>
 #include <set>
 #include <optional>
+#include <cassert>
 
 namespace d2m {
 
@@ -103,10 +104,10 @@ public:
     template<DataEnum I>
     auto& Get() { return std::get<(size_t)I>(data_); }
 
-    template<size_t DataFlagsT>
-    size_t Generate()
+    size_t Generate(size_t dataFlags)
     {
-        return module_class_->GenerateDataImpl(DataFlagsT);
+        assert(module_class_);
+        return module_class_->GenerateDataImpl(dataFlags);
     }
 };
 

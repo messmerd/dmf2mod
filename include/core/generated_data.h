@@ -8,6 +8,7 @@
 #include "note.h"
 #include "data.h"
 #include "state.h"
+#include "module_base.h"
 
 #include <cstddef>
 #include <unordered_map>
@@ -15,6 +16,9 @@
 #include <optional>
 
 namespace d2m {
+
+// Forward declare
+class ModuleBase;
 
 template<class ModuleClass>
 class ModuleGeneratedDataStorageDefault
@@ -71,34 +75,39 @@ template<class ModuleClass>
 class ModuleGeneratedDataStorage : public ModuleGeneratedDataStorageDefault<ModuleClass>
 {
 public:
-    using DataEnum = typename ModuleGeneratedDataStorageDefault<ModuleClass>::DataEnum;
 };
 
 // Implements methods for the Module's generated data storage - should not be specialized
 template<class ModuleClass>
 class ModuleGeneratedDataMethods : public ModuleGeneratedDataStorage<ModuleClass>
 {
-public:
-    ModuleGeneratedDataMethods() = delete;
-    ModuleGeneratedDataMethods(ModuleClass const* moduleClass) : module_class_(moduleClass) {}
-
-    using storage_t = ModuleGeneratedDataStorage<ModuleClass>;
-    static constexpr size_t data_count_ = static_cast<size_t>(storage_t::DataEnum::kCount);
-
-    const std::optional<ModuleState<ModuleClass>>& GetState() const { return std::get<(size_t)storage_t::DataEnum::kState>(storage_t::data_); }
-    std::optional<ModuleState<ModuleClass>>& GetState() { return std::get<(size_t)storage_t::DataEnum::kState>(storage_t::data_); }
-
-    template<typename storage_t::DataEnum I>
-    const auto& Get() const { return std::get<(size_t)I>(storage_t::data_); }
-    template<typename storage_t::DataEnum I>
-    auto& Get() { return std::get<(size_t)I>(storage_t::data_); }
-
-    // Each Module implements their own
-    template<size_t DataFlagsT>
-    size_t Generate();
-
 private:
-    ModuleClass const* module_class_;
+
+    ModuleBase const* module_class_;
+
+public:
+
+    ModuleGeneratedDataMethods() = delete;
+    ModuleGeneratedDataMethods(ModuleBase const* moduleClass) : module_class_(moduleClass) {}
+
+    // Bring in dependencies from parent:
+    using typename ModuleGeneratedDataStorageDefault<ModuleClass>::DataEnum;
+    using ModuleGeneratedDataStorageDefault<ModuleClass>::data_;
+    static constexpr size_t data_count_ = static_cast<size_t>(DataEnum::kCount);
+
+    const std::optional<ModuleState<ModuleClass>>& GetState() const { return std::get<(size_t)DataEnum::kState>(data_); }
+    std::optional<ModuleState<ModuleClass>>& GetState() { return std::get<(size_t)DataEnum::kState>(data_); }
+
+    template<DataEnum I>
+    const auto& Get() const { return std::get<(size_t)I>(data_); }
+    template<DataEnum I>
+    auto& Get() { return std::get<(size_t)I>(data_); }
+
+    template<size_t DataFlagsT>
+    size_t Generate()
+    {
+        return module_class_->GenerateDataImpl(DataFlagsT);
+    }
 };
 
 // Can specialize this, but it must also inherit from ModuleGeneratedDataMethods<ModuleClass>

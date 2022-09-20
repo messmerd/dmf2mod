@@ -31,8 +31,6 @@ namespace dmf {
         int16_t code;
         int16_t value;
     };
-
-    size_t GenerateDataImpl(DMF const* dmf, ModuleGeneratedDataMethods<DMF>* genData);
 }
 
 template<>
@@ -55,17 +53,6 @@ struct PatternMetadata<DMF>
 {
     std::string name;
 };
-
-template<> template<size_t DataFlagsT>
-size_t ModuleGeneratedDataMethods<DMF>::Generate()
-{
-    /*
-     * Currently there's only one method implemented which calculates all generated data.
-     * The DataFlagsT parameter is ignored, but with some if-constexpr's, it could be used to
-     * call methods that generate only the data which is requested.
-     */
-    return dmf::GenerateDataImpl(module_class_, this);
-}
 
 ///////////////////////////////////////////////////////////
 // dmf namespace
@@ -323,9 +310,10 @@ public:
 
 private:
 
-    void ImportRaw(const std::string& filename) override;
-    void ExportRaw(const std::string& filename) override;
-    void ConvertRaw(const ModulePtr& input) override;
+    void ImportImpl(const std::string& filename) override;
+    void ExportImpl(const std::string& filename) override;
+    void ConvertImpl(const ModulePtr& input) override;
+    size_t GenerateDataImpl(size_t dataFlags) const override;
 
     using Reader = StreamReader<zstr::ifstream, Endianness::Little>;
 

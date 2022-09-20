@@ -8,6 +8,7 @@
 #pragma once
 
 #include "config_types.h"
+#include "note.h"
 
 #include <vector>
 #include <tuple>
@@ -38,17 +39,6 @@ struct state_definition_tag {};
 // Sourced from: https://stackoverflow.com/a/53398815/8704745
 template<typename... input_t>
 using tuple_cat_t = decltype(std::tuple_cat(std::declval<input_t>()...));
-
-/*
-template<typename T>
-struct wrapped_state_data
-{
-    using type = std::tuple<>;
-};
-
-template<typename T>
-using wrapped_state_data_t = typename wrapped_state_data<T>::type;
-*/
 
 template<typename T>
 struct wrapped_state_data {};
@@ -93,7 +83,9 @@ struct GlobalStateCommonDefinition : public detail::state_definition_tag
     // Common state data have negative indexes
     enum StateEnumCommon
     {
+        // Add additional variants here
         kTempo=-1
+        // StateEnum contains values >= 0
     };
 
     // Define common data types
@@ -113,24 +105,26 @@ struct ChannelStateCommonDefinition : public detail::state_definition_tag
     // Common state data have negative indexes
     enum StateEnumCommon
     {
-        kSoundIndex=-1,
-        kVolume=-2,
-        kNotePlaying=-3,
-        kPanning=-4
+        // Add additional variants here
+        kPanning=-4,
+        kVolume=-3,
+        kNoteSlot=-2,
+        kSoundIndex=-1
+        // StateEnum contains values >= 0
     };
 
     // Define common data types
-    using sound_index_data_t = sound_index_t;
-    using volume_data_t = volume_t;
-    using note_playing_data_t = bool;
     using panning_data_t = panning_t;
+    using volume_data_t = volume_t;
+    using noteslot_data_t = NoteSlot;
+    using sound_index_data_t = sound_index_t;
 
     // Lowest to highest
     using common_data_t = std::tuple<
-        sound_index_data_t,
+        panning_data_t,
         volume_data_t,
-        note_playing_data_t,
-        panning_data_t
+        noteslot_data_t,
+        sound_index_data_t
         >;
 };
 
@@ -162,14 +156,12 @@ public:
         return std::get<I + CommonDefT::kCommonCount>(data_);
     }
 
-    /*
     // Returns a mutable reference to state data at index I
     template<int I>
     constexpr auto& Get()
     {
         return std::get<I + CommonDefT::kCommonCount>(data_);
     }
-    */
 
 private:
     data_wrapped_t data_; // Stores all state data
@@ -184,13 +176,22 @@ private:
  * They can be specialized to add additional supported state data if desired.
  * Any specializations must inherit from StateStorage and pass the correct common definition
  * struct plus the new module-specific types to the template parameter.
+ * In addition, specializations must define StateEnumCommon and StateEnum.
  */
 
 template<class ModuleClass>
-struct GlobalState : public StateStorage<GlobalStateCommonDefinition /* Module-specific types go here in any specializations */> {};
+struct GlobalState : public StateStorage<GlobalStateCommonDefinition /* Module-specific types go here in any specializations */>
+{
+    using StateStorage<GlobalStateCommonDefinition>::StateEnumCommon;
+    enum StateEnum {};
+};
 
 template<class ModuleClass>
-struct ChannelState : public StateStorage<ChannelStateCommonDefinition /* Module-specific types go here in any specializations */> {};
+struct ChannelState : public StateStorage<ChannelStateCommonDefinition /* Module-specific types go here in any specializations */>
+{
+    using StateStorage<ChannelStateCommonDefinition>::StateEnumCommon;
+    enum StateEnum {};
+};
 
 ///////////////////////////////////////////////////////////
 // STATE READER
@@ -198,17 +199,32 @@ struct ChannelState : public StateStorage<ChannelStateCommonDefinition /* Module
 
 namespace detail {
 
-// Compile-time for loop adapted from: https://stackoverflow.com/a/55648874/8704745
-template<int start, class T, typename F, size_t... Is>
-void next_state_ctf_helper(T const* reader, F f, std::index_sequence<Is...>)
+// Compile-time for loop helper
+template<int start, class T, class Tuple, typename F, int... Is>
+void copy_state_ctf_helper(T const* reader, Tuple& t, F f, std::integer_sequence<int, Is...>)
+{
+    (f(std::get<Is>(t), reader->template Get<start + Is>()), ...);
+}
+
+// Function F arguments are: (inner data tuple element reference, inner data)
+template<int start, int end, class T, class Tuple, typename F>
+void copy_state_ctf(T const* reader, Tuple& t, F f)
+{
+    copy_state_ctf_helper<start>(reader, t, f, std::make_integer_sequence<int, gcem::abs(start) + end>{});
+}
+
+// Compile-time for loop helper
+template<int start, class T, typename F, int... Is>
+void next_state_ctf_helper(T const* reader, F f, std::integer_sequence<int, Is...>)
 {
     (f(reader->template GetVec<start + Is>(), start + Is), ...);
 }
 
+// Function F arguments are: (wrapped state data vector, index)
 template<int start, int end, class T, typename F>
 void next_state_ctf(T const* reader, F f)
 {
-    next_state_ctf_helper<start>(reader, f, std::make_index_sequence<gcem::abs(start) + end>{});
+    next_state_ctf_helper<start>(reader, f, std::make_integer_sequence<int, gcem::abs(start) + end>{});
 }
 
 } // namespace detail
@@ -227,17 +243,18 @@ protected:
 
 public:
 
-    using state_data_t = typename StateT::data_t;
-    using state_data_wrapped_t = typename StateT::data_wrapped_t;
+    // Bring in dependencies:
+    using data_t = typename StateT::data_t;
+    using data_wrapped_t = typename StateT::data_wrapped_t;
+    using StateEnumCommon = typename StateT::StateEnumCommon;
+    using StateEnum = typename StateT::StateEnum;
 
-    template<int I>
-    using get_data_t = std::tuple_element_t<I + enum_common_count_, state_data_t>;
-
-    template<int I>
-    using get_data_wrapped_t = std::tuple_element_t<I + enum_common_count_, state_data_wrapped_t>;
+    // Helpers:
+    template<int I> using get_data_t = std::tuple_element_t<I + enum_common_count_, data_t>;
+    template<int I> using get_data_wrapped_t = std::tuple_element_t<I + enum_common_count_, data_wrapped_t>;
 
 public:
-    StateReader(StateT const* state) : state_(state), cur_pos_(0), cur_indexes_{} {}
+    StateReader(StateT* state) : state_(state), cur_pos_(0), cur_indexes_{} {}
 
     // Set current read position to the beginning of the Module's state data
     void Reset()
@@ -246,14 +263,14 @@ public:
         cur_indexes_.fill(0);
     }
 
-    // Get the specified state data (I) at the current index
+    // Get the specified state data (I) at the current read position
     template<int I>
     constexpr const get_data_t<I>& Get() const
     {
         return GetVec<I>().at(cur_indexes_[I]).second;
     }
 
-    // Get the specified state data (I) at the specified index (index)
+    // Get the specified state data (I) at the specified read index (index)
     template<int I>
     constexpr const get_data_t<I>& Get(size_t index) const
     {
@@ -265,6 +282,20 @@ public:
     inline constexpr const get_data_wrapped_t<I>& GetVec() const
     {
         return state_->template Get<I>();
+    }
+
+    // Returns a tuple of all the state values at the current read position
+    data_t Copy() const
+    {
+        data_t retVal;
+        detail::copy_state_ctf<
+            enum_lower_bound_,
+            enum_upper_bound_>
+            (this, retVal, [this](auto& retValElem, const auto& val) constexpr
+        {
+            retValElem = val;
+        });
+        return retVal;
     }
 
     // Advances read position to the next row in the state data; newPos should be the position after the last time this method was called.
@@ -296,7 +327,7 @@ public:
 
 protected:
 
-    StateT const* state_; // The state this reader is reading from
+    StateT* state_; // The state this reader is reading from
     global_pos_t cur_pos_; // The current read position in terms of order and pattern row
     std::array<size_t, enum_total_count_> cur_indexes_; // array of state data vector indexes
     // TODO: Add a "delta" array which keeps track of state data which recently changed
@@ -313,31 +344,17 @@ template<class T> using ChannelStateReader = StateReader<ChannelState<T>>;
 namespace detail {
 
 // Compile-time for loop helper
-template<int start, class T, class Tuple, typename F, size_t... Is>
-void copy_state_ctf_helper(T const* reader, Tuple& t, F f, std::index_sequence<Is...>)
+template<int start, class T, class Tuple, int... Is>
+void insert_state_ctf_helper(T* writer, Tuple& t, std::integer_sequence<int, Is...>)
 {
-    (f(std::get<Is>(t), reader->template Get<start + Is>()), ...);
+    (writer->template Set<start + Is>(std::get<Is>(t)), ...);
 }
 
-// Function F arguments are: (inner data tuple element reference, inner data)
-template<int start, int end, class T, class Tuple, typename F>
-void copy_state_ctf(T const* reader, Tuple& t, F f)
+// Calls writer->Set() for each element in the tuple t
+template<int start, int end, class T, class Tuple>
+void insert_state_ctf(T* writer, Tuple& t)
 {
-    copy_state_ctf_helper<start>(reader, t, f, std::make_index_sequence<gcem::abs(start) + end>{});
-}
-
-// Compile-time for loop helper
-template<int start, class T, class Tuple, typename F, size_t... Is>
-void insert_state_ctf_helper(T const* reader, Tuple& t, F f, std::index_sequence<Is...>)
-{
-    (f(reader->template GetVec<start + Is>(), std::get<Is>(t)), ...);
-}
-
-// Function F arguments are: (state data vector reference, inner data to insert)
-template<int start, int end, class T, class Tuple, typename F>
-void insert_state_ctf(T const* reader, Tuple& t, F f)
-{
-    insert_state_ctf_helper<start>(reader, t, f, std::make_index_sequence<gcem::abs(start) + end>{});
+    insert_state_ctf_helper<start>(writer, t, std::make_integer_sequence<int, gcem::abs(start) + end>{});
 }
 
 } // namespace detail
@@ -347,33 +364,39 @@ class StateReaderWriter : public StateReader<StateT>
 {
 public:
 
+    // Inherit constructors
     using StateReader<StateT>::StateReader;
 
-    using state_data_t = typename StateReader<StateT>::state_data_t;
+    // Bring in dependencies from parent:
+    using R = StateReader<StateT>;
+    using typename R::data_t;
+    using typename R::StateEnumCommon;
+    using typename R::StateEnum;
+    template<int I> using get_data_t = typename R::template get_data_t<I>;
 
-    state_data_t Copy() const
+    // Set the specified state data (I) at the current read/write position to val
+    template<int I>
+    void Set(const get_data_t<I>& val)
     {
-        state_data_t retVal;
-        detail::copy_state_ctf<
-            StateReader<StateT>::enum_lower_bound_,
-            StateReader<StateT>::enum_upper_bound_>
-            (this, retVal, [this](auto& retValElem, const auto& val) constexpr
+        auto& vec = R::state_->template Get<I>();
+        size_t& index = R::cur_indexes_[I + R::enum_common_count_]; // Current index within state data for data type I
+        auto& vecElem = vec[index]; // Current vec element
+
+        // There can only be one state data value for a given pos_t, so we won't always be adding a new element to the vector
+        if (vecElem.first != R::cur_pos_)
         {
-            retValElem = val;
-        });
-        return retVal;
+            vec.push_back({R::cur_pos_, val}); // Add new element
+            ++index; // Adjust current index
+        }
+        else
+            vecElem.second = val; // Update current element
     }
 
-    void Insert(state_data_t& allInnerData)
+    // Inserts state data at current position (Use with Copy() in order to "resume" a state)
+    void Insert(data_t& allInnerData)
     {
-        detail::insert_state_ctf<
-            StateReader<StateT>::enum_lower_bound_,
-            StateReader<StateT>::enum_upper_bound_>
-            (this, allInnerData, [this](auto& stateVec, auto& innerData) constexpr
-        {
-            // Create a (position, data) pair and add it to the end of the state vector
-            stateVec.push_back({StateReader<StateT>::cur_pos_, std::move(innerData)});
-        });
+        // Calls Set() for each element in allInnerData
+        detail::insert_state_ctf<R::enum_lower_bound_, R::enum_upper_bound_>(this, allInnerData);
     }
 
 };
@@ -390,10 +413,6 @@ template<class ModuleClass>
 class ModuleState
 {
 public:
-    void Initialize(unsigned numChannels)
-    {
-        channel_states_.resize(numChannels);
-    }
 
     // Creates and returns a GlobalStateReader. The reader is valid only for as long as ModuleState is valid.
     std::shared_ptr<GlobalStateReader<ModuleClass>> GetGlobalReader() const { return std::make_shared<GlobalStateReader<ModuleClass>>(&global_state_); }
@@ -401,16 +420,18 @@ public:
     // Creates and returns a ChannelStateReader for the given channel. The reader is valid only for as long as ModuleState is valid.
     std::shared_ptr<ChannelStateReader<ModuleClass>> GetChannelReader(channel_index_t channel) const { return std::make_shared<ChannelStateReader<ModuleClass>>(&channel_states_[channel]); }
 
-    // TODO: These methods should not be public:
+private:
+
+    // Only the ModuleClass which this class stores state information for is allowed to write state data
+    friend ModuleClass;
+
+    void Initialize(unsigned numChannels) { channel_states_.resize(numChannels); }
 
     // Creates and returns a GlobalStateReaderWriter. The reader/writer is valid only for as long as ModuleState is valid.
-    std::shared_ptr<GlobalStateReaderWriter<ModuleClass>> GetGlobalReaderWriter() const { return std::make_shared<GlobalStateReaderWriter<ModuleClass>>(&global_state_); }
+    std::shared_ptr<GlobalStateReaderWriter<ModuleClass>> GetGlobalReaderWriter() { return std::make_shared<GlobalStateReaderWriter<ModuleClass>>(&global_state_); }
 
     // Creates and returns a ChannelStateReaderWriter for the given channel. The reader/writer is valid only for as long as ModuleState is valid.
-    std::shared_ptr<ChannelStateReaderWriter<ModuleClass>> GetChannelReaderWriter(channel_index_t channel) const { return std::make_shared<ChannelStateReaderWriter<ModuleClass>>(&channel_states_[channel]); }
-
-    GlobalState<ModuleClass>* GetGlobalState() { return global_state_; }
-    ChannelState<ModuleClass>* GetChannelState(channel_index_t channel) { return channel_states_[channel]; }
+    std::shared_ptr<ChannelStateReaderWriter<ModuleClass>> GetChannelReaderWriter(channel_index_t channel) { return std::make_shared<ChannelStateReaderWriter<ModuleClass>>(&channel_states_[channel]); }
 
 private:
     GlobalState<ModuleClass> global_state_;

@@ -137,7 +137,7 @@ void DMF::CleanUp()
     GetData().CleanUp();
 }
 
-void DMF::ImportRaw(const std::string& filename)
+void DMF::ImportImpl(const std::string& filename)
 {
     CleanUp();
 
@@ -253,13 +253,13 @@ void DMF::ImportRaw(const std::string& filename)
         std::cout << "Done importing DMF file.\n\n";
 }
 
-void DMF::ExportRaw(const std::string& filename)
+void DMF::ExportImpl(const std::string& filename)
 {
     // Not implemented
     throw NotImplementedException{};
 }
 
-void DMF::ConvertRaw(const ModulePtr& input)
+void DMF::ConvertImpl(const ModulePtr& input)
 {
     // Not implemented
     throw NotImplementedException{};
@@ -843,41 +843,54 @@ int DMF::GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const NoteSlot& n
     return static_cast<int>(std::max(std::ceil((lowestPeriod - GetPeriod(GetNote(note))) / ((ticksPerRowPair / 2.0) * portDownParam)), 1.0));
 }
 
-size_t dmf::GenerateDataImpl(DMF const* dmf, ModuleGeneratedDataMethods<DMF>* genData)
+size_t DMF::GenerateDataImpl(size_t dataFlags) const
 {
-    if (!dmf || !genData)
-        return 0;
+    auto& genData = *GetGeneratedData();
 
     // Currently can only generate data for the Game Boy system
-    if (dmf->GetSystem().type != System::Type::GameBoy)
+    if (GetSystem().type != System::Type::GameBoy)
         return 0;
 
-    genData->GetState() = ModuleState<DMF>{}; // Give generated data a state object
-    auto& stateData = genData->GetState().value();
-    stateData.Initialize(dmf->GetSystem().channels);
-
+    // Initialize state
+    auto& stateData = genData.GetState().emplace();
+    stateData.Initialize(GetSystem().channels);
     auto globalState = stateData.GetGlobalReaderWriter();
-    //using state_data_t = GlobalStateReaderWriter<DMF>::state_data_t;
 
-    const auto& data = dmf->GetData();
+    // Initialize other generated data
+    using DataEnum = ModuleGeneratedDataMethods<DMF>::DataEnum;
+    auto& soundIndexesUsed = genData.Get<DataEnum::kSoundIndexesUsed>().emplace();
+    auto& soundIndexNoteExtremes = genData.Get<DataEnum::kSoundIndexNoteExtremes>().emplace();
+
+    // For convenience:
+    //using GlobalEnumCommon = GlobalState<DMF>::StateEnumCommon;
+    //using GlobalEnum = GlobalState<DMF>::StateEnum;
+    using ChannelEnumCommon = ChannelState<DMF>::StateEnumCommon;
+    //using ChannelEnum = ChannelState<DMF>::StateEnum;
+
+    // Set up for suspending/restoring states:
+    std::optional<ChannelState<DMF>::data_t> channelStateCopy = std::nullopt;
+    int jumpDestination = -1;
+    bool stateSuspended = false;
+
+    // Main loop
+    const auto& data = GetData();
     for (channel_index_t channel = 0; channel < data.GetNumChannels(); ++channel)
     {
-        auto channelState = stateData.GetChannelReaderWriter(channel);
+        auto& channelState = *stateData.GetChannelReaderWriter(channel);
         for (order_index_t order = 0; order < data.GetNumOrders(); ++order)
         {
             for (row_index_t row = 0; row < data.GetNumRows(); ++row)
             {
                 const auto& rowData = data.GetRow(channel, order, row);
 
-                /*
-
                 // If just arrived at jump destination:
-                if (static_cast<int>(dmfOrder) == state.global.jumpDestination && row == 0 && state.global.suspended)
+                if (static_cast<int>(order) == jumpDestination && row == 0 && stateSuspended)
                 {
                     // Restore state copies
-                    state.Restore();
+                    channelState.Insert(channelStateCopy.value());
                 }
 
+                /*
                 PriorityEffectsMap modEffects;
                 //mod_sample_id_t modSampleId = 0;
                 //uint16_t period = 0;
@@ -922,34 +935,38 @@ size_t dmf::GenerateDataImpl(DMF const* dmf, ModuleGeneratedDataMethods<DMF>* ge
                         }
                     }
                 }
+                */
 
                 // Convert note - Note OFF
-                if (NoteIsOff(chanRow.note)) // Note OFF. Use silent sample and handle effects.
+                if (NoteIsOff(rowData.note)) // Note OFF. Use silent sample and handle effects.
                 {
-                    chanState.notePlaying = false;
-                    chanState.currentNote = NoteTypes::Off{};
+                    channelState.Set<(int)ChannelEnumCommon::kNoteSlot>(rowData.note);
+                    //chanState.notePlaying = false;
+                    //chanState.currentNote = NoteTypes::Off{};
                 }
 
                 // A note on the SQ1, SQ2, or WAVE channels:
-                if (NoteHasPitch(chanRow.note) && chan != dmf::GameBoyChannel::NOISE)
+                if (NoteHasPitch(rowData.note) && channel != dmf::GameBoyChannel::NOISE)
                 {
-                    const Note& dmfNote = GetNote(chanRow.note);
-                    chanState.notePlaying = true;
-                    chanState.currentNote = chanRow.note;
+                    const Note& dmfNote = GetNote(rowData.note);
+                    //chanState.notePlaying = true;
+                    //chanState.currentNote = chanRow.note;
+                    channelState.Set<(int)ChannelEnumCommon::kNoteSlot>(rowData.note);
 
-                    mod_sample_id_t sampleId = chan == dmf::GameBoyChannel::WAVE ? chanState.wavetable + 4 : chanState.dutyCycle;
+                    // TODO:
+                    sound_index_t soundIndex = 0;///channel == dmf::GameBoyChannel::WAVE ? chanState.wavetable + 4 : chanState.dutyCycle;
 
                     // Mark this square wave or wavetable as used
-                    sampleMap[sampleId] = {};
+                    soundIndexesUsed.insert(soundIndex);
 
                     // Get lowest/highest notes
-                    if (sampleIdLowestHighestNotesMap.count(sampleId) == 0) // 1st time
+                    if (soundIndexNoteExtremes.count(soundIndex) == 0) // 1st time
                     {
-                        sampleIdLowestHighestNotesMap[sampleId] = { dmfNote, dmfNote };
+                        soundIndexNoteExtremes[soundIndex] = { dmfNote, dmfNote };
                     }
                     else
                     {
-                        auto& notePair = sampleIdLowestHighestNotesMap[sampleId];
+                        auto& notePair = soundIndexNoteExtremes[soundIndex];
                         if (dmfNote > notePair.second)
                         {
                             // Found a new highest note
@@ -962,7 +979,6 @@ size_t dmf::GenerateDataImpl(DMF const* dmf, ModuleGeneratedDataMethods<DMF>* ge
                         }
                     }
                 }
-                */
             }
         }
     }

@@ -380,9 +380,10 @@ private:
     using SampleMap = std::map<mod::dmf_sample_id_t, mod::DMFSampleMapper>;
     using DMFSampleNoteRangeMap = std::map<mod::dmf_sample_id_t, std::pair<Note, Note>>;
 
-    void ImportRaw(const std::string& filename) override;
-    void ExportRaw(const std::string& filename) override;
-    void ConvertRaw(const ModulePtr& input) override;
+    void ImportImpl(const std::string& filename) override;
+    void ExportImpl(const std::string& filename) override;
+    void ConvertImpl(const ModulePtr& input) override;
+    size_t GenerateDataImpl(size_t dataFlags) const override { return 0; }
 
     // Conversion from DMF:
     void ConvertFromDMF(const DMF& dmf);

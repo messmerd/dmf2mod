@@ -53,13 +53,13 @@ MOD::MOD()
     m_DataGenerated = false;
 }
 
-void MOD::ImportRaw(const std::string& filename)
+void MOD::ImportImpl(const std::string& filename)
 {
     // Not implemented
     throw NotImplementedException();
 }
 
-void MOD::ConvertRaw(const ModulePtr& input)
+void MOD::ConvertImpl(const ModulePtr& input)
 {
     if (!input)
     {
@@ -1612,7 +1612,7 @@ DMFSampleMapper::NoteRangeName DMFSampleMapper::GetMODNoteRangeName(NoteRange mo
 
 ///////// EXPORT /////////
 
-void MOD::ExportRaw(const std::string& filename)
+void MOD::ExportImpl(const std::string& filename)
 {
     std::ofstream outFile(filename, std::ios::binary);
     if (!outFile.is_open())

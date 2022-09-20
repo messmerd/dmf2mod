@@ -37,7 +37,7 @@ bool ModuleBase::Import(const std::string& filename)
     m_Status.Reset(Status::Category::Import);
     try
     {
-        ImportRaw(filename);
+        ImportImpl(filename);
         return false;
     }
     catch (ModuleException& e)
@@ -53,7 +53,7 @@ bool ModuleBase::Export(const std::string& filename)
     m_Status.Reset(Status::Category::Export);
     try
     {
-        ExportRaw(filename);
+        ExportImpl(filename);
         return false;
     }
     catch (ModuleException& e)
@@ -84,7 +84,7 @@ ModulePtr ModuleBase::Convert(ModuleType type, const ConversionOptionsPtr& optio
     try
     {
         // Perform the conversion
-        output->ConvertRaw(shared_from_this());
+        output->ConvertImpl(shared_from_this());
     }
     catch (ModuleException& e)
     {

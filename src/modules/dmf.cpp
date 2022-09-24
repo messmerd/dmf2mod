@@ -324,13 +324,13 @@ void DMF::LoadPatternMatrixValues(Reader& fin)
         m_ModuleInfo.totalRowsInPatternMatrix,
         m_ModuleInfo.totalRowsPerPattern);
 
-    std::map<std::pair<channel_index_t, pattern_index_t>, std::string> channelPatternIdToPatternNameMap;
+    std::map<std::pair<ChannelIndex, PatternIndex>, std::string> channelPatternIdToPatternNameMap;
 
-    for (channel_index_t channel = 0; channel < moduleData.GetNumChannels(); ++channel)
+    for (ChannelIndex channel = 0; channel < moduleData.GetNumChannels(); ++channel)
     {
-        for (order_index_t order = 0; order < moduleData.GetNumOrders(); ++order)
+        for (OrderIndex order = 0; order < moduleData.GetNumOrders(); ++order)
         {
-            const pattern_index_t patternId = fin.ReadInt();
+            const PatternIndex patternId = fin.ReadInt();
             moduleData.SetPatternId(channel, order, patternId);
 
             // Version 1.1 introduces pattern names
@@ -635,15 +635,15 @@ void DMF::LoadPatternsData(Reader& fin)
     auto& moduleData = GetData();
     auto& channelMetadata = moduleData.ChannelMetadataRef();
 
-    std::unordered_set<std::pair<channel_index_t, pattern_index_t>, PairHash> patternsVisited; // Storing channel/patternId pairs
+    std::unordered_set<std::pair<ChannelIndex, PatternIndex>, PairHash> patternsVisited; // Storing channel/patternId pairs
 
-    for (channel_index_t channel = 0; channel < moduleData.GetNumChannels(); ++channel)
+    for (ChannelIndex channel = 0; channel < moduleData.GetNumChannels(); ++channel)
     {
         channelMetadata[channel].effectColumnsCount = fin.ReadInt();
 
-        for (order_index_t order = 0; order < moduleData.GetNumOrders(); ++order)
+        for (OrderIndex order = 0; order < moduleData.GetNumOrders(); ++order)
         {
-            const pattern_index_t patternId = moduleData.GetPatternId(channel, order);
+            const PatternIndex patternId = moduleData.GetPatternId(channel, order);
 
             if (patternsVisited.count({channel, patternId}) > 0) // If pattern has been loaded previously
             {
@@ -662,7 +662,7 @@ void DMF::LoadPatternsData(Reader& fin)
                 patternsVisited.insert({channel, patternId});
             }
 
-            for (row_index_t row = 0; row < moduleData.GetNumRows(); ++row)
+            for (RowIndex row = 0; row < moduleData.GetNumRows(); ++row)
             {
                 moduleData.SetRowById(channel, patternId, row, LoadPatternRow(fin, channelMetadata[channel].effectColumnsCount));
             }
@@ -701,14 +701,59 @@ Row<DMF> DMF::LoadPatternRow(Reader& fin, uint8_t effectsColumnsCount)
 
     for (uint8_t col = 0; col < effectsColumnsCount; ++col)
     {
-        row.effect[col].code = fin.ReadInt<true, 2>();
+        const int16_t dmf_effect_code = fin.ReadInt<true, 2>();
         row.effect[col].value = fin.ReadInt<true, 2>();
+
+        // Convert DMF effect code to dmf2mod's internal representation
+        EffectCode effect_code = Effects::kNoEffect;
+        switch (dmf_effect_code)
+        {
+            case EffectCode::kNoEffect:             effect_code = Effects::kNoEffect; break;
+            case EffectCode::kArp:                  effect_code = Effects::kArp; break;
+            case EffectCode::kPortUp:               effect_code = Effects::kPortUp; break;
+            case EffectCode::kPortDown:             effect_code = Effects::kPortDown; break;
+            case EffectCode::kPort2Note:            effect_code = Effects::kPort2Note; break;
+            case EffectCode::kVibrato:              effect_code = Effects::kVibrato; break;
+            case EffectCode::kPort2NoteVolSlide:    effect_code = Effects::kPort2NoteVolSlide; break;
+            case EffectCode::kVibratoVolSlide:      effect_code = Effects::kVibratoVolSlide; break;
+            case EffectCode::kTremolo:              effect_code = Effects::kTremolo; break;
+            case EffectCode::kPanning:              effect_code = Effects::kPanning; break;
+            case EffectCode::kSetSpeedVal1:         effect_code = Effects::kSpeedA; break;
+            case EffectCode::kVolSlide:             effect_code = Effects::kVolSlide; break;
+            case EffectCode::kPosJump:              effect_code = Effects::kPosJump; break;
+            case EffectCode::kRetrig:               effect_code = Effects::kRetrigger; break;
+            case EffectCode::kPatBreak:             effect_code = Effects::kPatBreak; break;
+            case EffectCode::kArpTickSpeed:         effect_code = dmf::Effects::kArpTickSpeed; break;
+            case EffectCode::kNoteSlideUp:          effect_code = dmf::Effects::kNoteSlideUp; break;
+            case EffectCode::kNoteSlideDown:        effect_code = dmf::Effects::kNoteSlideDown; break;
+            case EffectCode::kSetVibratoMode:       effect_code = dmf::Effects::kSetVibratoMode; break;
+            case EffectCode::kSetFineVibratoDepth:  effect_code = dmf::Effects::kSetFineVibratoDepth; break;
+            case EffectCode::kSetFinetune:          effect_code = dmf::Effects::kSetFinetune; break;
+            case EffectCode::kSetSamplesBank:       effect_code = dmf::Effects::kSetSamplesBank; break;
+            case EffectCode::kNoteCut:              effect_code = Effects::kNoteCut; break;
+            case EffectCode::kNoteDelay:            effect_code = Effects::kNoteDelay; break;
+            case EffectCode::kSyncSignal:           effect_code = dmf::Effects::kSyncSignal; break;
+            case EffectCode::kSetGlobalFinetune:    effect_code = dmf::Effects::kSetGlobalFinetune; break;
+            case EffectCode::kSetSpeedVal2:         effect_code = Effects::kSpeedB; break;
+
+            // Game Boy exclusive:
+            case EffectCode::kGameBoySetWave:                   effect_code = dmf::Effects::kGameBoySetWave; break;
+            case EffectCode::kGameBoySetNoisePolyCounterMode:   effect_code = dmf::Effects::kGameBoySetNoisePolyCounterMode; break;
+            case EffectCode::kGameBoySetDutyCycle:              effect_code = dmf::Effects::kGameBoySetDutyCycle; break;
+            case EffectCode::kGameBoySetSweepTimeShift:         effect_code = dmf::Effects::kGameBoySetSweepTimeShift; break;
+            case EffectCode::kGameBoySetSweepDir:               effect_code = dmf::Effects::kGameBoySetSweepDir; break;
+
+            default:
+                // Set a warning here? (unable to parse effect code)
+                break;
+        }
+        row.effect[col].code = effect_code;
     }
 
     // Initialize the rest to zero
     for (uint8_t col = effectsColumnsCount; col < 4; ++col) // Max total of 4 effects columns in Deflemask
     {
-        row.effect[col] = {(int16_t)EffectCode::NoEffect, (int16_t)EffectCode::NoEffectVal};
+        row.effect[col] = {EffectCode::kNoEffect, 0};
     }
 
     row.instrument = fin.ReadInt<true, 2>();
@@ -845,25 +890,26 @@ int DMF::GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const NoteSlot& n
 
 size_t DMF::GenerateDataImpl(size_t dataFlags) const
 {
-    auto& genData = *GetGeneratedData();
+    auto& gen_data = *GetGeneratedData();
 
     // Currently can only generate data for the Game Boy system
     if (GetSystem().type != System::Type::GameBoy)
         return 0;
 
     // Initialize state
-    auto& stateData = genData.GetState().emplace();
-    stateData.Initialize(GetSystem().channels);
+    auto& state_data = gen_data.GetState().emplace();
+    state_data.Initialize(GetSystem().channels);
 
     // Get reader/writers
-    auto stateReaderWriters = stateData.GetReaderWriters();
-    auto& globalState = stateReaderWriters->global_reader_writer;
-    auto& channelStates = stateReaderWriters->channel_reader_writers;
+    auto state_reader_writers = state_data.GetReaderWriters();
+    auto& global_state = state_reader_writers->global_reader_writer;
+    auto& channel_states = state_reader_writers->channel_reader_writers;
 
     // Initialize other generated data
-    using DataEnum = ModuleGeneratedDataMethods<DMF>::DataEnum;
-    auto& soundIndexesUsed = genData.Get<DataEnum::kSoundIndexesUsed>().emplace();
-    auto& soundIndexNoteExtremes = genData.Get<DataEnum::kSoundIndexNoteExtremes>().emplace();
+    using GenDataEnumCommon = ModuleGeneratedData<DMF>::GenDataEnumCommon;
+    auto& sound_indexes_used = gen_data.Get<GenDataEnumCommon::kSoundIndexesUsed>().emplace();
+    auto& sound_index_note_extremes = gen_data.Get<GenDataEnumCommon::kSoundIndexNoteExtremes>().emplace();
+    auto& loopback_points = gen_data.Get<GenDataEnumCommon::kLoopbackPoints>().emplace();
 
     // For convenience:
     using GlobalEnumCommon = GlobalState<DMF>::StateEnumCommon;
@@ -872,55 +918,116 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
     //using ChannelEnum = ChannelState<DMF>::StateEnum;
 
     // Set up for suspending/restoring states:
-    std::optional<ChannelState<DMF>::data_t> channelStateCopy = std::nullopt;
-    int jumpDestination = -1;
-    bool stateSuspended = false;
+    int jump_destination_order = -1;
+    int jump_destination_row = -1;
+    bool state_suspended = false;
+
+    // TODO: Remove InitialState methods and just use 1st row of state?
+    // Set initial states
+    {
+        // Set initial state (global)
+        GlobalStateReaderWriter<DMF> global_init;
+        global_init.Set<GlobalEnumCommon::kSpeedA>(m_ModuleInfo.tickTime1); // * timebase?
+        global_init.Set<GlobalEnumCommon::kSpeedB>(m_ModuleInfo.tickTime2); // * timebase?
+        global_init.Set<GlobalEnumCommon::kTempo>(0); // TODO: How should tempo/speed info be stored?
+        global_state.Insert(global_init.Copy());
+
+        // Set initial state (per-channel)
+        ChannelStateReaderWriter<DMF> channel_init;
+        channel_init.Set<ChannelEnumCommon::kNoteSlot>(NoteTypes::Empty{});
+        channel_init.Set<ChannelEnumCommon::kVolume>(15);
+        channel_init.Set<ChannelEnumCommon::kArp>({0, 0});
+        channel_init.Set<ChannelEnumCommon::kPort>({PortamentoStateData::Type::None, 0});
+        channel_init.Set<ChannelEnumCommon::kVibrato>({0, 0});
+        channel_init.Set<ChannelEnumCommon::kPort2NoteVolSlide>({0, 0});
+        channel_init.Set<ChannelEnumCommon::kVibratoVolSlide>({0, 0});
+        channel_init.Set<ChannelEnumCommon::kTremolo>({0, 0});
+        channel_init.Set<ChannelEnumCommon::kPanning>(127);
+        channel_init.Set<ChannelEnumCommon::kVolSlide>({0, 0});
+
+        auto channel_init_state = channel_init.Copy();
+        for (auto& writer : channel_states)
+        {
+            writer.Insert(channel_init_state);
+        }
+    }
 
     // Main loop
     const auto& data = GetData();
-    for (channel_index_t channel = 0; channel < data.GetNumChannels(); ++channel)
+    for (ChannelIndex channel = 0; channel < data.GetNumChannels(); ++channel)
     {
-        auto& channelState = channelStates[channel];
-        for (order_index_t order = 0; order < data.GetNumOrders(); ++order)
+        auto& channelState = channel_states[channel];
+        for (OrderIndex order = 0; order < data.GetNumOrders(); ++order)
         {
-            for (row_index_t row = 0; row < data.GetNumRows(); ++row)
+            for (RowIndex row = 0; row < data.GetNumRows(); ++row)
             {
-                stateReaderWriters->SetWritePos(order, row);
+                state_reader_writers->SetWritePos(order, row);
                 const auto& rowData = data.GetRow(channel, order, row);
 
                 // If just arrived at jump destination:
-                if (static_cast<int>(order) == jumpDestination && row == 0 && stateSuspended)
+                if (static_cast<int>(order) == jump_destination_order && static_cast<int>(row) == jump_destination_row && state_suspended)
                 {
                     // Restore state copies
-                    channelState.Insert(channelStateCopy.value());
-                    globalState.SetSingle<GlobalEnumCommon::kJumpDestination>(true, false);
-                    stateSuspended = false;
+                    state_reader_writers->Restore();
+                    state_suspended = false;
+                    jump_destination_order = -1;
+                    jump_destination_row = -1;
                 }
 
+                // CHANNEL STATE
+                // TODO
+
+
+
                 // GLOBAL STATE
-                if (channel == 0) // Only do this the first time in the inner loop for this order/row
+                if (channel == data.GetNumChannels() - 1) // Only update global state after all channel states for this row have been updated
                 {
-                    // Right-most PosJumps and PatBreaks are the ones that take effect. TODO: Is this accurate behavior?
-                    int16_t posJump = -1, patBreak = -1, speed = -1, tempo = -1;
+                    // Deflemask PosJump/PatBreak behavior (experimentally determined in Deflemask 1.1.3):
+                    // The left-most PosJump or PatBreak in a given row is the one that takes effect.
+                    // If the left-most PosJump or PatBreak is invalid (no value or invalid value),
+                    //  every other effect of that type in the row is ignored.
+                    // PosJump effects are ignored if a valid and non-ignored PatBreak is present in the row.
+                    int16_t posJump = -1, patBreak = -1, speed_a = -1, speed_b = -1, tempo = -1;
+                    bool ignorePosJump = false, ignorePatBreak = false;
 
                     // Want to check all channels to update the global state for this row
-                    for (channel_index_t channel2 = 0; channel2 < data.GetNumChannels(); ++channel2)
+                    for (ChannelIndex channel2 = 0; channel2 < data.GetNumChannels(); ++channel2)
                     {
                         for (const auto& effect : rowData.effect)
                         {
-                            switch (static_cast<CommonEffects>(effect.code))
+                            switch (effect.code)
                             {
-                                case CommonEffects::PosJump:
+                                case Effects::kPosJump:
+                                    if (ignorePosJump)
+                                        break;
+                                    if (posJump < 0 && (effect.value < 0 || effect.value >= data.GetNumOrders()))
+                                    {
+                                        ignorePosJump = true;
+                                        break;
+                                    }
                                     posJump = effect.value;
                                     break;
-                                case CommonEffects::PatBreak:
+                                case Effects::kPatBreak:
+                                    if (ignorePatBreak)
+                                        break;
+                                    if (patBreak < 0 && (effect.value < 0 || effect.value >= data.GetNumRows()))
+                                    {
+                                        ignorePatBreak = true;
+                                        break;
+                                    }
                                     patBreak = effect.value;
                                     break;
-                                case CommonEffects::Speed:
-                                    speed = effect.value;
+                                case Effects::kSpeedA:
+                                    // TODO
+                                    //speed = effect.value;
                                     break;
-                                case CommonEffects::Tempo:
-                                    tempo = effect.value;
+                                case Effects::kSpeedB:
+                                    // TODO
+                                    //speed = effect.value;
+                                    break;
+                                case Effects::kTempo:
+                                    // TODO
+                                    //tempo = effect.value;
                                     break;
                                 default:
                                     break;
@@ -929,18 +1036,45 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                     }
 
                     // Set the global state if needed
-                    if (posJump >= 0)
-                        globalState.Set<GlobalEnumCommon::kPosJump>(posJump);
-                    if (patBreak >= 0)
-                        globalState.Set<GlobalEnumCommon::kPatBreak>(patBreak);
-                    if (speed >= 0)
-                        globalState.Set<GlobalEnumCommon::kSpeed>(speed);
+
+                    if (speed_a >= 0)
+                        global_state.Set<GlobalEnumCommon::kSpeedA>(speed_a);
+                    if (speed_b >= 0)
+                        global_state.Set<GlobalEnumCommon::kSpeedB>(speed_b);
                     if (tempo >= 0)
-                        globalState.Set<GlobalEnumCommon::kTempo>(tempo);
+                        global_state.Set<GlobalEnumCommon::kTempo>(tempo);
+
+                    if (patBreak >= 0)
+                    {
+                        // All state data for this row (besides PatBreak) must be ready when Copy occurs
+                        state_reader_writers->Save();
+                        jump_destination_order = order + 1;
+                        jump_destination_row = patBreak;
+                        state_suspended = true;
+                        global_state.Set<GlobalEnumCommon::kPatBreak>(patBreak); // Don't want the PatBreak in the copy
+                    }
+                    else if (posJump >= 0) // PosJump only takes effect if PatBreak isn't used
+                    {
+                        if (posJump >= order) // If not a loop
+                        {
+                            // All state data for this row (besides PosJump) must be ready when Copy occurs
+                            state_reader_writers->Save();
+                            jump_destination_order = posJump;
+                            jump_destination_row = 0;
+                            state_suspended = true;
+                        }
+                        else
+                        {
+                            // TODO: This could be overwritten by future PosJumps to the same order
+                            loopback_points[posJump] = {order, row};
+                        }
+
+                        global_state.Set<GlobalEnumCommon::kPosJump>(posJump); // Don't want the PosJump in the copy
+                    }
                 }
 
 
-                /// TODO: CONVERT EFFECTS HERE
+                
 
                 
 
@@ -949,7 +1083,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                 //mod_sample_id_t modSampleId = 0;
                 //uint16_t period = 0;
 
-                if (channel == static_cast<channel_index_t>(dmf::GameBoyChannel::NOISE))
+                if (channel == static_cast<ChannelIndex>(dmf::GameBoyChannel::NOISE))
                 {
                     modEffects = DMFConvertEffects_NoiseChannel(chanRow);
                     DMFUpdateStatePre(dmf, state, modEffects);
@@ -1014,19 +1148,19 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                     channelState.Set<ChannelEnumCommon::kNoteSlot, true>(rowData.note);
 
                     // TODO:
-                    sound_index_t soundIndex = 0;///channel == dmf::GameBoyChannel::WAVE ? chanState.wavetable + 4 : chanState.dutyCycle;
+                    SoundIndex soundIndex = 0;///channel == dmf::GameBoyChannel::WAVE ? chanState.wavetable + 4 : chanState.dutyCycle;
 
                     // Mark this square wave or wavetable as used
-                    soundIndexesUsed.insert(soundIndex);
+                    sound_indexes_used.insert(soundIndex);
 
                     // Get lowest/highest notes
-                    if (soundIndexNoteExtremes.count(soundIndex) == 0) // 1st time
+                    if (sound_index_note_extremes.count(soundIndex) == 0) // 1st time
                     {
-                        soundIndexNoteExtremes[soundIndex] = { dmfNote, dmfNote };
+                        sound_index_note_extremes[soundIndex] = { dmfNote, dmfNote };
                     }
                     else
                     {
-                        auto& notePair = soundIndexNoteExtremes[soundIndex];
+                        auto& notePair = sound_index_note_extremes[soundIndex];
                         if (dmfNote > notePair.second)
                         {
                             // Found a new highest note

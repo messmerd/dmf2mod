@@ -11,29 +11,44 @@
 
 namespace d2m {
 
-// All common effects are less than 0
-enum class CommonEffects : int8_t
+using EffectCode = int8_t;
+using EffectValue = int16_t;
+
+struct Effect
 {
-    NoEffect            =0,
-    Arp                 =-1,
-    PortUp              =-2,
-    PortDown            =-3,
-    Port2Note           =-4,
-    Vibrato             =-5,
-    Port2NoteVolSlide   =-6,
-    VibratoVolSlide     =-7,
-    Tremolo             =-8,
-    Panning             =-9,
-    VolSlide            =-10,
-    PosJump             =-11,
-    Retrigger           =-12,
-    PatBreak            =-13,
-    NoteCut             =-14,
-    NoteDelay           =-15,
-    Speed               =-16,
-    Tempo               =-17,
+    EffectCode code;
+    EffectValue value;
 };
 
-// Modules should implement effects specific to them using positive values starting with 1.
+inline constexpr bool operator==(const Effect& lhs, const Effect& rhs) { return lhs.code == rhs.code && lhs.value == rhs.value; }
+
+// Defines common effects used by multiple module types
+namespace Effects
+{
+    enum
+    {
+        // All common effects are less than 0
+        kNoEffect            =0,
+        kArp                 =-1,
+        kPortUp              =-2,
+        kPortDown            =-3,
+        kPort2Note           =-4,
+        kVibrato             =-5,
+        kPort2NoteVolSlide   =-6,
+        kVibratoVolSlide     =-7,
+        kTremolo             =-8,
+        kPanning             =-9,
+        kSpeedA              =-10,
+        kVolSlide            =-11,
+        kPosJump             =-12,
+        kRetrigger           =-13,
+        kPatBreak            =-14,
+        kNoteCut             =-15,
+        kNoteDelay           =-16,
+        kTempo               =-17,
+        kSpeedB              =-18,
+    };
+    // Modules should implement effects specific to them using positive values starting with 1.
+}
 
 } // namespace d2m

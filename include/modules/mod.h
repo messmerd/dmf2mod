@@ -63,7 +63,7 @@ namespace EffectCode
         FineVolSlideDown=0xEB, CutSample=0xEC, DelaySample=0xED, DelayPattern=0xEE, InvertLoop=0xEF, SetSpeed=0xF0,
 
         /* The following are not actual MOD effects, but they are useful during conversions */
-        DutyCycleChange=0xFF0, WavetableChange=0xFF1 
+        DutyCycleChange=0xFE, WavetableChange=0xFF
     };
 }
 
@@ -196,9 +196,9 @@ struct State
         int jumpDestination; // DMF pattern matrix row where you are jumping to. Not a loop.
         Effect channelIndependentEffect;
         unsigned ticksPerRowPair; // DMF's time_base * (speed_a + speed_b)
-        channel_index_t channel;    // The current channel in DMF or MOD
-        order_index_t order;      // The current pattern matrix row in DMF
-        pattern_index_t patternRow; // The current pattern row in DMF?
+        ChannelIndex channel;    // The current channel in DMF or MOD
+        OrderIndex order;      // The current pattern matrix row in DMF
+        PatternIndex patternRow; // The current pattern row in DMF?
     } global;
 
     ChannelStateOld channel[4];

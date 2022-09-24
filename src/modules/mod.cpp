@@ -95,7 +95,7 @@ void MOD::ConvertFromDMF(const DMF& dmf)
 
     const auto& dmfData = dmf.GetData();
     auto& modData = GetData();
-    const order_index_t numOrders = dmfData.GetNumOrders() + (order_index_t)m_UsingSetupPattern;
+    const OrderIndex numOrders = dmfData.GetNumOrders() + (OrderIndex)m_UsingSetupPattern;
     if (numOrders > 64) // numOrders is 1 more than it actually is
     {
         throw MODException(ModuleException::Category::Convert, MOD::ConvertError::TooManyPatternMatrixRows);
@@ -106,7 +106,7 @@ void MOD::ConvertFromDMF(const DMF& dmf)
         throw MODException(ModuleException::Category::Convert, MOD::ConvertError::Over64RowPattern);
     }
 
-    channel_index_t numChannels = dmfData.GetNumChannels();
+    ChannelIndex numChannels = dmfData.GetNumChannels();
     if (numChannels != 4)
     {
         throw ModuleException(ModuleException::Category::Convert, MOD::ConvertError::WrongChannelCount, "Wrong number of channels. There should be exactly 4.");
@@ -201,17 +201,17 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
     // Most of the following nested for loop is copied from the export pattern data loop in DMFConvertPatterns.
     // I didn't want to do this, but I think having two of the same loop is the only simple way.
     // Loop through SQ1, SQ2, and WAVE channels:
-    for (channel_index_t chan = static_cast<channel_index_t>(dmf::GameBoyChannel::SQW1); chan <= static_cast<channel_index_t>(dmf::GameBoyChannel::WAVE); chan++)
+    for (ChannelIndex chan = static_cast<ChannelIndex>(dmf::GameBoyChannel::SQW1); chan <= static_cast<ChannelIndex>(dmf::GameBoyChannel::WAVE); chan++)
     {
         state.global.channel = chan;
 
         // Loop through Deflemask patterns
-        for (order_index_t dmfOrder = 0; dmfOrder < dmfData.GetNumOrders(); dmfOrder++)
+        for (OrderIndex dmfOrder = 0; dmfOrder < dmfData.GetNumOrders(); dmfOrder++)
         {
             state.global.order = dmfOrder;
 
             // Row within pattern
-            for (row_index_t dmfRow = 0; dmfRow < dmfData.GetNumRows(); dmfRow++)
+            for (RowIndex dmfRow = 0; dmfRow < dmfData.GetNumRows(); dmfRow++)
             {
                 state.global.patternRow = dmfRow;
 
@@ -230,7 +230,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
                 //mod_sample_id_t modSampleId = 0;
                 //uint16_t period = 0;
 
-                if (chan == static_cast<channel_index_t>(dmf::GameBoyChannel::NOISE))
+                if (chan == static_cast<ChannelIndex>(dmf::GameBoyChannel::NOISE))
                 {
                     modEffects = DMFConvertEffects_NoiseChannel(chanRow);
                     DMFUpdateStatePre(dmf, state, modEffects);
@@ -252,7 +252,7 @@ void MOD::DMFCreateSampleMapping(const DMF& dmf, SampleMap& sampleMap, DMFSample
                 {
                     for (auto& iter = sampleChangeEffects.first; iter != sampleChangeEffects.second; )
                     {
-                        Effect& modEffect = iter->second;
+                        mod::Effect& modEffect = iter->second;
                         if (modEffect.effect == EffectCode::CutSample && modEffect.value == 0) // Note cut
                         {
                             // Silent sample is needed
@@ -565,16 +565,16 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
     //   Keep a copy of the main state for each channel, and once it reaches the 
     //   jump destination, overwrite the current state with the copied state.
 
-    const order_index_t dmfNumOrders = dmf.GetData().GetNumOrders();
-    const row_index_t dmfNumRows = dmf.GetData().GetNumRows();
+    const OrderIndex dmfNumOrders = dmf.GetData().GetNumOrders();
+    const RowIndex dmfNumRows = dmf.GetData().GetNumRows();
 
     // Loop through ProTracker pattern matrix rows (corresponds to DMF pattern numbers):
-    for (order_index_t dmfOrder = 0; dmfOrder < dmfNumOrders; dmfOrder++)
+    for (OrderIndex dmfOrder = 0; dmfOrder < dmfNumOrders; dmfOrder++)
     {
         state.global.order = dmfOrder;
 
         // Loop through rows in a pattern:
-        for (row_index_t dmfRow = 0; dmfRow < dmfNumRows; dmfRow++)
+        for (RowIndex dmfRow = 0; dmfRow < dmfNumRows; dmfRow++)
         {
             state.global.patternRow = dmfRow;
             state.global.channelIndependentEffect = {EffectCode::NoEffectCode, EffectCode::NoEffectVal};
@@ -584,13 +584,13 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
                 state.global.channelIndependentEffect = {EffectCode::PatBreak, 0};
 
             // Clear channel rows
-            for (channel_index_t chan = 0; chan < modData.GetNumChannels(); chan++)
+            for (ChannelIndex chan = 0; chan < modData.GetNumChannels(); chan++)
             {
                 state.channelRows[chan] = {};
             }
 
             // Loop through channels:
-            for (channel_index_t chan = 0; chan < modData.GetNumChannels(); chan++)
+            for (ChannelIndex chan = 0; chan < modData.GetNumChannels(); chan++)
             {
                 state.global.channel = chan;
 
@@ -624,9 +624,9 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
             }
 
             // Set the channel rows for the current pattern row all at once
-            for (channel_index_t chan = 0; chan < modData.GetNumChannels(); ++chan)
+            for (ChannelIndex chan = 0; chan < modData.GetNumChannels(); ++chan)
             {
-                modData.SetRow(chan, dmfOrder + (order_index_t)m_UsingSetupPattern, dmfRow, state.channelRows[chan]);
+                modData.SetRow(chan, dmfOrder + (OrderIndex)m_UsingSetupPattern, dmfRow, state.channelRows[chan]);
             }
 
             // TODO: Better channel independent effects implementation
@@ -634,10 +634,10 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sampleMap)
         }
 
         // If the DMF has less than 64 rows per pattern, there will be extra MOD rows which will need to be blank; TODO: May not be needed
-        for (row_index_t dmfRow = dmfNumRows; dmfRow < 64; dmfRow++)
+        for (RowIndex dmfRow = dmfNumRows; dmfRow < 64; dmfRow++)
         {
             // Loop through channels:
-            for (channel_index_t chan = 0; chan < modData.GetNumChannels(); chan++)
+            for (ChannelIndex chan = 0; chan < modData.GetNumChannels(); chan++)
             {
                 Row<MOD> tempRow = {0, 0, 0, 0};
                 modData.SetRow(chan, dmfOrder + (int)m_UsingSetupPattern, dmfRow, tempRow);
@@ -699,21 +699,21 @@ PriorityEffectsMap MOD::DMFConvertEffects(const Row<DMF>& row, State& state)
     // Convert DMF effects to MOD effects
     for (const auto& dmfEffect : row.effect)
     {
-        if (dmfEffect.code == dmf::EffectCode::NoEffect)
+        if (dmfEffect.code == Effects::kNoEffect)
             continue;
 
         switch (dmfEffect.code)
         {
-            case dmf::EffectCode::Arp:
+            case Effects::kArp:
             {
                 if (!options->AllowArpeggio()) break;
                 persistentEffects.erase(EffectPriorityArp);
                 if (dmfEffect.value <= 0)
                     break;
-                persistentEffects.emplace(EffectPriorityArp, Effect{EffectCode::Arp, (uint16_t)dmfEffect.value});
+                persistentEffects.emplace(EffectPriorityArp, Effect{EffectCode::Arp, (uint8_t)dmfEffect.value});
                 break;
             }
-            case dmf::EffectCode::PortUp:
+            case dmf::EffectCode::kPortUp:
             {
                 if (!options->AllowPortamento()) break;
                 persistentEffects.erase(EffectPriorityPortUp);
@@ -724,14 +724,14 @@ PriorityEffectsMap MOD::DMFConvertEffects(const Row<DMF>& row, State& state)
                     channelState.rowsUntilPortAutoOff = -1;
                     break;
                 }
-                persistentEffects.emplace(EffectPriorityPortUp, Effect{EffectCode::PortUp, (uint16_t)dmfEffect.value});
+                persistentEffects.emplace(EffectPriorityPortUp, Effect{EffectCode::PortUp, (uint8_t)dmfEffect.value});
                 if (channelState.rowsUntilPortAutoOff == -1)
                     channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortUpAutoOff(state.global.ticksPerRowPair, NoteHasPitch(row.note) ? row.note : channelState.currentNote, dmfEffect.value);
                 channelState.portDirection = ChannelStateOld::PORT_UP;
                 channelState.portParam = dmfEffect.value;
                 break;
             }
-            case dmf::EffectCode::PortDown:
+            case dmf::EffectCode::kPortDown:
             {
                 if (!options->AllowPortamento()) break;
                 persistentEffects.erase(EffectPriorityPortUp);
@@ -742,14 +742,14 @@ PriorityEffectsMap MOD::DMFConvertEffects(const Row<DMF>& row, State& state)
                     channelState.rowsUntilPortAutoOff = -1;
                     break;
                 }
-                persistentEffects.emplace(EffectPriorityPortDown, Effect{EffectCode::PortDown, (uint16_t)dmfEffect.value});
+                persistentEffects.emplace(EffectPriorityPortDown, Effect{EffectCode::PortDown, (uint8_t)dmfEffect.value});
                 if (channelState.rowsUntilPortAutoOff == -1)
                     channelState.rowsUntilPortAutoOff = DMF::GetRowsUntilPortDownAutoOff(state.global.ticksPerRowPair, NoteHasPitch(row.note) ? row.note : channelState.currentNote, dmfEffect.value);
                 channelState.portDirection = ChannelStateOld::PORT_DOWN;
                 channelState.portParam = dmfEffect.value;
                 break;
             }
-            case dmf::EffectCode::Port2Note:
+            case dmf::EffectCode::kPort2Note:
             {
                 if (!options->AllowPort2Note()) break;
                 persistentEffects.erase(EffectPriorityPortUp);
@@ -760,19 +760,19 @@ PriorityEffectsMap MOD::DMFConvertEffects(const Row<DMF>& row, State& state)
                     channelState.rowsUntilPortAutoOff = -1;
                     break;
                 }
-                persistentEffects.emplace(EffectPriorityPort2Note, Effect{EffectCode::Port2Note, (uint16_t)dmfEffect.value});
+                persistentEffects.emplace(EffectPriorityPort2Note, Effect{EffectCode::Port2Note, (uint8_t)dmfEffect.value});
                 break;
             }
-            case dmf::EffectCode::Vibrato:
+            case dmf::EffectCode::kVibrato:
             {
                 if (!options->AllowVibrato()) break;
                 persistentEffects.erase(EffectPriorityVibrato);
                 if (dmfEffect.value <= 0)
                     break;
-                persistentEffects.emplace(EffectPriorityVibrato, Effect{EffectCode::Vibrato, (uint16_t)dmfEffect.value});
+                persistentEffects.emplace(EffectPriorityVibrato, Effect{EffectCode::Vibrato, (uint8_t)dmfEffect.value});
                 break;
             }
-            case dmf::EffectCode::NoteCut:
+            case dmf::EffectCode::kNoteCut:
             {
                 if (dmfEffect.value == 0)
                 {
@@ -781,7 +781,7 @@ PriorityEffectsMap MOD::DMFConvertEffects(const Row<DMF>& row, State& state)
                 }
                 break;
             }
-            case dmf::EffectCode::PatBreak:
+            case dmf::EffectCode::kPatBreak:
             {
                 if (dmfEffect.value == 0)
                 {
@@ -790,10 +790,10 @@ PriorityEffectsMap MOD::DMFConvertEffects(const Row<DMF>& row, State& state)
                 }
                 break;
             }
-            case dmf::EffectCode::PosJump:
+            case dmf::EffectCode::kPosJump:
             {
                 const int dest = dmfEffect.value + (int)m_UsingSetupPattern; // Into MOD order value, not DMF
-                modEffects.emplace(EffectPriorityStructureRelated, Effect{EffectCode::PosJump, (uint16_t)dest});
+                modEffects.emplace(EffectPriorityStructureRelated, Effect{EffectCode::PosJump, (uint8_t)dest});
                 break;
             }
 
@@ -803,11 +803,11 @@ PriorityEffectsMap MOD::DMFConvertEffects(const Row<DMF>& row, State& state)
 
         switch (dmfEffect.code)
         {
-            case dmf::GameBoyEffectCode::SetDutyCycle:
-                modEffects.emplace(EffectPrioritySampleChange, Effect{EffectCode::DutyCycleChange, (uint16_t)dmfEffect.value});
+            case dmf::Effects::kGameBoySetDutyCycle:
+                modEffects.emplace(EffectPrioritySampleChange, Effect{EffectCode::DutyCycleChange, (uint8_t)dmfEffect.value});
                 break;
-            case dmf::GameBoyEffectCode::SetWave:
-                modEffects.emplace(EffectPrioritySampleChange, Effect{EffectCode::WavetableChange, (uint16_t)(dmfEffect.value)});
+            case dmf::Effects::kGameBoySetWave:
+                modEffects.emplace(EffectPrioritySampleChange, Effect{EffectCode::WavetableChange, (uint8_t)(dmfEffect.value)});
                 break;
             default:
                 break; // Unsupported effect
@@ -831,13 +831,13 @@ PriorityEffectsMap MOD::DMFConvertEffects_NoiseChannel(const Row<DMF>& row)
 
     for (auto& dmfEffect : row.effect)
     {
-        if (dmfEffect.code == dmf::EffectCode::PatBreak && dmfEffect.value == 0)
+        if (dmfEffect.code == Effects::kPatBreak && dmfEffect.value == 0)
         {
             // Only D00 is supported at the moment
             modEffects.insert({EffectPriorityStructureRelated, {EffectCode::PatBreak, 0}});
             break;
         }
-        else if (dmfEffect.code == dmf::EffectCode::PosJump)
+        else if (dmfEffect.code == Effects::kPosJump)
         {
             const int dest = dmfEffect.value + (int)m_UsingSetupPattern; // Into MOD order value, not DMF
             modEffects.insert({EffectPriorityStructureRelated, {EffectCode::PosJump, (uint16_t)dest}});
@@ -864,10 +864,10 @@ void MOD::DMFUpdateStatePre(const DMF& dmf, State& state, const PriorityEffectsM
             auto effectValue = iter->second.value;
 
             // If a PosJump / PatBreak command was found and it's not in a section skipped by another PosJump / PatBreak:
-            if (effectCode == dmf::EffectCode::PosJump || (effectCode == dmf::EffectCode::PatBreak && effectValue == 0))
+            if (effectCode == Effects::kPosJump || (effectCode == Effects::kPatBreak && effectValue == 0))
             {
                 // Convert MOD destination value to DMF destination value:
-                const int dest = effectCode == dmf::EffectCode::PosJump ? effectValue - (int)m_UsingSetupPattern : state.global.order + 1;
+                const int dest = effectCode == Effects::kPosJump ? effectValue - (int)m_UsingSetupPattern : state.global.order + 1;
 
                 if (dest < 0 || dest >= static_cast<int>(dmf.GetData().GetNumOrders()))
                     throw std::invalid_argument("Invalid Position Jump or Pattern Break effect");
@@ -923,11 +923,11 @@ void MOD::DMFUpdateStatePre(const DMF& dmf, State& state, const PriorityEffectsM
 static inline int16_t GetNewDMFVolume(int16_t dmfRowVol, const ChannelStateOld& state)
 {
     if (state.channel != dmf::GameBoyChannel::WAVE)
-        return dmfRowVol == dmf::DMFNoVolume ? state.volume : dmfRowVol;
+        return dmfRowVol == dmf::kDMFNoVolume ? state.volume : dmfRowVol;
 
     switch (dmfRowVol)
     {
-        case dmf::DMFNoVolume: // Volume isn't set for this channel row
+        case dmf::kDMFNoVolume: // Volume isn't set for this channel row
             return state.volume; // channel's volume
         case 0: case 1: case 2: case 3:
             return 0;
@@ -956,7 +956,7 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const Row<DMF>& 
         // The WAVE channel volume changes whether a note is attached or not, but SQ1/SQ2 need a note
         if (chanState.channel == dmf::GameBoyChannel::WAVE || NoteHasPitch(row.note))
         {
-            uint8_t newVolume = (uint8_t)std::round(newChanVol / (double)dmf::DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
+            uint8_t newVolume = (uint8_t)std::round(newChanVol / (double)dmf::kDMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
 
             modEffects.insert({EffectPriorityVolumeChange, {EffectCode::SetVolume, newVolume}});
 
@@ -974,16 +974,16 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const Row<DMF>& 
     {
         // Check whether DMF pattern row has any Pos Jump effects that loop back to earlier in the song
         bool hasLoopback = false;
-        order_index_t loopbackToPattern = 0; // DMF pattern matrix row
-        for (channel_index_t chan = 0; chan <= (channel_index_t)dmf::GameBoyChannel::NOISE; chan++)
+        OrderIndex loopbackToPattern = 0; // DMF pattern matrix row
+        for (ChannelIndex chan = 0; chan <= (ChannelIndex)dmf::GameBoyChannel::NOISE; chan++)
         {
             const Row<DMF>& tempChanRow = dmf.GetData().GetRow(chan, state.global.order, state.global.patternRow);
             for (const auto& effect : tempChanRow.effect)
             {
-                if (effect.code == dmf::EffectCode::PosJump && effect.value >= 0 && effect.value < (int)state.global.patternRow)
+                if (effect.code == dmf::EffectCode::kPosJump && effect.value >= 0 && effect.value < (int)state.global.patternRow)
                 {
                     hasLoopback = true;
-                    loopbackToPattern = static_cast<order_index_t>(effect.value);
+                    loopbackToPattern = static_cast<OrderIndex>(effect.value);
                     break;
                 }
             }
@@ -995,7 +995,7 @@ void MOD::DMFGetAdditionalEffects(const DMF& dmf, State& state, const Row<DMF>& 
         if (m_DataGenerated)
         {
             // Add Note OFF to the loopback point for any channels where the sound would carry over
-            for (channel_index_t chan = 0; chan <= (channel_index_t)dmf::GameBoyChannel::NOISE; chan++)
+            for (ChannelIndex chan = 0; chan <= (ChannelIndex)dmf::GameBoyChannel::NOISE; chan++)
             {
                 // If a note is playing on the last row before it loops, and the loopback point does not have a note playing:
                 if (chanState.notePlaying && !NoteHasPitch(dmf.GetData().GetRow(chan, loopbackToPattern, 0).note))
@@ -1047,7 +1047,7 @@ Note MOD::DMFConvertNote(State& state, const Row<DMF>& row, const MOD::SampleMap
     {
         for (auto& iter = sampleChangeEffects.first; iter != sampleChangeEffects.second; ++iter)
         {
-            Effect& modEffect = iter->second;
+            mod::Effect& modEffect = iter->second;
             if (modEffect.effect == EffectCode::CutSample && modEffect.value == 0) // Note cut
             {
                 sampleId = sampleMap.at(-1).GetFirstMODSampleId(); // Use silent sample
@@ -1122,9 +1122,9 @@ Note MOD::DMFConvertNote(State& state, const Row<DMF>& row, const MOD::SampleMap
             // When you change ProTracker samples, the channel volume resets, so
             //  we need to check if a volume change effect is needed to get the volume back to where it was.
 
-            if (chanState.volume != dmf::DMFVolumeMax) // Currently, the default volume for all samples is the maximum. TODO: Can optimize
+            if (chanState.volume != dmf::kDMFVolumeMax) // Currently, the default volume for all samples is the maximum. TODO: Can optimize
             {
-                uint8_t newVolume = (uint8_t)std::round(chanState.volume / (double)dmf::DMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
+                uint8_t newVolume = (uint8_t)std::round(chanState.volume / (double)dmf::kDMFVolumeMax * (double)VolumeMax); // Convert DMF volume to MOD volume
 
                 modEffects.insert({EffectPriorityVolumeChange, {EffectCode::SetVolume, newVolume}});
 
@@ -1151,7 +1151,7 @@ Row<MOD> MOD::DMFApplyNoteAndEffect(State& state, const PriorityEffectsMap& modE
     modChannelRow.EffectCode = 0; // Will be set below
     modChannelRow.EffectValue = 0; // Will be set below
 
-    Effect& channelIndependentEffect = state.global.channelIndependentEffect;
+    mod::Effect& channelIndependentEffect = state.global.channelIndependentEffect;
 
     // If no effects are being used here and a pat break or jump effect needs to be used, it can be done here
     if (modEffects.size() == 0)
@@ -1718,7 +1718,7 @@ void MOD::ExportModuleInfo(std::ofstream& fout) const
     fout.put(127);       // 0x7F - Useless byte that has to be here
 
     // Pattern matrix (Each ProTracker pattern number is the same as its pattern matrix row number)
-    for (pattern_index_t patternId : GetData().PatternMatrixRef())
+    for (PatternIndex patternId : GetData().PatternMatrixRef())
     {
         fout.put(static_cast<uint8_t>(patternId));
     }
@@ -1735,9 +1735,9 @@ void MOD::ExportPatterns(std::ofstream& fout) const
     const auto& modData = GetData();
     for (const auto& pattern : modData.PatternsRef())
     {
-        for (row_index_t row = 0; row < modData.GetNumRows(); ++row)
+        for (RowIndex row = 0; row < modData.GetNumRows(); ++row)
         {
-            for (channel_index_t channel = 0; channel < modData.GetNumChannels(); ++channel)
+            for (ChannelIndex channel = 0; channel < modData.GetNumChannels(); ++channel)
             {
                 const Row<MOD>& rowData = pattern[row][channel];
                 // Sample number (upper 4b); sample period/effect param. (upper 4b)

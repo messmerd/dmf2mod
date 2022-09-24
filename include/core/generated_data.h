@@ -21,66 +21,153 @@ namespace d2m {
 // Forward declare
 class ModuleBase;
 
-template<class ModuleClass>
-class ModuleGeneratedDataStorageDefault
+
+namespace detail {
+
+struct GenDataDefinitionTag {};
+
+template<typename T>
+struct wrapped_gen_data {};
+
+template<typename... Ts>
+struct wrapped_gen_data<std::tuple<Ts...>>
 {
-protected:
-    ModuleGeneratedDataStorageDefault() = default;
-    virtual ~ModuleGeneratedDataStorageDefault() = default;
+    // type is either an empty tuple or a tuple with each Ts wrapped in an optional
+    using type = std::conditional_t<sizeof...(Ts)==0, std::tuple<>, std::tuple<std::optional<Ts>...>>;
+};
 
-protected:
+template<typename... T>
+using wrapped_gen_data_t = typename wrapped_gen_data<T...>::type;
 
-    // All data types, wrapped with std::optional (?)
-    using state_t = std::optional<ModuleState<ModuleClass>>;
-    using sound_index_note_extremes_t = std::optional<std::unordered_map<sound_index_t, std::pair<Note, Note>>>;
-    using channel_note_extremes_t = std::optional<std::unordered_map<channel_index_t, std::pair<Note, Note>>>;
-    using note_off_used_t = std::optional<bool>;
-    using sound_indexes_used_t = std::optional<std::set<sound_index_t>>;
+} // namespace detail
 
-    // data_t is a required type alias. Must be a std::tuple of the above data types in the order that they appear in DataEnum.
-    using data_t = std::tuple<state_t, sound_index_note_extremes_t, channel_note_extremes_t, note_off_used_t, sound_indexes_used_t>;
+///////////////////////////////////////////////////////////
+// COMMON GENERATED DATA TYPES
+///////////////////////////////////////////////////////////
 
-    // Stores all the generated data
-    data_t data_;
+// All data types, wrapped with std::optional (?)
+template<class T> using StateGenData = std::optional<ModuleState<T>>;
+using SoundIndexNoteExtremesGenData = std::optional<std::unordered_map<SoundIndex, std::pair<Note, Note>>>;
+using ChannelNoteExtremesGenData = std::optional<std::unordered_map<ChannelIndex, std::pair<Note, Note>>>;
+using NoteOffUsedGenData = std::optional<bool>;
+using SoundIndexesUsedGenData = std::optional<std::set<SoundIndex>>;
+using LoopbackPointsGenData = std::optional<std::map<OrderIndex, OrderRowPosition>>; // Jump destination order --> Order/Row where the PosJump occurred
 
-public:
+///////////////////////////////////////////////////////////
+// COMMON GENERATED DATA DEFINITION
+///////////////////////////////////////////////////////////
 
-    // Required enum. Variant values must correspond to the element indexes in data_t, and in the same order.
-    enum class DataEnum : size_t
+template<class ModuleClass>
+struct GeneratedDataCommonDefinition : public detail::GenDataDefinitionTag
+{
+    static constexpr int kCommonCount = 7; // # of variants in GenDataEnumCommon (remember to update this after changing the enum)
+    static constexpr int kLowerBound = -kCommonCount;
+
+    enum class GenDataEnumCommon
     {
-        kState,
-        kSoundIndexNoteExtremes,
-        kChannelNoteExtremes,
-        kNoteOffUsed,
-        kSoundIndexesUsed,
-        //kDuplicateOrders,
-        kCount
+        kDuplicateOrders        =-7,
+        kNoteOffUsed            =-6,
+        kLoopbackPoints         =-5,
+        kChannelNoteExtremes    =-4,
+        kSoundIndexNoteExtremes =-3,
+        kSoundIndexesUsed       =-2,
+        kState                  =-1,
     };
+
+    using GenDataCommon = std::tuple<
+        StateGenData<ModuleClass>,
+        SoundIndexNoteExtremesGenData,
+        ChannelNoteExtremesGenData,
+        NoteOffUsedGenData,
+        SoundIndexesUsedGenData,
+        LoopbackPointsGenData
+        >;
 
     // Not necessary, but could be used for potential performance improvements when calling Generate()
     //  by only generating the data which is needed.
-    enum DataFlags : size_t
+    enum GenDataFlagsCommon : size_t
     {
         kFlagAll                    = 0, // 0 as a template parameter to Generate() means calculate all generated data
         kFlagState                  = 1,
-        kFlagSoundIndexNoteExtremes = 2,
-        kFlagChannelNoteExtremes    = 4,
-        kFlagNoteOffUsed            = 8,
-        kFlagSoundIndexesUsed       = 16,
-        //kFlagDuplicateOrders        = 32,
+        kFlagSoundIndexesUsed       = 2,
+        kFlagSoundIndexNoteExtremes = 4,
+        kFlagChannelNoteExtremes    = 8,
+        kFlagLoopbackPoints         = 16,
+        kFlagNoteOffUsed            = 32,
+        kFlagDuplicateOrders        = 64
+        // ...
     };
 };
 
+///////////////////////////////////////////////////////////
+// GENERATED DATA STORAGE
+///////////////////////////////////////////////////////////
 
-template<class ModuleClass>
-class ModuleGeneratedDataStorage : public ModuleGeneratedDataStorageDefault<ModuleClass>
+template<class CommonDef, typename... Ts>
+class GeneratedDataStorage : public CommonDef
 {
 public:
+    static constexpr int kUpperBound = sizeof...(Ts); // # of module-specific gen data types
+
+    using typename CommonDef::GenDataEnumCommon;
+
+    // The GenDataEnum for any module-specific types should be defined
+    //  in the GeneratedData template specialization
+
+    using GenDataModuleSpecific = std::tuple<Ts...>;
+
+    // Single tuple of all data types stored by this gen data storage
+    using GenData = detail::tuple_cat_t<typename CommonDef::GenDataCommon, GenDataModuleSpecific>;
+
+    // Single tuple of all wrapped data types stored by this gen data storage. They should all be optionals.
+    using GenDataWrapped = detail::wrapped_gen_data_t<GenData>;
+
+    // Returns an immutable reference to generated data at index gen_data_index
+    template<int gen_data_index>
+    constexpr const auto& Get() const
+    {
+        return std::get<gen_data_index + CommonDef::kCommonCount>(data_);
+    }
+
+    // Returns a mutable reference to generated data at index gen_data_index
+    template<int gen_data_index>
+    constexpr auto& Get()
+    {
+        return std::get<gen_data_index + CommonDef::kCommonCount>(data_);
+    }
+
+    // For convenience:
+    constexpr const std::optional<ModuleState<ModuleClass>>& GetState() const { return Get<GenDataEnumCommon::kState>(); }
+    constexpr std::optional<ModuleState<ModuleClass>>& GetState() { return Get<GenDataEnumCommon::kState>(); }
+
+protected:
+    GenDataWrapped data_; // Stores all generated data
 };
 
-// Implements methods for the Module's generated data storage - should not be specialized
+///////////////////////////////////////////////////////////
+// GENERATED DATA PRIMARY TEMPLATE
+///////////////////////////////////////////////////////////
+
+/*
+ * The following is the generated data storage primary class template.
+ * It can be specialized to add additional supported generated data if desired.
+ * Any specializations must inherit from GeneratedDataStorage and pass the correct
+ * common definition struct plus the new module-specific types to the template parameter.
+ * In addition, specializations must define GenDataEnumCommon and GenDataEnum.
+ * All generated data types must have a "==" operator defined for them.
+ */
+
 template<class ModuleClass>
-class ModuleGeneratedDataMethods : public ModuleGeneratedDataStorage<ModuleClass>
+struct GeneratedData : public GeneratedDataStorage<GeneratedDataCommonDefinition<ModuleClass> /* Module-specific types go here in any specializations */>
+{
+    //using Parent = GeneratedDataStorage<GeneratedDataCommonDefinition<ModuleClass>>;
+    using GeneratedDataCommonDefinition<ModuleClass>::GenDataEnumCommon;
+    enum GenDataEnum {};
+};
+
+// This is used by Module classes
+template<class ModuleClass>
+class ModuleGeneratedData : public GeneratedData<ModuleClass>
 {
 private:
 
@@ -88,36 +175,20 @@ private:
 
 public:
 
-    ModuleGeneratedDataMethods() = delete;
-    ModuleGeneratedDataMethods(ModuleBase const* moduleClass) : module_class_(moduleClass) {}
+    ModuleGeneratedData() = delete;
+    ModuleGeneratedData(ModuleBase const* moduleClass) : module_class_(moduleClass) {}
 
     // Bring in dependencies from parent:
-    using typename ModuleGeneratedDataStorageDefault<ModuleClass>::DataEnum;
-    using ModuleGeneratedDataStorageDefault<ModuleClass>::data_;
-    static constexpr size_t data_count_ = static_cast<size_t>(DataEnum::kCount);
-
-    const std::optional<ModuleState<ModuleClass>>& GetState() const { return std::get<(size_t)DataEnum::kState>(data_); }
-    std::optional<ModuleState<ModuleClass>>& GetState() { return std::get<(size_t)DataEnum::kState>(data_); }
-
-    template<DataEnum I>
-    const auto& Get() const { return std::get<(size_t)I>(data_); }
-    template<DataEnum I>
-    auto& Get() { return std::get<(size_t)I>(data_); }
+    using typename GeneratedData<ModuleClass>::GenDataEnumCommon;
+    using typename GeneratedData<ModuleClass>::GenDataEnum;
+    //using typename GeneratedData<ModuleClass>::Parent;
 
     size_t Generate(size_t dataFlags)
     {
         assert(module_class_);
         return module_class_->GenerateDataImpl(dataFlags);
     }
-};
 
-// Can specialize this, but it must also inherit from ModuleGeneratedDataMethods<ModuleClass>
-template<class ModuleClass>
-class ModuleGeneratedData : public ModuleGeneratedDataMethods<ModuleClass>
-{
-public:
-    // Inherit constructors
-    using ModuleGeneratedDataMethods<ModuleClass>::ModuleGeneratedDataMethods;
 };
 
 } // namespace d2m

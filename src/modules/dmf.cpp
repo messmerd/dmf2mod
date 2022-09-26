@@ -710,40 +710,40 @@ Row<DMF> DMF::LoadPatternRow(Reader& fin, uint8_t effectsColumnsCount)
         EffectCode effect_code = Effects::kNoEffect;
         switch (dmf_effect_code)
         {
-            case EffectCode::kNoEffect:             effect_code = Effects::kNoEffect; break;
-            case EffectCode::kArp:                  effect_code = Effects::kArp; break;
-            case EffectCode::kPortUp:               effect_code = Effects::kPortUp; break;
-            case EffectCode::kPortDown:             effect_code = Effects::kPortDown; break;
-            case EffectCode::kPort2Note:            effect_code = Effects::kPort2Note; break;
-            case EffectCode::kVibrato:              effect_code = Effects::kVibrato; break;
-            case EffectCode::kPort2NoteVolSlide:    effect_code = Effects::kPort2NoteVolSlide; break;
-            case EffectCode::kVibratoVolSlide:      effect_code = Effects::kVibratoVolSlide; break;
-            case EffectCode::kTremolo:              effect_code = Effects::kTremolo; break;
-            case EffectCode::kPanning:              effect_code = Effects::kPanning; break;
-            case EffectCode::kSetSpeedVal1:         effect_code = Effects::kSpeedA; break;
-            case EffectCode::kVolSlide:             effect_code = Effects::kVolSlide; break;
-            case EffectCode::kPosJump:              effect_code = Effects::kPosJump; break;
-            case EffectCode::kRetrig:               effect_code = Effects::kRetrigger; break;
-            case EffectCode::kPatBreak:             effect_code = Effects::kPatBreak; break;
-            case EffectCode::kArpTickSpeed:         effect_code = dmf::Effects::kArpTickSpeed; break;
-            case EffectCode::kNoteSlideUp:          effect_code = dmf::Effects::kNoteSlideUp; break;
-            case EffectCode::kNoteSlideDown:        effect_code = dmf::Effects::kNoteSlideDown; break;
-            case EffectCode::kSetVibratoMode:       effect_code = dmf::Effects::kSetVibratoMode; break;
-            case EffectCode::kSetFineVibratoDepth:  effect_code = dmf::Effects::kSetFineVibratoDepth; break;
-            case EffectCode::kSetFinetune:          effect_code = dmf::Effects::kSetFinetune; break;
-            case EffectCode::kSetSamplesBank:       effect_code = dmf::Effects::kSetSamplesBank; break;
-            case EffectCode::kNoteCut:              effect_code = Effects::kNoteCut; break;
-            case EffectCode::kNoteDelay:            effect_code = Effects::kNoteDelay; break;
-            case EffectCode::kSyncSignal:           effect_code = dmf::Effects::kSyncSignal; break;
-            case EffectCode::kSetGlobalFinetune:    effect_code = dmf::Effects::kSetGlobalFinetune; break;
-            case EffectCode::kSetSpeedVal2:         effect_code = Effects::kSpeedB; break;
+            case dmf::EffectCode::kNoEffect:             effect_code = Effects::kNoEffect; break;
+            case dmf::EffectCode::kArp:                  effect_code = Effects::kArp; break;
+            case dmf::EffectCode::kPortUp:               effect_code = Effects::kPortUp; break;
+            case dmf::EffectCode::kPortDown:             effect_code = Effects::kPortDown; break;
+            case dmf::EffectCode::kPort2Note:            effect_code = Effects::kPort2Note; break;
+            case dmf::EffectCode::kVibrato:              effect_code = Effects::kVibrato; break;
+            case dmf::EffectCode::kPort2NoteVolSlide:    effect_code = Effects::kPort2NoteVolSlide; break;
+            case dmf::EffectCode::kVibratoVolSlide:      effect_code = Effects::kVibratoVolSlide; break;
+            case dmf::EffectCode::kTremolo:              effect_code = Effects::kTremolo; break;
+            case dmf::EffectCode::kPanning:              effect_code = Effects::kPanning; break;
+            case dmf::EffectCode::kSetSpeedVal1:         effect_code = Effects::kSpeedA; break;
+            case dmf::EffectCode::kVolSlide:             effect_code = Effects::kVolSlide; break;
+            case dmf::EffectCode::kPosJump:              effect_code = Effects::kPosJump; break;
+            case dmf::EffectCode::kRetrig:               effect_code = Effects::kRetrigger; break;
+            case dmf::EffectCode::kPatBreak:             effect_code = Effects::kPatBreak; break;
+            case dmf::EffectCode::kArpTickSpeed:         effect_code = dmf::Effects::kArpTickSpeed; break;
+            case dmf::EffectCode::kNoteSlideUp:          effect_code = dmf::Effects::kNoteSlideUp; break;
+            case dmf::EffectCode::kNoteSlideDown:        effect_code = dmf::Effects::kNoteSlideDown; break;
+            case dmf::EffectCode::kSetVibratoMode:       effect_code = dmf::Effects::kSetVibratoMode; break;
+            case dmf::EffectCode::kSetFineVibratoDepth:  effect_code = dmf::Effects::kSetFineVibratoDepth; break;
+            case dmf::EffectCode::kSetFinetune:          effect_code = dmf::Effects::kSetFinetune; break;
+            case dmf::EffectCode::kSetSamplesBank:       effect_code = dmf::Effects::kSetSamplesBank; break;
+            case dmf::EffectCode::kNoteCut:              effect_code = Effects::kNoteCut; break;
+            case dmf::EffectCode::kNoteDelay:            effect_code = Effects::kNoteDelay; break;
+            case dmf::EffectCode::kSyncSignal:           effect_code = dmf::Effects::kSyncSignal; break;
+            case dmf::EffectCode::kSetGlobalFinetune:    effect_code = dmf::Effects::kSetGlobalFinetune; break;
+            case dmf::EffectCode::kSetSpeedVal2:         effect_code = Effects::kSpeedB; break;
 
             // Game Boy exclusive:
-            case EffectCode::kGameBoySetWave:                   effect_code = dmf::Effects::kGameBoySetWave; break;
-            case EffectCode::kGameBoySetNoisePolyCounterMode:   effect_code = dmf::Effects::kGameBoySetNoisePolyCounterMode; break;
-            case EffectCode::kGameBoySetDutyCycle:              effect_code = dmf::Effects::kGameBoySetDutyCycle; break;
-            case EffectCode::kGameBoySetSweepTimeShift:         effect_code = dmf::Effects::kGameBoySetSweepTimeShift; break;
-            case EffectCode::kGameBoySetSweepDir:               effect_code = dmf::Effects::kGameBoySetSweepDir; break;
+            case dmf::EffectCode::kGameBoySetWave:                   effect_code = dmf::Effects::kGameBoySetWave; break;
+            case dmf::EffectCode::kGameBoySetNoisePolyCounterMode:   effect_code = dmf::Effects::kGameBoySetNoisePolyCounterMode; break;
+            case dmf::EffectCode::kGameBoySetDutyCycle:              effect_code = dmf::Effects::kGameBoySetDutyCycle; break;
+            case dmf::EffectCode::kGameBoySetSweepTimeShift:         effect_code = dmf::Effects::kGameBoySetSweepTimeShift; break;
+            case dmf::EffectCode::kGameBoySetSweepDir:               effect_code = dmf::Effects::kGameBoySetSweepDir; break;
 
             default:
                 // Set a warning here? (unable to parse effect code)

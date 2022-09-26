@@ -243,14 +243,14 @@ private:
 template<class ModuleClass>
 struct GlobalState : public StateStorage<GlobalStateCommonDefinition<ModuleClass> /* Module-specific types go here in any specializations */>
 {
-    using GlobalStateCommonDefinition<ModuleClass>::StateEnumCommon;
+    using typename GlobalStateCommonDefinition<ModuleClass>::StateEnumCommon;
     enum StateEnum {};
 };
 
 template<class ModuleClass>
 struct ChannelState : public StateStorage<ChannelStateCommonDefinition<ModuleClass> /* Module-specific types go here in any specializations */>
 {
-    using ChannelStateCommonDefinition<ModuleClass>::StateEnumCommon;
+    using typename ChannelStateCommonDefinition<ModuleClass>::StateEnumCommon;
     enum StateEnum {};
 };
 
@@ -362,7 +362,7 @@ public:
     {
         StateData retVal;
         detail::CopyState<enum_lower_bound_, enum_upper_bound_>(this, retVal,
-            [this](auto& retValElem, const auto& val) constexpr
+            [](auto& retValElem, const auto& val) constexpr
         {
             retValElem = val;
         });

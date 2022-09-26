@@ -163,7 +163,7 @@ template<class ModuleClass>
 struct GeneratedData : public GeneratedDataStorage<GeneratedDataCommonDefinition<ModuleClass> /* Module-specific types go here in any specializations */>
 {
     //using Parent = GeneratedDataStorage<GeneratedDataCommonDefinition<ModuleClass>>;
-    using GeneratedDataCommonDefinition<ModuleClass>::GenDataEnumCommon;
+    using typename GeneratedDataCommonDefinition<ModuleClass>::GenDataEnumCommon;
     enum GenDataEnum {};
 };
 

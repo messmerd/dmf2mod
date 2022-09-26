@@ -22,6 +22,9 @@ struct Effect
 
 inline constexpr bool operator==(const Effect& lhs, const Effect& rhs) { return lhs.code == rhs.code && lhs.value == rhs.value; }
 
+// In Module data storage, this may be used, but in generated data, only the effects which actually have an effect should be present
+inline constexpr EffectValue kEffectValueless = -1;
+
 // Defines common effects used by multiple module types
 namespace Effects
 {

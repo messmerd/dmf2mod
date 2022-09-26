@@ -46,6 +46,22 @@ struct PatternMetadata<DMF>
     std::string name;
 };
 
+template<>
+struct SoundIndex<DMF>
+{
+    enum Types { kSquare, kWave, /*Other options here*/ };
+
+    struct Square { uint8_t id; operator uint8_t() const { return id; } };
+    struct Wave { uint8_t id; operator uint8_t() const { return id; } };
+    struct Noise { uint8_t id; operator uint8_t() const { return id; } }; // Placeholder
+
+    using type = std::variant<Square, Wave, Noise>;
+};
+
+inline constexpr bool operator==(const SoundIndex<DMF>::Square& lhs, const SoundIndex<DMF>::Square& rhs) { return lhs.id == rhs.id; }
+inline constexpr bool operator==(const SoundIndex<DMF>::Wave& lhs, const SoundIndex<DMF>::Wave& rhs) { return lhs.id == rhs.id; }
+inline constexpr bool operator==(const SoundIndex<DMF>::Noise& lhs, const SoundIndex<DMF>::Noise& rhs) { return lhs.id == rhs.id; }
+
 ///////////////////////////////////////////////////////////
 // dmf namespace
 ///////////////////////////////////////////////////////////

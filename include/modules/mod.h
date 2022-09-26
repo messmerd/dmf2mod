@@ -233,7 +233,7 @@ struct State
             channel[i].dutyCycle = 0; // Default is 0 or a 12.5% duty cycle square wave.
             channel[i].wavetable = 0; // Default is wavetable #0.
             channel[i].sampleChanged = true; // Whether dutyCycle or wavetable recently changed
-            channel[i].volume = dmf::DMFVolumeMax; // The max volume for a channel (in DMF units)
+            channel[i].volume = dmf::kDMFVolumeMax; // The max volume for a channel (in DMF units)
             channel[i].notePlaying = false; // Whether a note is currently playing on a channel
             channel[i].noteRange = DMFSampleMapper::NoteRange::First; // Which MOD sample note range is currently being used
             channel[i].persistentEffects = {};

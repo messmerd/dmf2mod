@@ -19,6 +19,7 @@ namespace d2m {
 // Forward declares
 class ModuleBase;
 class ConversionOptionsBase;
+template<typename> class ModuleGeneratedData;
 
 // Type aliases to make usage easier
 using Module = ModuleBase;
@@ -109,6 +110,9 @@ protected:
     virtual void ImportImpl(const std::string& filename) = 0;
     virtual void ExportImpl(const std::string& filename) = 0;
     virtual void ConvertImpl(const ModulePtr& input) = 0;
+
+    // Allow ModuleGeneratedData to call GenerateDataImpl
+    template<typename> friend class ModuleGeneratedData;
 
     // dataFlags specifies what data was requested to be generated
     virtual size_t GenerateDataImpl(size_t dataFlags) const = 0;

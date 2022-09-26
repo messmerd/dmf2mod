@@ -675,7 +675,7 @@ Row<DMF> DMF::LoadPatternRow(Reader& fin, uint8_t effectsColumnsCount)
     Row<DMF> row;
 
     const uint16_t tempPitch = fin.ReadInt<false, 2>();
-    uint8_t tempOctave = fin.ReadInt<false, 2>(); // Upper byte is unused to this conversion is okay
+    uint8_t tempOctave = fin.ReadInt<false, 2>(); // Upper byte is unused
 
     switch (tempPitch)
     {
@@ -689,6 +689,7 @@ Row<DMF> DMF::LoadPatternRow(Reader& fin, uint8_t effectsColumnsCount)
             row.note = NoteTypes::Off{};
             break;
         default:
+            assert(tempPitch <= 12);
             // Apparently, the note pitch for C- can be either 0 or 12. I'm setting it to 0 always.
             if (tempPitch == 12)
                 row.note = NoteTypes::Note{NotePitch::C, ++tempOctave};
@@ -703,6 +704,7 @@ Row<DMF> DMF::LoadPatternRow(Reader& fin, uint8_t effectsColumnsCount)
     {
         const int16_t dmf_effect_code = fin.ReadInt<true, 2>();
         row.effect[col].value = fin.ReadInt<true, 2>();
+        assert(kEffectValueless == -1); // DMF valueless effect magic number is -1, and so must be kEffectValueless
 
         // Convert DMF effect code to dmf2mod's internal representation
         EffectCode effect_code = Effects::kNoEffect;
@@ -753,7 +755,7 @@ Row<DMF> DMF::LoadPatternRow(Reader& fin, uint8_t effectsColumnsCount)
     // Initialize the rest to zero
     for (uint8_t col = effectsColumnsCount; col < 4; ++col) // Max total of 4 effects columns in Deflemask
     {
-        row.effect[col] = {EffectCode::kNoEffect, 0};
+        row.effect[col] = {Effects::kNoEffect, 0};
     }
 
     row.instrument = fin.ReadInt<true, 2>();
@@ -891,6 +893,7 @@ int DMF::GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const NoteSlot& n
 size_t DMF::GenerateDataImpl(size_t dataFlags) const
 {
     auto& gen_data = *GetGeneratedData();
+    const auto& data = GetData();
 
     // Currently can only generate data for the Game Boy system
     if (GetSystem().type != System::Type::GameBoy)
@@ -909,7 +912,9 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
     using GenDataEnumCommon = ModuleGeneratedData<DMF>::GenDataEnumCommon;
     auto& sound_indexes_used = gen_data.Get<GenDataEnumCommon::kSoundIndexesUsed>().emplace();
     auto& sound_index_note_extremes = gen_data.Get<GenDataEnumCommon::kSoundIndexNoteExtremes>().emplace();
+    //auto& channel_note_extremes = gen_data.Get<GenDataEnumCommon::kChannelNoteExtremes>().emplace();
     auto& loopback_points = gen_data.Get<GenDataEnumCommon::kLoopbackPoints>().emplace();
+    gen_data.Get<GenDataEnumCommon::kNoteOffUsed>() = false;
 
     // For convenience:
     using GlobalEnumCommon = GlobalState<DMF>::StateEnumCommon;
@@ -917,52 +922,106 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
     using ChannelEnumCommon = ChannelState<DMF>::StateEnumCommon;
     //using ChannelEnum = ChannelState<DMF>::StateEnum;
 
+    // For portamento auto-off: -1 = port not on; 0 = need to turn port off; >0 = rows until port auto off
+    std::vector<int> rows_until_port_auto_off(data.GetNumChannels(), -1);
+
+    /*
+     * In spite of what the Deflemask manual says, portamento effects are automatically turned off if they
+     *  stay on long enough without a new note being played. I believe it's until C-2 is reached for port down
+     *  and C-8 for port up. Port2Note also seems to have an "auto-off" point, but I haven't looked into it.
+     * See order 0x14 in the "i wanna eat my ice cream alone (reprise)" demo song for an example of "auto-off" behavior.
+     * In that order, for the F-2 note on SQ2, the port down effect turns off automatically if the next note
+     *   comes 21 or more rows later. The number of rows it takes depends on the note pitch, port effect parameter,
+     * and the tempo denominator (Speed A/B and the base time).
+     * The lambda functions below return the number of rows until auto-off given this information.
+     * While they are based on the formulas apparently used by Deflemask, they are still not 100% accurate.
+     */
+    auto RowsUntilPortUpAutoOff = [](unsigned ticksPerRowPair, const NoteSlot& note, int portUpParam)
+    {
+        // Note: This is not always 100% accurate, probably due to differences in rounding/truncating at intermediate steps of the calculation, but it's very close.
+        // TODO: Need to take into account odd/even rows rather than using the average ticks per row
+        if (!NoteHasPitch(note)) return 0;
+        assert((int)GetNote(note).pitch >= 0);
+        constexpr double highestPeriod = GetPeriod({NotePitch::C, 8}); // C-8
+        // Not sure why the 0.75 is needed
+        return static_cast<int>(std::max(std::ceil(0.75 * (highestPeriod - GetPeriod(GetNote(note))) / ((ticksPerRowPair / 2.0) * portUpParam * -1.0)), 1.0));
+    };
+
+    auto RowsUntilPortDownAutoOff = [](unsigned ticksPerRowPair, const NoteSlot& note, int portDownParam)
+    {
+        // Note: This is not always 100% accurate, probably due to differences in rounding/truncating at intermediate steps of the calculation, but it's very close.
+        // TODO: Need to take into account odd/even rows rather than using the average ticks per row
+        if (!NoteHasPitch(note)) return 0;
+        assert((int)GetNote(note).pitch >= 0);
+        constexpr double lowestPeriod = GetPeriod({NotePitch::C, 2}); // C-2
+        return static_cast<int>(std::max(std::ceil((lowestPeriod - GetPeriod(GetNote(note))) / ((ticksPerRowPair / 2.0) * portDownParam)), 1.0));
+    };
+
+    const unsigned ticks_per_row_pair = m_ModuleInfo.timeBase * (m_ModuleInfo.tickTime1 + m_ModuleInfo.tickTime2);
+
+    // Notes can be "cancelled" by Port2Note effects under certain conditions
+    std::vector<bool> note_cancelled(data.GetNumChannels(), false);
+
     // Set up for suspending/restoring states:
     int jump_destination_order = -1;
     int jump_destination_row = -1;
     bool state_suspended = false;
 
     // TODO: Remove InitialState methods and just use 1st row of state?
-    // Set initial states
+
+    // Set initial state (global)
+    global_state.Reset(); // Just in case
+    global_state.Set<GlobalEnumCommon::kSpeedA>(m_ModuleInfo.tickTime1); // * timebase?
+    global_state.Set<GlobalEnumCommon::kSpeedB>(m_ModuleInfo.tickTime2); // * timebase?
+    global_state.Set<GlobalEnumCommon::kTempo>(0); // TODO: How should tempo/speed info be stored?
+
+    // Set initial state (per-channel)
+    for (unsigned i = 0; i < channel_states.size(); ++i)
     {
-        // Set initial state (global)
-        GlobalStateReaderWriter<DMF> global_init;
-        global_init.Set<GlobalEnumCommon::kSpeedA>(m_ModuleInfo.tickTime1); // * timebase?
-        global_init.Set<GlobalEnumCommon::kSpeedB>(m_ModuleInfo.tickTime2); // * timebase?
-        global_init.Set<GlobalEnumCommon::kTempo>(0); // TODO: How should tempo/speed info be stored?
-        global_state.Insert(global_init.Copy());
+        auto& channel_state = channel_states[i];
+        channel_state.Reset(); // Just in case
 
-        // Set initial state (per-channel)
-        ChannelStateReaderWriter<DMF> channel_init;
-        channel_init.Set<ChannelEnumCommon::kNoteSlot>(NoteTypes::Empty{});
-        channel_init.Set<ChannelEnumCommon::kVolume>(15);
-        channel_init.Set<ChannelEnumCommon::kArp>({0, 0});
-        channel_init.Set<ChannelEnumCommon::kPort>({PortamentoStateData::Type::None, 0});
-        channel_init.Set<ChannelEnumCommon::kVibrato>({0, 0});
-        channel_init.Set<ChannelEnumCommon::kPort2NoteVolSlide>({0, 0});
-        channel_init.Set<ChannelEnumCommon::kVibratoVolSlide>({0, 0});
-        channel_init.Set<ChannelEnumCommon::kTremolo>({0, 0});
-        channel_init.Set<ChannelEnumCommon::kPanning>(127);
-        channel_init.Set<ChannelEnumCommon::kVolSlide>({0, 0});
-
-        auto channel_init_state = channel_init.Copy();
-        for (auto& writer : channel_states)
+        SoundIndex<DMF>::type si;
+        switch (i)
         {
-            writer.Insert(channel_init_state);
+        case dmf::GameBoyChannel::SQW1:
+        case dmf::GameBoyChannel::SQW2:
+            si = SoundIndex<DMF>::Square{0}; // Default: 12.5% duty cycle
+            break;
+        case dmf::GameBoyChannel::WAVE:
+            si = SoundIndex<DMF>::Wave{0}; // Default: wavetable #0
+            break;
+        case dmf::GameBoyChannel::NOISE:
+            si = SoundIndex<DMF>::Noise{0}; // Placeholder
+            break;
+        default:
+            assert(0);
+            break;
         }
+
+        channel_state.Set<ChannelEnumCommon::kSoundIndex>(si);
+        channel_state.Set<ChannelEnumCommon::kNoteSlot>(NoteTypes::Empty{});
+        channel_state.Set<ChannelEnumCommon::kVolume>(15);
+        channel_state.Set<ChannelEnumCommon::kArp>(0);
+        channel_state.Set<ChannelEnumCommon::kPort>({PortamentoStateData::kNone, 0});
+        channel_state.Set<ChannelEnumCommon::kVibrato>(0);
+        channel_state.Set<ChannelEnumCommon::kPort2NoteVolSlide>(0);
+        channel_state.Set<ChannelEnumCommon::kVibratoVolSlide>(0);
+        channel_state.Set<ChannelEnumCommon::kTremolo>(0);
+        channel_state.Set<ChannelEnumCommon::kPanning>(127);
+        channel_state.Set<ChannelEnumCommon::kVolSlide>(0);
     }
 
     // Main loop
-    const auto& data = GetData();
     for (ChannelIndex channel = 0; channel < data.GetNumChannels(); ++channel)
     {
-        auto& channelState = channel_states[channel];
+        auto& channel_state = channel_states[channel];
         for (OrderIndex order = 0; order < data.GetNumOrders(); ++order)
         {
             for (RowIndex row = 0; row < data.GetNumRows(); ++row)
             {
                 state_reader_writers->SetWritePos(order, row);
-                const auto& rowData = data.GetRow(channel, order, row);
+                const auto& row_data = data.GetRow(channel, order, row);
 
                 // If just arrived at jump destination:
                 if (static_cast<int>(order) == jump_destination_order && static_cast<int>(row) == jump_destination_row && state_suspended)
@@ -974,10 +1033,279 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                     jump_destination_row = -1;
                 }
 
-                // CHANNEL STATE
-                // TODO
+                // CHANNEL STATE - PORT2NOTE
+                if (!NoteIsEmpty(row_data.note))
+                {
+                    // Portamento to note stops when next note is reached or on Note OFF
+                    if (channel_state.Get<ChannelEnumCommon::kPort>().type == PortamentoStateData::kToNote)
+                        channel_state.Set<ChannelEnumCommon::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0});
+                }
 
+                if (rows_until_port_auto_off[channel] != -1)
+                {
+                    if (rows_until_port_auto_off[channel] == 0)
+                    {
+                        // Automatically turn port effects off by using the previous port type and setting the value to 0
+                        PortamentoStateData temp_prev_port = channel_state.Get<ChannelEnumCommon::kPort>();
+                        temp_prev_port.value = 0;
+                        channel_state.Set<ChannelEnumCommon::kPort>(temp_prev_port);
+                        rows_until_port_auto_off[channel] = -1;
+                    }
+                    else if (NoteHasPitch(row_data.note))
+                    {
+                        const auto& temp_port = channel_state.Get<ChannelEnumCommon::kPort>();
+                        // Reset the time until port effects automatically turn off
+                        if (temp_port.type == PortamentoStateData::kUp)
+                            rows_until_port_auto_off[channel] = RowsUntilPortUpAutoOff(ticks_per_row_pair, row_data.note, temp_port.value);
+                        else if (temp_port.type == PortamentoStateData::kDown)
+                            rows_until_port_auto_off[channel] = RowsUntilPortDownAutoOff(ticks_per_row_pair, row_data.note, temp_port.value);
+                        else
+                        {
+                            throw std::runtime_error{"Invalid portamento type."};
+                        }
+                    }
+                    else
+                    {
+                        --rows_until_port_auto_off[channel];
+                    }
+                }
 
+                // CHANNEL STATE - EFFECTS
+                // TODO: Could this be done during the import step for greater efficiency?
+                if (channel != dmf::GameBoyChannel::NOISE) // Currently not using per-channel effects on noise channel
+                {
+                    // -1 means the port effect wasn't used in this row, else it is the active (left-most) port's effect value.
+                    // If the left-most port effect was valueless, it is set to 0 since valueless/0 seem to have the same behavior in Deflemask.
+                    int16_t port_up = -1, port_down = -1, port2note = -1;
+
+                    // Any port effect regardless of value/valueless/priority cancels any active port effect from a previous row.
+                    bool prev_port_cancelled = false;
+
+                    // When no note w/ pitch has played in the channel yet, and there is a note with pitch
+                    // on the current row, if the left-most Port2Note were to be used with value > 0, that note will not play.
+                    // In addition, all subsequent notes in the channel will also be cancelled until the port2note is stopped by
+                    // a future port effect, note OFF, or it auto-off's. Port2Note auto-off is not implemented here though.
+                    const bool port2note_note_cancellation_possible = channel_state.GetSize<ChannelEnumCommon::kNoteSlot>() == 1 && NoteHasPitch(row_data.note);
+                    bool just_cancelled_note = false;
+                    bool temp_note_cancelled = note_cancelled[channel];
+
+                    // Other effects:
+                    int16_t vibrato = -1, port2note_volslide = -1, vibrato_volslide = -1, tremolo = -1, panning = -1, volslide = -1, retrigger = -1, note_cut = -1, note_delay = -1;
+
+                    auto sound_index = channel_state.Get<ChannelEnumCommon::kSoundIndex>();
+
+                    // Loop right to left because left-most effects in effects column have priority
+                    for (auto iter = std::crbegin(row_data.effect); iter != std::crend(row_data.effect); ++iter)
+                    {
+                        const auto& effect = *iter;
+                        if (effect.code == Effects::kNoEffect)
+                            continue;
+
+                        const EffectValue effect_value = effect.value;
+                        const uint8_t effect_value_normal = effect_value != kEffectValueless ? effect_value : 0;
+
+                        switch (effect.code)
+                        {
+                        case Effects::kArp:
+                            channel_state.Set<ChannelEnumCommon::kArp>(effect_value > 0 ? effect_value : 0); break;
+                        case Effects::kPortUp:
+                            prev_port_cancelled = true;
+                            temp_note_cancelled = false; // Will "uncancel" notes if a port2note in this row isn't cancelling them
+                            port_up = effect_value_normal;
+                            break;
+                        case Effects::kPortDown:
+                            prev_port_cancelled = true;
+                            temp_note_cancelled = false; // Will "uncancel" notes if a port2note in this row isn't cancelling them
+                            port_down = effect_value_normal;
+                            break;
+                        case Effects::kPort2Note:
+                            prev_port_cancelled = true;
+
+                            if (port2note_note_cancellation_possible)
+                            {
+                                note_cancelled[channel] = effect_value > 0;
+                                just_cancelled_note = effect_value > 0;
+                            }
+                            else
+                            {
+                                // Will "uncancel" notes
+                                temp_note_cancelled = false;
+                            }
+                            port2note = effect_value_normal;
+                            break;
+                        case Effects::kVibrato:
+                            vibrato = effect_value_normal;
+                            break;
+                        case Effects::kPort2NoteVolSlide:
+                            port2note_volslide = effect_value_normal;
+                            break;
+                        case Effects::kVibratoVolSlide:
+                            vibrato_volslide = effect_value_normal;
+                            break;
+                        case Effects::kTremolo:
+                            tremolo = effect_value_normal;
+                            break;
+                        case Effects::kPanning:
+                            panning = effect_value_normal;
+                            break;
+                        case Effects::kSpeedA:
+                            // Handled by global state
+                            break;
+                        case Effects::kVolSlide:
+                            volslide = effect_value_normal;
+                            break;
+                        case Effects::kPosJump:
+                            // Handled by global state
+                            break;
+                        case Effects::kRetrigger:
+                            retrigger = effect_value_normal;
+                            break;
+                        case Effects::kPatBreak:
+                            // Handled by global state
+                            break;
+                        case Effects::kNoteCut:
+                            note_cut = effect_value_normal;
+                            break;
+                        case Effects::kNoteDelay:
+                            note_delay = effect_value_normal;
+                            break;
+                        case Effects::kTempo:
+                            // Handled by global state
+                            break;
+                        case Effects::kSpeedB:
+                            // Handled by global state
+                            break;
+
+                        // DMF-specific effects
+
+                        case dmf::Effects::kGameBoySetWave:
+                            if (channel != dmf::GameBoyChannel::WAVE || effect_value < 0 || effect_value >= GetTotalWavetables())
+                                break; // TODO: Is this behavior correct?
+                            sound_index = SoundIndex<DMF>::Wave{effect_value_normal};
+                            // TODO: If a sound index is set but a note with it is never played, it should later be removed from the channel state
+                            break;
+                        case dmf::Effects::kGameBoySetDutyCycle:
+                            if (channel > dmf::GameBoyChannel::SQW2 || effect_value < 0 || effect_value >= 4)
+                                break; // Valueless of invalid 12xx effects do not do anything. TODO: What is the effect in WAVE and NOISE channels?
+                            sound_index = SoundIndex<DMF>::Square{effect_value_normal};
+                            // TODO: If a sound index is set but a note with it is never played, it should later be removed from the channel state
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+
+                    if (!just_cancelled_note && !temp_note_cancelled)
+                    {
+                        // A port up/down/2note "uncancelled" the notes
+                        note_cancelled[channel] = false;
+                    }
+
+                    if (!just_cancelled_note) // No port effects are set if port2note just cancelled notes
+                    {
+                        // Set port effects in order of priority:
+                        if (port2note != -1)
+                        {
+                            channel_state.Set<ChannelEnumCommon::kPort>(PortamentoStateData{PortamentoStateData::kToNote, static_cast<uint8_t>(port2note)});
+                            // TODO: Handle port2note auto-off
+                        }
+                        else if (port_down != -1)
+                        {
+                            channel_state.Set<ChannelEnumCommon::kPort>(PortamentoStateData{PortamentoStateData::kDown, static_cast<uint8_t>(port_down)});
+                            if (rows_until_port_auto_off[channel] == -1)
+                            {
+                                NoteSlot temp_note_slot = NoteHasPitch(row_data.note) ? row_data.note : channel_state.Get<ChannelEnumCommon::kNoteSlot>();
+                                rows_until_port_auto_off[channel] = RowsUntilPortDownAutoOff(ticks_per_row_pair, temp_note_slot, port_down);
+                            }
+                        }
+                        else if (port_up != -1)
+                        {
+                            channel_state.Set<ChannelEnumCommon::kPort>(PortamentoStateData{PortamentoStateData::kUp, static_cast<uint8_t>(port_up)});
+                            if (rows_until_port_auto_off[channel] == -1)
+                            {
+                                NoteSlot temp_note_slot = NoteHasPitch(row_data.note) ? row_data.note : channel_state.Get<ChannelEnumCommon::kNoteSlot>();
+                                rows_until_port_auto_off[channel] = RowsUntilPortUpAutoOff(ticks_per_row_pair, temp_note_slot, port_up);
+                            }
+                        }
+                        else if (prev_port_cancelled)
+                        {
+                            // Cancel the previous port by using the same port type and setting the value to 0
+                            PortamentoStateData prev_port = channel_state.Get<ChannelEnumCommon::kPort>();
+                            prev_port.value = 0;
+                            channel_state.Set<ChannelEnumCommon::kPort>(prev_port);
+                        }
+                    }
+
+                    if (just_cancelled_note)
+                    {
+                        // TODO: Set warning here
+                        // Port2Note auto-off's are not handled, so notes may be cancelled for longer than they should be.
+                    }
+
+                    // Set other effects' states (WIP)
+                    if (vibrato != -1)
+                        channel_state.Set<ChannelEnumCommon::kVibrato>(vibrato);
+                    if (port2note_volslide != -1)
+                        channel_state.Set<ChannelEnumCommon::kPort2NoteVolSlide>(port2note_volslide);
+                    if (vibrato_volslide != -1)
+                        channel_state.Set<ChannelEnumCommon::kVibratoVolSlide>(vibrato_volslide);
+                    if (tremolo != -1)
+                        channel_state.Set<ChannelEnumCommon::kTremolo>(tremolo);
+                    if (panning != -1)
+                        channel_state.Set<ChannelEnumCommon::kPanning>(panning);
+                    if (volslide != -1)
+                        channel_state.Set<ChannelEnumCommon::kVolSlide>(volslide);
+                    if (retrigger != -1)
+                        channel_state.Set<ChannelEnumCommon::kRetrigger>(retrigger);
+                    if (note_cut != -1)
+                        channel_state.Set<ChannelEnumCommon::kNoteCut>(note_cut);
+                    if (note_delay != -1)
+                        channel_state.Set<ChannelEnumCommon::kNoteDelay>(note_delay);
+
+                    // TODO: This sound index may end up being unused but we have no way of knowing right now.
+                    //       Should compare with sound_indexes_used at the end and remove entries that aren't used?
+                    channel_state.Set<ChannelEnumCommon::kSoundIndex>(sound_index);
+                }
+
+                // CHANNEL STATE - NOTES AND SOUND INDEXES
+                const NoteSlot& note_slot = row_data.note;
+                if (NoteIsOff(note_slot))
+                {
+                    channel_state.Set<ChannelEnumCommon::kNoteSlot>(note_slot);
+                    gen_data.Get<GenDataEnumCommon::kNoteOffUsed>() = true;
+                    note_cancelled[channel] = false; // An OFF also "uncancels" notes cancelled by a port2note effect
+                }
+                else if (NoteHasPitch(row_data.note) && channel != dmf::GameBoyChannel::NOISE && !note_cancelled[channel])
+                {
+                    // NoteTypes::Empty should never appear in state data (but can in initial state)
+                    channel_state.Set<ChannelEnumCommon::kNoteSlot, true>(row_data.note);
+                    const Note& note = GetNote(row_data.note);
+
+                    const auto& sound_index = channel_state.Get<ChannelEnumCommon::kSoundIndex>();
+
+                    // Mark this square wave or wavetable as used
+                    sound_indexes_used.insert(sound_index);
+
+                    // Get lowest/highest notes
+                    if (sound_index_note_extremes.count(sound_index) == 0) // 1st time
+                    {
+                        sound_index_note_extremes[sound_index] = { note, note };
+                    }
+                    else
+                    {
+                        auto& note_pair = sound_index_note_extremes[sound_index];
+                        if (note > note_pair.second)
+                        {
+                            // Found a new highest note
+                            note_pair.second = note;
+                        }
+                        if (note < note_pair.first)
+                        {
+                            // Found a new lowest note
+                            note_pair.first = note;
+                        }
+                    }
+                }
 
                 // GLOBAL STATE
                 if (channel == data.GetNumChannels() - 1) // Only update global state after all channel states for this row have been updated
@@ -987,35 +1315,35 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                     // If the left-most PosJump or PatBreak is invalid (no value or invalid value),
                     //  every other effect of that type in the row is ignored.
                     // PosJump effects are ignored if a valid and non-ignored PatBreak is present in the row.
-                    int16_t posJump = -1, patBreak = -1, speed_a = -1, speed_b = -1, tempo = -1;
-                    bool ignorePosJump = false, ignorePatBreak = false;
+                    int16_t pos_jump = -1, pat_break = -1, speed_a = -1, speed_b = -1, tempo = -1;
+                    bool ignore_pos_jump = false, ignore_pat_break = false;
 
                     // Want to check all channels to update the global state for this row
                     for (ChannelIndex channel2 = 0; channel2 < data.GetNumChannels(); ++channel2)
                     {
-                        for (const auto& effect : rowData.effect)
+                        for (const auto& effect : row_data.effect)
                         {
                             switch (effect.code)
                             {
                                 case Effects::kPosJump:
-                                    if (ignorePosJump)
+                                    if (ignore_pos_jump)
                                         break;
-                                    if (posJump < 0 && (effect.value < 0 || effect.value >= data.GetNumOrders()))
+                                    if (pos_jump < 0 && (effect.value < 0 || effect.value >= data.GetNumOrders()))
                                     {
-                                        ignorePosJump = true;
+                                        ignore_pos_jump = true;
                                         break;
                                     }
-                                    posJump = effect.value;
+                                    pos_jump = effect.value;
                                     break;
                                 case Effects::kPatBreak:
-                                    if (ignorePatBreak)
+                                    if (ignore_pat_break)
                                         break;
-                                    if (patBreak < 0 && (effect.value < 0 || effect.value >= data.GetNumRows()))
+                                    if (pat_break < 0 && (effect.value < 0 || effect.value >= data.GetNumRows()))
                                     {
-                                        ignorePatBreak = true;
+                                        ignore_pat_break = true;
                                         break;
                                     }
-                                    patBreak = effect.value;
+                                    pat_break = effect.value;
                                     break;
                                 case Effects::kSpeedA:
                                     // TODO
@@ -1044,133 +1372,32 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                     if (tempo >= 0)
                         global_state.Set<GlobalEnumCommon::kTempo>(tempo);
 
-                    if (patBreak >= 0)
+                    if (pat_break >= 0)
                     {
                         // All state data for this row (besides PatBreak) must be ready when Copy occurs
                         state_reader_writers->Save();
                         jump_destination_order = order + 1;
-                        jump_destination_row = patBreak;
+                        jump_destination_row = pat_break;
                         state_suspended = true;
-                        global_state.Set<GlobalEnumCommon::kPatBreak>(patBreak); // Don't want the PatBreak in the copy
+                        global_state.Set<GlobalEnumCommon::kPatBreak>(pat_break); // Don't want the PatBreak in the copy
                     }
-                    else if (posJump >= 0) // PosJump only takes effect if PatBreak isn't used
+                    else if (pos_jump >= 0) // PosJump only takes effect if PatBreak isn't used
                     {
-                        if (posJump >= order) // If not a loop
+                        if (pos_jump >= order) // If not a loop
                         {
                             // All state data for this row (besides PosJump) must be ready when Copy occurs
                             state_reader_writers->Save();
-                            jump_destination_order = posJump;
+                            jump_destination_order = pos_jump;
                             jump_destination_row = 0;
                             state_suspended = true;
                         }
                         else
                         {
                             // TODO: This could be overwritten by future PosJumps to the same order
-                            loopback_points[posJump] = {order, row};
+                            loopback_points[pos_jump] = GetOrderRowPosition(order, row);
                         }
 
-                        global_state.Set<GlobalEnumCommon::kPosJump>(posJump); // Don't want the PosJump in the copy
-                    }
-                }
-
-
-                
-
-                
-
-                /*
-                PriorityEffectsMap modEffects;
-                //mod_sample_id_t modSampleId = 0;
-                //uint16_t period = 0;
-
-                if (channel == static_cast<ChannelIndex>(dmf::GameBoyChannel::NOISE))
-                {
-                    modEffects = DMFConvertEffects_NoiseChannel(chanRow);
-                    DMFUpdateStatePre(dmf, state, modEffects);
-                    continue;
-                }
-
-                modEffects = DMFConvertEffects(chanRow, state);
-                DMFUpdateStatePre(dmf, state, modEffects);
-                DMFGetAdditionalEffects(dmf, state, chanRow, modEffects);
-
-                //DMFConvertNote(state, chanRow, sampleMap, modEffects, modSampleId, period);
-
-                // TODO: More state-related stuff could be extracted from DMFConvertNote and put into separate 
-                //  method so that I don't have to copy code from it to put here.
-
-                // Convert note - Note cut effect
-                auto sampleChangeEffects = modEffects.equal_range(EffectPrioritySampleChange);
-                if (sampleChangeEffects.first != sampleChangeEffects.second) // If sample change occurred (duty cycle, wave, or note cut effect)
-                {
-                    for (auto& iter = sampleChangeEffects.first; iter != sampleChangeEffects.second; )
-                    {
-                        Effect& modEffect = iter->second;
-                        if (modEffect.effect == EffectCode::CutSample && modEffect.value == 0) // Note cut
-                        {
-                            // Silent sample is needed
-                            if (sampleMap.count(-1) == 0)
-                                sampleMap[-1] = {};
-
-                            chanState.notePlaying = false;
-                            chanState.currentNote = {};
-                            iter = modEffects.erase(iter); // Consume the effect
-                        }
-                        else
-                        {
-                            // Only increment if an element wasn't erased
-                            ++iter;
-                        }
-                    }
-                }
-                */
-
-                const NoteSlot& noteSlot = rowData.note;
-                if (!NoteIsEmpty(noteSlot)) // NoteTypes::Off should never appear in state data (but can in initial state)
-                    channelState.Set<ChannelEnumCommon::kNoteSlot, true>(noteSlot);
-
-                /*
-                // Convert note - Note OFF
-                if (NoteIsOff(rowData.note)) // Note OFF. Use silent sample and handle effects.
-                {
-                    channelState.Set<(int)ChannelEnumCommon::kNoteSlot>(rowData.note);
-                    //chanState.notePlaying = false;
-                    //chanState.currentNote = NoteTypes::Off{};
-                }
-                */
-
-                // A note on the SQ1, SQ2, or WAVE channels:
-                if (NoteHasPitch(rowData.note) && channel != dmf::GameBoyChannel::NOISE)
-                {
-                    const Note& dmfNote = GetNote(rowData.note);
-                    //chanState.notePlaying = true;
-                    //chanState.currentNote = chanRow.note;
-                    channelState.Set<ChannelEnumCommon::kNoteSlot, true>(rowData.note);
-
-                    // TODO:
-                    SoundIndex soundIndex = 0;///channel == dmf::GameBoyChannel::WAVE ? chanState.wavetable + 4 : chanState.dutyCycle;
-
-                    // Mark this square wave or wavetable as used
-                    sound_indexes_used.insert(soundIndex);
-
-                    // Get lowest/highest notes
-                    if (sound_index_note_extremes.count(soundIndex) == 0) // 1st time
-                    {
-                        sound_index_note_extremes[soundIndex] = { dmfNote, dmfNote };
-                    }
-                    else
-                    {
-                        auto& notePair = sound_index_note_extremes[soundIndex];
-                        if (dmfNote > notePair.second)
-                        {
-                            // Found a new highest note
-                            notePair.second = dmfNote;
-                        }
-                        if (dmfNote < notePair.first)
-                        {
-                            // Found a new lowest note
-                            notePair.first = dmfNote;
-                        }
+                        global_state.Set<GlobalEnumCommon::kPosJump>(pos_jump); // Don't want the PosJump in the copy
                     }
                 }
 

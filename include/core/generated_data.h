@@ -11,7 +11,7 @@
 #include "module_base.h"
 
 #include <cstddef>
-#include <unordered_map>
+#include <map>
 #include <set>
 #include <optional>
 #include <cassert>
@@ -45,27 +45,27 @@ using wrapped_gen_data_t = typename wrapped_gen_data<T...>::type;
 // COMMON GENERATED DATA TYPES
 ///////////////////////////////////////////////////////////
 
-// All data types, wrapped with std::optional (?)
-template<class T> using StateGenData = std::optional<ModuleState<T>>;
-using SoundIndexNoteExtremesGenData = std::optional<std::unordered_map<SoundIndex, std::pair<Note, Note>>>;
-using ChannelNoteExtremesGenData = std::optional<std::unordered_map<ChannelIndex, std::pair<Note, Note>>>;
-using NoteOffUsedGenData = std::optional<bool>;
-using SoundIndexesUsedGenData = std::optional<std::set<SoundIndex>>;
-using LoopbackPointsGenData = std::optional<std::map<OrderIndex, OrderRowPosition>>; // Jump destination order --> Order/Row where the PosJump occurred
+template<class T> using StateGenData = ModuleState<T>;
+template<class T> using SoundIndexNoteExtremesGenData = std::map<typename SoundIndex<T>::type, std::pair<Note, Note>>;
+using ChannelNoteExtremesGenData = std::map<ChannelIndex, std::pair<Note, Note>>;
+using NoteOffUsedGenData = bool;
+template<class T> using SoundIndexesUsedGenData = std::set<typename SoundIndex<T>::type>;
+using LoopbackPointsGenData = std::map<OrderIndex, OrderRowPosition>; // Jump destination order --> Order/Row where the PosJump occurred
 
 ///////////////////////////////////////////////////////////
 // COMMON GENERATED DATA DEFINITION
 ///////////////////////////////////////////////////////////
 
-template<class ModuleClass>
+template<class TModule>
 struct GeneratedDataCommonDefinition : public detail::GenDataDefinitionTag
 {
-    static constexpr int kCommonCount = 7; // # of variants in GenDataEnumCommon (remember to update this after changing the enum)
+    static constexpr int kCommonCount = 6; // # of variants in GenDataEnumCommon (remember to update this after changing the enum)
     static constexpr int kLowerBound = -kCommonCount;
+    using ModuleClass = TModule;
 
-    enum class GenDataEnumCommon
+    enum GenDataEnumCommon
     {
-        kDuplicateOrders        =-7,
+        //kDuplicateOrders        =-7,
         kNoteOffUsed            =-6,
         kLoopbackPoints         =-5,
         kChannelNoteExtremes    =-4,
@@ -74,13 +74,14 @@ struct GeneratedDataCommonDefinition : public detail::GenDataDefinitionTag
         kState                  =-1,
     };
 
+    // Lowest to highest
     using GenDataCommon = std::tuple<
-        StateGenData<ModuleClass>,
-        SoundIndexNoteExtremesGenData,
-        ChannelNoteExtremesGenData,
         NoteOffUsedGenData,
-        SoundIndexesUsedGenData,
-        LoopbackPointsGenData
+        LoopbackPointsGenData,
+        ChannelNoteExtremesGenData,
+        SoundIndexNoteExtremesGenData<ModuleClass>,
+        SoundIndexesUsedGenData<ModuleClass>,
+        StateGenData<ModuleClass>
         >;
 
     // Not necessary, but could be used for potential performance improvements when calling Generate()
@@ -110,6 +111,7 @@ public:
     static constexpr int kUpperBound = sizeof...(Ts); // # of module-specific gen data types
 
     using typename CommonDef::GenDataEnumCommon;
+    using typename CommonDef::ModuleClass;
 
     // The GenDataEnum for any module-specific types should be defined
     //  in the GeneratedData template specialization

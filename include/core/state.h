@@ -62,10 +62,15 @@ using wrapped_state_data_t = typename wrapped_state_data<T...>::type;
 ///////////////////////////////////////////////////////////
 
 // A unique identifier for wavetables, duty cycles, samples, etc.
-using SoundIndex = size_t;
+// This can be specialized, but an "==" operator must be defined for the type.
+template<class ModuleClass>
+struct SoundIndex
+{
+    using type = size_t;
+};
 
 using EffectValueXX = uint8_t;
-using EffectValueXXYY = std::pair<uint8_t, uint8_t>;
+using EffectValueXXYY = uint8_t; //std::pair<uint8_t, uint8_t>;
 
 // Global state data types
 
@@ -89,7 +94,7 @@ using VibratoStateData = EffectValueXXYY;
 
 struct PortamentoStateData
 {
-    enum Type { None, Up, Down, ToNote } type;
+    enum Type { kNone, kUp, kDown, kToNote } type;
     EffectValueXX value;
 };
 
@@ -99,12 +104,13 @@ inline constexpr bool operator==(const PortamentoStateData& lhs, const Portament
 using ArpStateData = EffectValueXXYY;
 using VolumeStateData = EffectValueXX;
 using NoteSlotStateData = NoteSlot;
-using SoundIndexStateData = SoundIndex;
+template<class T> using SoundIndexStateData = typename SoundIndex<T>::type;
 
 ///////////////////////////////////////////////////////////
 // COMMON STATE DEFINITIONS
 ///////////////////////////////////////////////////////////
 
+template<class ModuleClass>
 struct GlobalStateCommonDefinition : public detail::StateDefinitionTag
 {
     static constexpr int kCommonCount = 5; // # of variants in StateEnumCommon (remember to update this after changing the enum)
@@ -132,6 +138,7 @@ struct GlobalStateCommonDefinition : public detail::StateDefinitionTag
         >;
 };
 
+template<class ModuleClass>
 struct ChannelStateCommonDefinition : public detail::StateDefinitionTag
 {
     static constexpr int kCommonCount = 14; // # of variants in StateEnumCommon (remember to update this after changing the enum)
@@ -173,7 +180,7 @@ struct ChannelStateCommonDefinition : public detail::StateDefinitionTag
         ArpStateData,
         VolumeStateData,
         NoteSlotStateData,
-        SoundIndexStateData
+        SoundIndexStateData<ModuleClass>
         >;
 };
 
@@ -234,16 +241,16 @@ private:
  */
 
 template<class ModuleClass>
-struct GlobalState : public StateStorage<GlobalStateCommonDefinition /* Module-specific types go here in any specializations */>
+struct GlobalState : public StateStorage<GlobalStateCommonDefinition<ModuleClass> /* Module-specific types go here in any specializations */>
 {
-    using StateStorage<GlobalStateCommonDefinition>::StateEnumCommon;
+    using GlobalStateCommonDefinition<ModuleClass>::StateEnumCommon;
     enum StateEnum {};
 };
 
 template<class ModuleClass>
-struct ChannelState : public StateStorage<ChannelStateCommonDefinition /* Module-specific types go here in any specializations */>
+struct ChannelState : public StateStorage<ChannelStateCommonDefinition<ModuleClass> /* Module-specific types go here in any specializations */>
 {
-    using StateStorage<ChannelStateCommonDefinition>::StateEnumCommon;
+    using ChannelStateCommonDefinition<ModuleClass>::StateEnumCommon;
     enum StateEnum {};
 };
 
@@ -316,21 +323,23 @@ public:
     void Reset()
     {
         cur_pos_ = 0;
-        cur_indexes_.fill(0);
+        cur_indexes_.fill(-1);
     }
 
     // Get the specified state data (state_data_index) at the current read position
     template<int state_data_index>
     inline constexpr const get_data_t<state_data_index>& Get() const
     {
-        return GetVec<state_data_index>().at(cur_indexes_[state_data_index]).second;
+        const size_t vec_index = cur_indexes_[state_data_index + enum_common_count_];
+        assert(vec_index >= 0 && "The initial state must be set before reading");
+        return GetVec<state_data_index>().at(vec_index).second;
     }
 
-    // Get the specified state data (state_data_index) at the specified read index (pos_index)
+    // Get the specified state data (state_data_index) at the specified read index (vec_index) within the vector
     template<int state_data_index>
-    inline constexpr const get_data_t<state_data_index>& Get(size_t pos_index) const
+    inline constexpr const get_data_t<state_data_index>& Get(size_t vec_index) const
     {
-        return GetVec<state_data_index>().at(pos_index).second;
+        return GetVec<state_data_index>().at(vec_index).second;
     }
 
     // Get the specified state data vector (state_data_index)
@@ -412,6 +421,13 @@ public:
             return SetReadPos<return_deltas>(GetOrderRowPosition(order, row));
         else
             SetReadPos<return_deltas>(GetOrderRowPosition(order, row));
+    }
+
+    // Get the size of the specified state data vector (state_data_index)
+    template<int state_data_index>
+    inline constexpr size_t GetSize() const
+    {
+        return GetVec<state_data_index>().size();
     }
 
     // Add this value to StateEnumCommon or StateEnum variants to get a zero-based index into an array such as the one returned by SetReadPos
@@ -496,18 +512,31 @@ public:
     template<int state_data_index, bool ignore_duplicates = false>
     void Set(get_data_t<state_data_index>&& val)
     {
-        assert(R::state_);
+        assert(R::state_ != nullptr);
         auto& vec = R::state_->template Get<state_data_index>();
-        auto& vecElem = vec.back(); // Current vec element (always the end when writing)
+
+        // For the 1st time setting this state. TODO: Use SetInitial() for this for greater efficiency?
+        if (vec.empty())
+        {
+            // Add new element
+            vec.push_back({R::cur_pos_, std::move(val)});
+
+            // Adjust current index
+            size_t& index = R::cur_indexes_[state_data_index + R::enum_common_count_]; // Current index within state data for data type I
+            ++index;
+            return;
+        }
+
+        auto& vec_elem = vec.back(); // Current vec element (always the end when writing)
 
         // There can only be one state data value for a given OrderRowPosition, so we won't always be adding a new element to the vector
-        if (vecElem.first != R::cur_pos_)
+        if (vec_elem.first != R::cur_pos_)
         {
             if constexpr (!ignore_duplicates)
             {
                 // If the latest value in the state is the same
                 // as what we're trying to add to the state, don't add it
-                if (vecElem.second == val)
+                if (vec_elem.second == val)
                     return;
             }
 
@@ -519,7 +548,7 @@ public:
             ++index;
         }
         else
-            vecElem.second = std::move(val); // Update current element
+            vec_elem.second = std::move(val); // Update current element
     }
 
     // Set the specified state data (state_data_index) at the current write position (the end of the vector) to val
@@ -558,8 +587,8 @@ public:
     // Sets the initial state
     inline void SetInitialState(const StateData& vals)
     {
-        StateData valsCopy = vals;
-        SetInitialState(std::move(valsCopy));
+        StateData vals_copy = vals;
+        SetInitialState(std::move(vals_copy));
     }
 
     // Inserts state data at current position. Use with Copy() in order to "resume" a state.
@@ -609,11 +638,11 @@ struct StateReaders
     GlobalStateReader<ModuleClass> global_reader;
     std::vector<ChannelStateReader<ModuleClass>> channel_readers;
 
-    void SetReadPos(OrderRowPosition newPos)
+    void SetReadPos(OrderRowPosition pos)
     {
-        global_reader.SetReadPos();
+        global_reader.SetReadPos(pos);
         for (auto& temp : channel_readers)
-            temp.SetReadPos();
+            temp.SetReadPos(pos);
     }
 
     void SetReadPos(OrderIndex order, RowIndex row) { SetReadPos(GetOrderRowPosition(order, row)); }
@@ -632,11 +661,11 @@ struct StateReaderWriters
     GlobalStateReaderWriter<ModuleClass> global_reader_writer;
     std::vector<ChannelStateReaderWriter<ModuleClass>> channel_reader_writers;
 
-    void SetReadPos(OrderRowPosition newPos)
+    void SetReadPos(OrderRowPosition pos)
     {
-        global_reader_writer.SetReadPos();
+        global_reader_writer.SetReadPos(pos);
         for (auto& temp : channel_reader_writers)
-            temp.SetReadPos();
+            temp.SetReadPos(pos);
     }
 
     void SetReadPos(OrderIndex order, RowIndex row) { SetReadPos(GetOrderRowPosition(order, row)); }
@@ -674,8 +703,8 @@ struct StateReaderWriters
     }
 
 private:
-    GlobalState<ModuleClass>::StateData saved_global_data_;
-    std::vector<ChannelState<ModuleClass>::StateData> saved_channel_states_;
+    typename GlobalState<ModuleClass>::StateData saved_global_data_;
+    std::vector<typename ChannelState<ModuleClass>::StateData> saved_channel_states_;
 };
 
 

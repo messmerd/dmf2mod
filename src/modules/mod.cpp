@@ -30,6 +30,7 @@ using MODOptionEnum = MODConversionOptions::OptionEnum;
 
 static std::vector<int8_t> GenerateSquareWaveSample(unsigned dutyCycle, unsigned length);
 static std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned length);
+static inline uint8_t GetEffectCode(int effect_code);
 
 static std::string GetWarningMessage(MOD::ConvertWarning warning, const std::string& info = "");
 
@@ -776,10 +777,86 @@ void MOD::DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed)
         m_Status.AddWarning(GetWarningMessage(ConvertWarning::TempoAccuracy));
 }
 
-uint8_t mod::GetEffectCode(int effect)
+static inline uint8_t GetEffectCode(int effect_code)
 {
-    // TODO: Implement this. Maps dmf2mod internal effect code to MOD effect code.
-    return 0;
+    // Maps dmf2mod internal effect code to MOD effect code.
+    switch (effect_code)
+    {
+        // Common effects:
+        case d2m::Effects::kNoEffect:
+            return mod::EffectCode::kNoEffect;
+        case d2m::Effects::kArp:
+            return mod::EffectCode::kArp;
+        case d2m::Effects::kPortUp:
+            return mod::EffectCode::kPortUp;
+        case d2m::Effects::kPortDown:
+            return mod::EffectCode::kPortDown;
+        case d2m::Effects::kPort2Note:
+            return mod::EffectCode::kPort2Note;
+        case d2m::Effects::kVibrato:
+            return mod::EffectCode::kVibrato;
+        case d2m::Effects::kPort2NoteVolSlide:
+            return mod::EffectCode::kPort2NoteVolSlide;
+        case d2m::Effects::kVibratoVolSlide:
+            return mod::EffectCode::kVibratoVolSlide;
+        case d2m::Effects::kTremolo:
+            return mod::EffectCode::kTremolo;
+        case d2m::Effects::kPanning:
+            return mod::EffectCode::kPanning;
+        case d2m::Effects::kSpeedA:
+            return mod::EffectCode::kSetSpeed;
+        case d2m::Effects::kVolSlide:
+            return mod::EffectCode::kVolSlide;
+        case d2m::Effects::kPosJump:
+            return mod::EffectCode::kPosJump;
+        case d2m::Effects::kRetrigger:
+            return mod::EffectCode::kRetriggerSample;
+        case d2m::Effects::kPatBreak:
+            return mod::EffectCode::kPatBreak;
+        case d2m::Effects::kNoteCut:
+            return mod::EffectCode::kCutSample;
+        case d2m::Effects::kNoteDelay:
+            return mod::EffectCode::kDelaySample;
+        case d2m::Effects::kTempo:
+            return mod::EffectCode::kSetSpeed; // Same as kSpeedA, but different effect values are used
+        case d2m::Effects::kSpeedB:
+            assert(0 && "Unsupported effect");
+            return mod::EffectCode::kNoEffect;
+
+        // ProTracker-specific effects:
+        case mod::Effects::kSetSampleOffset:
+            return mod::EffectCode::kSetSampleOffset;
+        case mod::Effects::kSetVolume:
+            return mod::EffectCode::kSetVolume;
+        case mod::Effects::kSetFilter:
+            return mod::EffectCode::kSetFilter;
+        case mod::Effects::kFineSlideUp:
+            return mod::EffectCode::kFineSlideUp;
+        case mod::Effects::kFineSlideDown:
+            return mod::EffectCode::kFineSlideDown;
+        case mod::Effects::kSetGlissando:
+            return mod::EffectCode::kSetGlissando;
+        case mod::Effects::kSetVibratoWaveform:
+            return mod::EffectCode::kSetVibratoWaveform;
+        case mod::Effects::kSetFinetune:
+            return mod::EffectCode::kSetFinetune;
+        case mod::Effects::kLoopPattern:
+            return mod::EffectCode::kLoopPattern;
+        case mod::Effects::kSetTremoloWaveform:
+            return mod::EffectCode::kSetTremoloWaveform;
+        case mod::Effects::kFineVolSlideUp:
+            return mod::EffectCode::kFineVolSlideUp;
+        case mod::Effects::kFineVolSlideDown:
+            return mod::EffectCode::kFineVolSlideDown;
+        case mod::Effects::kDelayPattern:
+            return mod::EffectCode::kDelayPattern;
+        case mod::Effects::kInvertLoop:
+            return mod::EffectCode::kInvertLoop;
+
+        default:
+            assert(0 && "Unknown effect");
+            return mod::EffectCode::kNoEffect;
+    }
 }
 
 ///// DMF --> MOD Sample Mapper

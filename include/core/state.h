@@ -337,7 +337,7 @@ public:
     template<int state_data_index>
     inline constexpr const get_data_t<state_data_index>& Get() const
     {
-        const size_t vec_index = cur_indexes_[state_data_index + enum_common_count_];
+        const int vec_index = cur_indexes_[state_data_index + enum_common_count_];
         assert(vec_index >= 0 && "The initial state must be set before reading");
         return GetVec<state_data_index>().at(vec_index).second;
     }
@@ -363,9 +363,14 @@ public:
     template<int state_data_index>
     inline constexpr bool GetOnCurrentRow(get_data_t<state_data_index>* out) const
     {
-        const size_t vec_index = cur_indexes_[state_data_index + enum_common_count_];
-        assert(vec_index >= 0 && "The initial state must be set before reading");
-        const auto& elem = GetVec<state_data_index>().at(vec_index);
+        const int vec_index = cur_indexes_[state_data_index + enum_common_count_];
+
+        // This type of state data probably won't have an initial state, so the vector may be empty
+        const auto& vec = GetVec<state_data_index>();
+        if (vec.empty())
+            return false;
+
+        const auto& elem = vec.at(vec_index);
         if (elem.first != cur_pos_)
             return false;
 
@@ -410,14 +415,14 @@ public:
 
         detail::NextState<enum_lower_bound_, enum_upper_bound_>(this, [&, this](const auto& vec, int state_data_index) constexpr
         {
-            size_t& index = cur_indexes_[state_data_index + enum_common_count_]; // Current index within state data
-            const size_t vec_size = vec.size();
+            int& index = cur_indexes_[state_data_index + enum_common_count_]; // Current index within state data
+            const int vec_size = vec.size();
 
-            if (vec_size == 0 || index + 1 == vec_size)
-                return; // No state data for data type state_data_index, or on last element in state data
+            if (vec_size == 0)
+                return; // No state data for data type state_data_index
 
-            // There's a next state that we could potentially need to advance to
-            while (cur_pos_ >= vec.at(index+1).first && index + 1 != vec_size)
+            // While there's a next state that we need to advance to
+            while (index + 1 != vec_size && cur_pos_ >= vec.at(index+1).first)
             {
                 // Need to advance
                 ++index;
@@ -467,7 +472,7 @@ protected:
     TState const* state_; // The state this reader is reading from
     Deltas deltas_; // An array of bools indicating which (if any) state data values have changed since the last SetReadPos<true>() call
     OrderRowPosition cur_pos_; // The current read position in terms of order and pattern row. (The write position is the end of the state data vector)
-    std::array<size_t, enum_total_count_> cur_indexes_; // array of state data vector indexes
+    std::array<int, enum_total_count_> cur_indexes_; // array of state data vector indexes
     ChannelIndex channel_; // Which channel this reader is used for (if applicable)
 };
 
@@ -556,7 +561,7 @@ public:
             vec.push_back({R::cur_pos_, std::move(val)});
 
             // Adjust current index
-            size_t& index = R::cur_indexes_[state_data_index + R::enum_common_count_]; // Current index within state data for data type I
+            int& index = R::cur_indexes_[state_data_index + R::enum_common_count_]; // Current index within state data for data type I
             ++index;
             return;
         }
@@ -578,7 +583,7 @@ public:
             vec.push_back({R::cur_pos_, std::move(val)});
 
             // Adjust current index
-            size_t& index = R::cur_indexes_[state_data_index + R::enum_common_count_]; // Current index within state data for data type I
+            int& index = R::cur_indexes_[state_data_index + R::enum_common_count_]; // Current index within state data for data type I
             ++index;
         }
         else

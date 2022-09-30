@@ -120,8 +120,6 @@ namespace Effects
     };
 }
 
-uint8_t GetEffectCode(int effect);
-
 // Higher enum value = higher priority
 enum EffectPriority
 {

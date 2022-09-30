@@ -142,6 +142,13 @@ public:
     constexpr const std::optional<ModuleState<ModuleClass>>& GetState() const { return Get<GenDataEnumCommon::kState>(); }
     constexpr std::optional<ModuleState<ModuleClass>>& GetState() { return Get<GenDataEnumCommon::kState>(); }
 
+    // Destroys any generated data at index gen_data_index. Call this after any change which would make the data invalid.
+    template<int gen_data_index>
+    void Clear()
+    {
+        std::get<gen_data_index + CommonDef::kCommonCount>(data_).reset();
+    }
+
 protected:
     GenDataWrapped data_; // Stores all generated data
 };

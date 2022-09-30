@@ -36,7 +36,7 @@ struct Info<ConversionOptionsBase> : public InfoBase
 
 
 // Base class for conversion options
-class ConversionOptionsBase : public OptionCollection, public EnableReflection<ConversionOptionsBase>
+class ConversionOptionsBase : public OptionCollection, public EnableReflection<ConversionOptionsBase>, public std::enable_shared_from_this<ConversionOptionsBase>
 {
 protected:
 
@@ -45,6 +45,15 @@ protected:
 public:
 
     virtual ~ConversionOptionsBase() = default;
+
+    /*
+     * Cast ConversionOptionsPtr to std::shared_ptr<T> where T is the derived ConversionOptions class
+     */
+    template<class T, std::enable_if_t<std::is_base_of_v<ConversionOptionsBase, T>, bool> = true>
+    std::shared_ptr<T> Cast() const
+    {
+        return std::static_pointer_cast<T>(shared_from_this());
+    }
 
     /*
      * Get the filename of the output file. Returns empty string if error occurred.

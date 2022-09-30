@@ -965,7 +965,6 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
     // Set up for suspending/restoring states:
     int jump_destination_order = -1;
     int jump_destination_row = -1;
-    bool state_suspended = false;
 
     // TODO: Remove InitialState methods and just use 1st row of state?
 
@@ -1024,11 +1023,10 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                 const auto& row_data = data.GetRow(channel, order, row);
 
                 // If just arrived at jump destination:
-                if (static_cast<int>(order) == jump_destination_order && static_cast<int>(row) == jump_destination_row && state_suspended)
+                if (static_cast<int>(order) == jump_destination_order && static_cast<int>(row) == jump_destination_row)
                 {
                     // Restore state copies
                     state_reader_writers->Restore();
-                    state_suspended = false;
                     jump_destination_order = -1;
                     jump_destination_row = -1;
                 }
@@ -1207,6 +1205,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                         if (port2note != -1)
                         {
                             channel_state.Set<ChannelEnumCommon::kPort>(PortamentoStateData{PortamentoStateData::kToNote, static_cast<uint8_t>(port2note)});
+                            rows_until_port_auto_off[channel] = -1; // ???
                             // TODO: Handle port2note auto-off
                         }
                         else if (port_down != -1)
@@ -1269,17 +1268,21 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
 
                 // CHANNEL STATE - NOTES AND SOUND INDEXES
                 const NoteSlot& note_slot = row_data.note;
+                if (NoteIsEmpty(note_slot))
+                {
+                    channel_state.Set<ChannelEnumCommon::kNoteSlot>(note_slot);
+                }
                 if (NoteIsOff(note_slot))
                 {
                     channel_state.Set<ChannelEnumCommon::kNoteSlot>(note_slot);
                     gen_data.Get<GenDataEnumCommon::kNoteOffUsed>() = true;
                     note_cancelled[channel] = false; // An OFF also "uncancels" notes cancelled by a port2note effect
                 }
-                else if (NoteHasPitch(row_data.note) && channel != dmf::GameBoyChannel::NOISE && !note_cancelled[channel])
+                else if (NoteHasPitch(note_slot) && channel != dmf::GameBoyChannel::NOISE && !note_cancelled[channel])
                 {
                     // NoteTypes::Empty should never appear in state data (but can in initial state)
-                    channel_state.Set<ChannelEnumCommon::kNoteSlot, true>(row_data.note);
-                    const Note& note = GetNote(row_data.note);
+                    channel_state.Set<ChannelEnumCommon::kNoteSlot, true>(note_slot);
+                    const Note& note = GetNote(note_slot);
 
                     const auto& sound_index = channel_state.Get<ChannelEnumCommon::kSoundIndex>();
 
@@ -1304,6 +1307,35 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                             // Found a new lowest note
                             note_pair.first = note;
                         }
+                    }
+                }
+
+
+                // CHANNEL STATE - VOLUME
+                if (row_data.volume != kDMFNoVolume)
+                {
+                    // The WAVE channel volume changes whether a note is attached or not, but SQ1/SQ2 need a note
+                    if (channel == dmf::GameBoyChannel::WAVE)
+                    {
+                        // WAVE volume is actually more quantized:
+                        switch (row_data.volume)
+                        {
+                            case 0: case 1: case 2: case 3:
+                                channel_state.Set<ChannelEnumCommon::kVolume>(0); break;
+                            case 4: case 5: case 6: case 7:
+                                channel_state.Set<ChannelEnumCommon::kVolume>(5); break;
+                            case 8: case 9: case 10: case 11:
+                                channel_state.Set<ChannelEnumCommon::kVolume>(10); break;
+                            case 12: case 13: case 14: case 15:
+                                channel_state.Set<ChannelEnumCommon::kVolume>(15); break;
+                            default:
+                                assert(false && "Invalid DMF volume");
+                                break;
+                        }
+                    }
+                    else if (NoteHasPitch(row_data.note))
+                    {
+                        channel_state.Set<ChannelEnumCommon::kVolume>(row_data.volume);
                     }
                 }
 
@@ -1378,7 +1410,6 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                         state_reader_writers->Save();
                         jump_destination_order = order + 1;
                         jump_destination_row = pat_break;
-                        state_suspended = true;
                         global_state.Set<GlobalEnumCommon::kPatBreak>(pat_break); // Don't want the PatBreak in the copy
                     }
                     else if (pos_jump >= 0) // PosJump only takes effect if PatBreak isn't used
@@ -1389,7 +1420,6 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                             state_reader_writers->Save();
                             jump_destination_order = pos_jump;
                             jump_destination_row = 0;
-                            state_suspended = true;
                         }
                         else
                         {

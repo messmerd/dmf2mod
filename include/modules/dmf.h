@@ -49,13 +49,14 @@ struct PatternMetadata<DMF>
 template<>
 struct SoundIndex<DMF>
 {
-    enum Types { kSquare, kWave, /*Other options here*/ };
+    enum Types { kNone, kSquare, kWave, kNoise /*Other options here*/ };
 
+    using None = std::monostate;
     struct Square { uint8_t id; operator uint8_t() const { return id; } };
     struct Wave { uint8_t id; operator uint8_t() const { return id; } };
     struct Noise { uint8_t id; operator uint8_t() const { return id; } }; // Placeholder
 
-    using type = std::variant<Square, Wave, Noise>;
+    using type = std::variant<None, Square, Wave, Noise>;
 };
 
 inline constexpr bool operator==(const SoundIndex<DMF>::Square& lhs, const SoundIndex<DMF>::Square& rhs) { return lhs.id == rhs.id; }

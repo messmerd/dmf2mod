@@ -66,8 +66,11 @@ using wrapped_state_data_t = typename wrapped_state_data<T...>::type;
 template<class ModuleClass>
 struct SoundIndex
 {
-    using type = size_t;
+    using type = uint8_t;
 };
+
+template<class ModuleClass>
+using SoundIndexType = typename SoundIndex<ModuleClass>::type;
 
 using EffectValueXX = uint8_t;
 using EffectValueXXYY = uint8_t; //std::pair<uint8_t, uint8_t>;
@@ -314,16 +317,20 @@ public:
     template<int state_data_index> using get_data_t = std::tuple_element_t<state_data_index + enum_common_count_, StateData>;
     template<int state_data_index> using get_data_wrapped_t = std::tuple_element_t<state_data_index + enum_common_count_, StateDataWrapped>;
 
+    using Deltas = std::array<bool, enum_total_count_>;
+
 public:
     StateReader() : state_(nullptr), cur_pos_(0), cur_indexes_{} {}
     StateReader(TState* state) : state_(state), cur_pos_(0), cur_indexes_{} {}
-    void AssignState(TState* state) { state_ = state; }
+    void AssignState(TState const* state) { state_ = state; channel_ = 0; }
+    void AssignState(TState const* state, ChannelIndex channel) { state_ = state; channel_ = channel; }
 
     // Set current read position to the beginning of the Module's state data
     void Reset()
     {
         cur_pos_ = 0;
-        cur_indexes_.fill(-1);
+        cur_indexes_.fill(-1); // ???
+        deltas_.fill(false);
     }
 
     // Get the specified state data (state_data_index) at the current read position
@@ -350,6 +357,22 @@ public:
         return state_->template Get<state_data_index>();
     }
 
+    // Gets the specified state data (state_data_index) if it is exactly at the current read position.
+    // Useful for state data types like PosJump which happen once during a single row and don't stay on continuously like Tremolo for example
+    // TODO: Currently makes a copy of the data it places in out
+    template<int state_data_index>
+    inline constexpr bool GetOnCurrentRow(get_data_t<state_data_index>* out) const
+    {
+        const size_t vec_index = cur_indexes_[state_data_index + enum_common_count_];
+        assert(vec_index >= 0 && "The initial state must be set before reading");
+        const auto& elem = GetVec<state_data_index>().at(vec_index);
+        if (elem.first != cur_pos_)
+            return false;
+
+        *out = elem.second;
+        return true;
+    }
+
     // Gets the initial state
     inline constexpr const StateData& GetInitialState() const
     {
@@ -372,55 +395,53 @@ public:
     /*
      * Advances the read position to the next row in the state data if needed; pos should be the current position.
      * Call this method at the start of an inner loop before any the reading has been done for that iteration.
-     * If return_deltas == true, returns an array of bools specifying which state values have changed since last iteration.
+     * It can also be used to seek forward to the specified position even if it's not the next row.
+     * If set_deltas == true, sets an array of bools specifying which state values have changed since last iteration.
+     * These delta values can then be obtained by calling GetDeltas().
      */
-    template<bool return_deltas = false>
-    auto SetReadPos(OrderRowPosition pos) -> std::conditional_t<return_deltas, std::array<bool, enum_total_count_>, void>
+    template<bool set_deltas = false>
+    void SetReadPos(OrderRowPosition pos)
     {
         cur_pos_ = pos;
-
-        [[maybe_unused]] std::array<bool, enum_total_count_> deltas{}; // Will probably be optimized away if return_deltas == false
+        if constexpr (set_deltas)
+        {
+            deltas_.fill(false);
+        }
 
         detail::NextState<enum_lower_bound_, enum_upper_bound_>(this, [&, this](const auto& vec, int state_data_index) constexpr
         {
             size_t& index = cur_indexes_[state_data_index + enum_common_count_]; // Current index within state data
-            const size_t vecSize = vec.size();
+            const size_t vec_size = vec.size();
 
-            if (vecSize == 0 || index + 1 == vecSize)
+            if (vec_size == 0 || index + 1 == vec_size)
                 return; // No state data for data type state_data_index, or on last element in state data
 
             // There's a next state that we could potentially need to advance to
-            if (cur_pos_ >= vec.at(index+1).first)
+            while (cur_pos_ >= vec.at(index+1).first && index + 1 != vec_size)
             {
                 // Need to advance
                 ++index;
 
-                if constexpr (return_deltas)
+                if constexpr (set_deltas)
                 {
                     // NOTE: If Set() is called with ignore_duplicates == true, delta could be true even if nothing changed.
-                    deltas[state_data_index + enum_common_count_] = true;
+                    deltas_[state_data_index + enum_common_count_] = true;
                 }
             }
         });
-
-        if constexpr (return_deltas)
-            return deltas;
-        else
-            return;
     }
 
     /*
      * Advances the read position to the next row in the state data if needed; pos should be the current position.
      * Call this method at the start of an inner loop before any the reading has been done for that iteration.
-     * If return_deltas == true, returns an array of bools specifying which state values have changed since last iteration.
+     * It can also be used to seek forward to the specified position even if it's not the next row.
+     * If set_deltas == true, sets an array of bools specifying which state values have changed since last iteration.
+     * These delta values can then be obtained by calling GetDeltas().
      */
-    template<bool return_deltas = false>
-    inline auto SetReadPos(OrderIndex order, RowIndex row) -> std::conditional_t<return_deltas, std::array<bool, enum_total_count_>, void>
+    template<bool set_deltas = false>
+    inline void SetReadPos(OrderIndex order, RowIndex row)
     {
-        if constexpr (return_deltas)
-            return SetReadPos<return_deltas>(GetOrderRowPosition(order, row));
-        else
-            SetReadPos<return_deltas>(GetOrderRowPosition(order, row));
+        SetReadPos<set_deltas>(GetOrderRowPosition(order, row));
     }
 
     // Get the size of the specified state data vector (state_data_index)
@@ -430,14 +451,24 @@ public:
         return GetVec<state_data_index>().size();
     }
 
-    // Add this value to StateEnumCommon or StateEnum variants to get a zero-based index into an array such as the one returned by SetReadPos
-    constexpr inline int GetIndexOffset() const { return enum_common_count_; }
+    // Converts StateEnumCommon or StateEnum variants into a zero-based index of an array such as the one returned by SetReadPos. Returns offset if no enum is provided.
+    static inline constexpr int GetIndex(int state_data_index = 0) { return enum_common_count_ + state_data_index; }
+
+    // Returns the deltas from the last SetReadPos<true>() call
+    inline constexpr const Deltas& GetDeltas() const { return deltas_; }
+
+    inline constexpr bool GetDelta(int state_data_index) const { return deltas_[GetIndex(state_data_index)]; }
+
+    // Only useful for ChannelStateReader
+    inline ChannelIndex GetChannel() const { return channel_; }
 
 protected:
 
-    TState* state_; // The state this reader is reading from
+    TState const* state_; // The state this reader is reading from
+    Deltas deltas_; // An array of bools indicating which (if any) state data values have changed since the last SetReadPos<true>() call
     OrderRowPosition cur_pos_; // The current read position in terms of order and pattern row. (The write position is the end of the state data vector)
     std::array<size_t, enum_total_count_> cur_indexes_; // array of state data vector indexes
+    ChannelIndex channel_; // Which channel this reader is used for (if applicable)
 };
 
 // Type aliases for convenience
@@ -508,12 +539,15 @@ public:
     using typename R::StateEnum;
     template<int state_data_index> using get_data_t = typename R::template get_data_t<state_data_index>;
 
+    void AssignStateWrite(TState* state) { state_write_ = state; R::AssignState(state); }
+    void AssignStateWrite(TState* state, ChannelIndex channel) { state_write_ = state; R::AssignState(state, channel); }
+
     // Set the specified state data (state_data_index) at the current write position (the end of the vector) to val
     template<int state_data_index, bool ignore_duplicates = false>
     void Set(get_data_t<state_data_index>&& val)
     {
-        assert(R::state_ != nullptr);
-        auto& vec = R::state_->template Get<state_data_index>();
+        assert(state_write_);
+        auto& vec = state_write_->template Get<state_data_index>();
 
         // For the 1st time setting this state. TODO: Use SetInitial() for this for greater efficiency?
         if (vec.empty())
@@ -555,24 +589,24 @@ public:
     template<int state_data_index, bool ignore_duplicates = false>
     inline void Set(const get_data_t<state_data_index>& val)
     {
-        get_data_t<state_data_index> valCopy = val;
-        Set<state_data_index, ignore_duplicates>(std::move(valCopy));
+        get_data_t<state_data_index> val_copy = val;
+        Set<state_data_index, ignore_duplicates>(std::move(val_copy));
     }
 
     // For non-persistent state values. Next time SetWritePos is called, nextVal will automatically be set.
     template<int state_data_index, bool ignore_duplicates = false>
-    inline void SetSingle(get_data_t<state_data_index>&& val, get_data_t<state_data_index>&& nextVal)
+    inline void SetSingle(get_data_t<state_data_index>&& val, get_data_t<state_data_index>&& next_val)
     {
-        std::get<state_data_index + R::enum_common_count_>(next_vals_) = std::move(nextVal);
+        std::get<state_data_index + R::enum_common_count_>(next_vals_) = std::move(next_val);
         has_next_vals_ = true;
         Set<state_data_index, ignore_duplicates>(std::move(val));
     }
 
     // For non-persistent state values. Next time SetWritePos is called, nextVal will automatically be set.
     template<int state_data_index, bool ignore_duplicates = false>
-    inline void SetSingle(const get_data_t<state_data_index>& val, const get_data_t<state_data_index>& nextVal)
+    inline void SetSingle(const get_data_t<state_data_index>& val, const get_data_t<state_data_index>& next_val)
     {
-        std::get<state_data_index + R::enum_common_count_>(next_vals_) = nextVal;
+        std::get<state_data_index + R::enum_common_count_>(next_vals_) = next_val;
         has_next_vals_ = true;
         Set<state_data_index, ignore_duplicates>(val);
     }
@@ -580,8 +614,8 @@ public:
     // Sets the initial state
     void SetInitialState(StateData&& vals)
     {
-        assert(R::state_);
-        R::state_->GetInitialState() = std::move(vals);
+        assert(state_write_);
+        state_write_->GetInitialState() = std::move(vals);
     }
 
     // Sets the initial state
@@ -620,6 +654,7 @@ public:
 
 private:
 
+    TState* state_write_; // The state this reader is writing to
     detail::optional_state_data_t<StateData> next_vals_;
     bool has_next_vals_{false};
 };
@@ -725,7 +760,7 @@ public:
         retVal->channel_readers.resize(channel_states_.size());
         for (unsigned i = 0; i < channel_states_.size(); ++i)
         {
-            retVal->channel_readers[i].AssignState(&channel_states_[i]);
+            retVal->channel_readers[i].AssignState(&channel_states_[i], i);
         }
         return retVal;
     }
@@ -741,11 +776,11 @@ private:
     std::shared_ptr<StateReaderWriters<ModuleClass>> GetReaderWriters()
     {
         auto retVal = std::make_shared<StateReaderWriters<ModuleClass>>();
-        retVal->global_reader_writer.AssignState(&global_state_);
+        retVal->global_reader_writer.AssignStateWrite(&global_state_);
         retVal->channel_reader_writers.resize(channel_states_.size());
         for (unsigned i = 0; i < channel_states_.size(); ++i)
         {
-            retVal->channel_reader_writers[i].AssignState(&channel_states_[i]);
+            retVal->channel_reader_writers[i].AssignStateWrite(&channel_states_[i], i);
         }
         return retVal;
     }

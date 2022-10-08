@@ -37,6 +37,7 @@ inline constexpr std::pair<OrderIndex, RowIndex> GetOrderRowPosition(OrderRowPos
 namespace detail {
 
 struct StateDefinitionTag {};
+struct OneShotDefinitionTag {};
 
 // Sourced from: https://stackoverflow.com/a/53398815/8704745
 template<typename... input_t>
@@ -113,21 +114,18 @@ template<class T> using SoundIndexStateData = typename SoundIndex<T>::type;
 // COMMON STATE DEFINITIONS
 ///////////////////////////////////////////////////////////
 
-template<class ModuleClass>
 struct GlobalStateCommonDefinition : public detail::StateDefinitionTag
 {
-    static constexpr int kCommonCount = 5; // # of variants in StateEnumCommon (remember to update this after changing the enum)
+    static constexpr int kCommonCount = 3; // # of variants in StateEnumCommon (remember to update this after changing the enum)
     static constexpr int kLowerBound = -kCommonCount;
 
     // Common state data have negative indexes
     enum StateEnumCommon
     {
         // Add additional variants here
-        kTempo              =-5,
-        kSpeedB             =-4,
-        kSpeedA             =-3,
-        kPatBreak           =-2,
-        kPosJump            =-1
+        kTempo              =-3,
+        kSpeedB             =-2,
+        kSpeedA             =-1
         // StateEnum contains values >= 0
     };
 
@@ -135,7 +133,26 @@ struct GlobalStateCommonDefinition : public detail::StateDefinitionTag
     using StateDataCommon = std::tuple<
         TempoStateData,
         SpeedBStateData,
-        SpeedAStateData,
+        SpeedAStateData
+        >;
+};
+
+struct GlobalOneShotCommonDefinition : public detail::OneShotDefinitionTag
+{
+    static constexpr int kOneShotCommonCount = 2; // # of variants in OneShotEnumCommon (remember to update this after changing the enum)
+    static constexpr int kOneShotLowerBound = -kOneShotCommonCount;
+
+    // Common one-shot data have negative indexes
+    enum OneShotEnumCommon
+    {
+        // Add additional variants here
+        kPatBreak           =-2,
+        kPosJump            =-1
+        // OneShotEnum contains values >= 0
+    };
+
+    // Lowest to highest
+    using OneShotDataCommon = std::tuple<
         PatBreakStateData,
         PosJumpStateData
         >;
@@ -144,16 +161,13 @@ struct GlobalStateCommonDefinition : public detail::StateDefinitionTag
 template<class ModuleClass>
 struct ChannelStateCommonDefinition : public detail::StateDefinitionTag
 {
-    static constexpr int kCommonCount = 14; // # of variants in StateEnumCommon (remember to update this after changing the enum)
+    static constexpr int kCommonCount = 11; // # of variants in StateEnumCommon (remember to update this after changing the enum)
     static constexpr int kLowerBound = -kCommonCount;
 
     // Common state data have negative indexes
     enum StateEnumCommon
     {
         // Add additional variants here
-        kNoteDelay          =-14,
-        kNoteCut            =-13,
-        kRetrigger          =-12,
         kVolSlide           =-11,
         kPanning            =-10,
         kTremolo            =-9,
@@ -170,9 +184,6 @@ struct ChannelStateCommonDefinition : public detail::StateDefinitionTag
 
     // Lowest to highest
     using StateDataCommon = std::tuple<
-        NoteDelayStateData,
-        NoteCutStateData,
-        RetriggerStateData,
         VolSlideStateData,
         PanningStateData,
         TremoloStateData,
@@ -184,6 +195,29 @@ struct ChannelStateCommonDefinition : public detail::StateDefinitionTag
         VolumeStateData,
         NoteSlotStateData,
         SoundIndexStateData<ModuleClass>
+        >;
+};
+
+struct ChannelOneShotCommonDefinition : public detail::OneShotDefinitionTag
+{
+    static constexpr int kOneShotCommonCount = 3; // # of variants in OneShotEnumCommon (remember to update this after changing the enum)
+    static constexpr int kOneShotLowerBound = -kOneShotCommonCount;
+
+    // Common one-shot data have negative indexes
+    enum OneShotEnumCommon
+    {
+        // Add additional variants here
+        kNoteDelay          =-3,
+        kNoteCut            =-2,
+        kRetrigger          =-1
+        // OneShotEnum contains values >= 0
+    };
+
+    // Lowest to highest
+    using OneShotDataCommon = std::tuple<
+        NoteDelayStateData,
+        NoteCutStateData,
+        RetriggerStateData
         >;
 };
 
@@ -230,6 +264,41 @@ private:
     StateData initial_state_; // Default values which are used when nothing is specified
 };
 
+template<class CommonDef, typename... Ts>
+class OneShotStorage : public CommonDef
+{
+public:
+    static constexpr int kOneShotUpperBound = sizeof...(Ts); // # of module-specific one-shot data types
+
+    // The OneShotEnum for any module-specific types should be defined
+    //  in the GlobalState/ChannelState template specialization
+
+    using OneShotDataModuleSpecific = std::tuple<Ts...>;
+
+    // Single tuple of all data types stored by this one-shot state
+    using OneShotData = detail::tuple_cat_t<typename CommonDef::OneShotDataCommon, OneShotDataModuleSpecific>;
+
+    // Single tuple of all wrapped data types stored by this one-shot state. They should all be vectors of pairs.
+    using OneShotDataWrapped = detail::wrapped_state_data_t<OneShotData>;
+
+    // Returns an immutable reference to one-shot data at index oneshot_data_index
+    template<int oneshot_data_index>
+    constexpr const auto& GetOneShot() const
+    {
+        return std::get<oneshot_data_index + CommonDef::kOneShotCommonCount>(oneshot_data_);
+    }
+
+    // Returns a mutable reference to one-shot data at index oneshot_data_index
+    template<int oneshot_data_index>
+    constexpr auto& GetOneShot()
+    {
+        return std::get<oneshot_data_index + CommonDef::kOneShotCommonCount>(oneshot_data_);
+    }
+
+private:
+    OneShotDataWrapped oneshot_data_; // Stores all one-shot state data
+};
+
 ///////////////////////////////////////////////////////////
 // GLOBAL/PER-CHANNEL STATE PRIMARY TEMPLATES
 ///////////////////////////////////////////////////////////
@@ -237,24 +306,33 @@ private:
 /*
  * The following are the global and per-channel state storage primary class templates.
  * They can be specialized to add additional supported state data if desired.
- * Any specializations must inherit from StateStorage and pass the correct common definition
- * struct plus the new module-specific types to the template parameter.
- * In addition, specializations must define StateEnumCommon and StateEnum.
+ * Any specializations must inherit from StateStorage and OneShotStorage and pass the correct
+ * common definition structs plus the new module-specific types to the template parameters.
+ * In addition, specializations must define StateEnumCommon, StateEnum, OneShotEnumCommon, and
+ * OneShotEnum.
  * All state data types must have a "==" operator defined for them.
  */
 
 template<class ModuleClass>
-struct GlobalState : public StateStorage<GlobalStateCommonDefinition<ModuleClass> /* Module-specific types go here in any specializations */>
+struct GlobalState :
+    public StateStorage<GlobalStateCommonDefinition /* Module-specific types go here in any specializations */>,
+    public OneShotStorage<GlobalOneShotCommonDefinition /* Module-specific types go here in any specializations */>
 {
-    using typename GlobalStateCommonDefinition<ModuleClass>::StateEnumCommon;
+    using typename GlobalStateCommonDefinition::StateEnumCommon;
     enum StateEnum {};
+    using typename GlobalOneShotCommonDefinition::OneShotEnumCommon;
+    enum OneShotEnum {};
 };
 
 template<class ModuleClass>
-struct ChannelState : public StateStorage<ChannelStateCommonDefinition<ModuleClass> /* Module-specific types go here in any specializations */>
+struct ChannelState :
+    public StateStorage<ChannelStateCommonDefinition<ModuleClass> /* Module-specific types go here in any specializations */>,
+    public OneShotStorage<ChannelOneShotCommonDefinition /* Module-specific types go here in any specializations */>
 {
     using typename ChannelStateCommonDefinition<ModuleClass>::StateEnumCommon;
     enum StateEnum {};
+    using typename ChannelOneShotCommonDefinition::OneShotEnumCommon;
+    enum OneShotEnum {};
 };
 
 ///////////////////////////////////////////////////////////
@@ -278,32 +356,41 @@ void CopyState(TReader const* reader, TTuple& t, TFunction f)
 }
 
 // Compile-time for loop helper
-template<int start, class Reader, typename Function, int... Is>
+template<int start, bool oneshots, class Reader, typename Function, int... Is>
 void NextStateHelper(Reader const* reader, Function f, std::integer_sequence<int, Is...>)
 {
-    (f(reader->template GetVec<start + Is>(), start + Is), ...);
+    if constexpr (oneshots)
+        (f(reader->template GetOneShotVec<start + Is>(), start + Is), ...);
+    else
+        (f(reader->template GetVec<start + Is>(), start + Is), ...);
 }
 
-// Function F arguments are: (wrapped state data vector, index)
-template<int start, int end, class Reader, typename Function>
+// Function F arguments are: (wrapped state/one-shot data vector, index)
+template<int start, int end, bool oneshots, class Reader, typename Function>
 void NextState(Reader const* reader, Function f)
 {
-    NextStateHelper<start>(reader, f, std::make_integer_sequence<int, gcem::abs(start) + end>{});
+    NextStateHelper<start, oneshots>(reader, f, std::make_integer_sequence<int, gcem::abs(start) + end>{});
 }
 
 } // namespace detail
 
 
 // Allows easy, efficient reading/traversal of GlobalState/ChannelState
-template<class TState, std::enable_if_t<std::is_base_of_v<detail::StateDefinitionTag, TState>, bool> = true>
+template<class TState, std::enable_if_t<std::is_base_of_v<detail::StateDefinitionTag, TState> && std::is_base_of_v<detail::OneShotDefinitionTag, TState>, bool> = true>
 class StateReader
 {
 protected:
 
+    // TODO: Rename these:
     static constexpr int enum_lower_bound_ = TState::kLowerBound;
     static constexpr int enum_common_count_ = TState::kCommonCount;
     static constexpr int enum_upper_bound_ = TState::kUpperBound;
     static constexpr int enum_total_count_ = enum_common_count_ + enum_upper_bound_;
+
+    static constexpr int oneshot_enum_lower_bound_ = TState::kOneShotLowerBound;
+    static constexpr int oneshot_enum_common_count_ = TState::kOneShotCommonCount;
+    static constexpr int oneshot_enum_upper_bound_ = TState::kOneShotUpperBound;
+    static constexpr int oneshot_enum_total_count_ = oneshot_enum_common_count_ + oneshot_enum_upper_bound_;
 
 public:
 
@@ -313,15 +400,24 @@ public:
     using StateEnumCommon = typename TState::StateEnumCommon;
     using StateEnum = typename TState::StateEnum;
 
+    using OneShotData = typename TState::OneShotData;
+    using OneShotDataWrapped = typename TState::OneShotDataWrapped;
+    using OneShotEnumCommon = typename TState::OneShotEnumCommon;
+    using OneShotEnum = typename TState::OneShotEnum;
+
     // Helpers:
     template<int state_data_index> using get_data_t = std::tuple_element_t<state_data_index + enum_common_count_, StateData>;
     template<int state_data_index> using get_data_wrapped_t = std::tuple_element_t<state_data_index + enum_common_count_, StateDataWrapped>;
 
+    template<int oneshot_data_index> using get_oneshot_data_t = std::tuple_element_t<oneshot_data_index + oneshot_enum_common_count_, OneShotData>;
+    template<int oneshot_data_index> using get_oneshot_data_wrapped_t = std::tuple_element_t<oneshot_data_index + oneshot_enum_common_count_, OneShotDataWrapped>;
+
     using Deltas = std::array<bool, enum_total_count_>;
+    using OneShotDeltas = std::array<bool, oneshot_enum_total_count_>;
 
 public:
-    StateReader() : state_(nullptr), cur_pos_(0), cur_indexes_{} {}
-    StateReader(TState* state) : state_(state), cur_pos_(0), cur_indexes_{} {}
+    StateReader() : state_(nullptr), deltas_{}, oneshot_deltas_{}, cur_pos_(0), cur_indexes_{}, cur_indexes_oneshot_{} {}
+    StateReader(TState* state) : state_(state), deltas_{}, oneshot_deltas_{}, cur_pos_(0), cur_indexes_{}, cur_indexes_oneshot_{} {}
     void AssignState(TState const* state) { state_ = state; channel_ = 0; }
     void AssignState(TState const* state, ChannelIndex channel) { state_ = state; channel_ = channel; }
 
@@ -330,7 +426,25 @@ public:
     {
         cur_pos_ = 0;
         cur_indexes_.fill(-1); // ???
+        cur_indexes_oneshot_.fill(-1); // ???
         deltas_.fill(false);
+        oneshot_deltas_.fill(false);
+    }
+
+    // Get the specified state data vector (state_data_index)
+    template<int state_data_index>
+    inline constexpr const get_data_wrapped_t<state_data_index>& GetVec() const
+    {
+        assert(state_);
+        return state_->template Get<state_data_index>();
+    }
+
+    // Get the specified one-shot data vector (oneshot_data_index)
+    template<int oneshot_data_index>
+    inline constexpr const get_oneshot_data_wrapped_t<oneshot_data_index>& GetOneShotVec() const
+    {
+        assert(state_);
+        return state_->template GetOneShot<oneshot_data_index>();
     }
 
     // Get the specified state data (state_data_index) at the current read position
@@ -349,27 +463,16 @@ public:
         return GetVec<state_data_index>().at(vec_index).second;
     }
 
-    // Get the specified state data vector (state_data_index)
-    template<int state_data_index>
-    inline constexpr const get_data_wrapped_t<state_data_index>& GetVec() const
-    {
-        assert(state_);
-        return state_->template Get<state_data_index>();
-    }
-
-    // Gets the specified state data (state_data_index) if it is exactly at the current read position.
-    // Useful for state data types like PosJump which happen once during a single row and don't stay on continuously like Tremolo for example
+    // Gets the specified one-shot data (oneshot_data_index) if it is exactly at the current read position.
     // TODO: Currently makes a copy of the data it places in out
-    template<int state_data_index>
-    inline constexpr bool GetOnCurrentRow(get_data_t<state_data_index>* out) const
+    template<int oneshot_data_index>
+    inline constexpr bool GetOnCurrentRow(get_oneshot_data_t<oneshot_data_index>* out) const
     {
-        const int vec_index = cur_indexes_[state_data_index + enum_common_count_];
-
-        // This type of state data probably won't have an initial state, so the vector may be empty
-        const auto& vec = GetVec<state_data_index>();
+        const auto& vec = GetOneShotVec<oneshot_data_index>();
         if (vec.empty())
             return false;
 
+        const int vec_index = cur_indexes_oneshot_[GetOneShotIndex(oneshot_data_index)];
         const auto& elem = vec.at(vec_index);
         if (elem.first != cur_pos_)
             return false;
@@ -402,7 +505,7 @@ public:
      * Call this method at the start of an inner loop before any the reading has been done for that iteration.
      * It can also be used to seek forward to the specified position even if it's not the next row.
      * If set_deltas == true, sets an array of bools specifying which state values have changed since last iteration.
-     * These delta values can then be obtained by calling GetDeltas().
+     * These delta values can then be obtained by calling GetDeltas() or GetOneShotDeltas().
      */
     template<bool set_deltas = false>
     void SetReadPos(OrderRowPosition pos)
@@ -413,9 +516,9 @@ public:
             deltas_.fill(false);
         }
 
-        detail::NextState<enum_lower_bound_, enum_upper_bound_>(this, [&, this](const auto& vec, int state_data_index) constexpr
+        detail::NextState<enum_lower_bound_, enum_upper_bound_, false>(this, [&, this](const auto& vec, int state_data_index) constexpr
         {
-            int& index = cur_indexes_[state_data_index + enum_common_count_]; // Current index within state data
+            int& index = cur_indexes_[GetIndex(state_data_index)]; // Current index within state data
             const int vec_size = vec.size();
 
             if (vec_size == 0)
@@ -430,7 +533,29 @@ public:
                 if constexpr (set_deltas)
                 {
                     // NOTE: If Set() is called with ignore_duplicates == true, delta could be true even if nothing changed.
-                    deltas_[state_data_index + enum_common_count_] = true;
+                    deltas_[GetIndex(state_data_index)] = true;
+                }
+            }
+        });
+
+        detail::NextState<oneshot_enum_lower_bound_, oneshot_enum_upper_bound_, true>(this, [&, this](const auto& vec, int oneshot_data_index) constexpr
+        {
+            int& index = cur_indexes_oneshot_[GetOneShotIndex(oneshot_data_index)]; // Current index within one-shot data
+            const int vec_size = vec.size();
+
+            if (vec_size == 0)
+                return; // No one-shot data for data type oneshot_data_index
+
+            // While there's a next state that we need to advance to
+            while (index + 1 != vec_size && cur_pos_ >= vec.at(index+1).first)
+            {
+                // Need to advance
+                ++index;
+
+                if constexpr (set_deltas)
+                {
+                    // NOTE: If Set() is called with ignore_duplicates == true, delta could be true even if nothing changed.
+                    oneshot_deltas_[GetOneShotIndex(oneshot_data_index)] = true;
                 }
             }
         });
@@ -441,7 +566,7 @@ public:
      * Call this method at the start of an inner loop before any the reading has been done for that iteration.
      * It can also be used to seek forward to the specified position even if it's not the next row.
      * If set_deltas == true, sets an array of bools specifying which state values have changed since last iteration.
-     * These delta values can then be obtained by calling GetDeltas().
+     * These delta values can then be obtained by calling GetDeltas() or GetOneShotDeltas().
      */
     template<bool set_deltas = false>
     inline void SetReadPos(OrderIndex order, RowIndex row)
@@ -456,23 +581,33 @@ public:
         return GetVec<state_data_index>().size();
     }
 
-    // Converts StateEnumCommon or StateEnum variants into a zero-based index of an array such as the one returned by SetReadPos. Returns offset if no enum is provided.
-    static inline constexpr int GetIndex(int state_data_index = 0) { return enum_common_count_ + state_data_index; }
-
     // Returns the deltas from the last SetReadPos<true>() call
     inline constexpr const Deltas& GetDeltas() const { return deltas_; }
 
     inline constexpr bool GetDelta(int state_data_index) const { return deltas_[GetIndex(state_data_index)]; }
+
+    // Returns the one-shot deltas from the last SetReadPos<true>() call
+    inline constexpr const OneShotDeltas& GetOneShotDeltas() const { return oneshot_deltas_; }
+
+    inline constexpr bool GetOneShotDelta(int oneshot_data_index) const { return oneshot_deltas_[GetOneShotIndex(oneshot_data_index)]; }
 
     // Only useful for ChannelStateReader
     inline ChannelIndex GetChannel() const { return channel_; }
 
 protected:
 
+    // Converts StateEnumCommon or StateEnum variants into a zero-based index of an array. Returns offset if no enum is provided.
+    static inline constexpr int GetIndex(int state_data_index = 0) { return enum_common_count_ + state_data_index; }
+
+    // Converts OneShotEnumCommon or OneShotEnum variants into a zero-based index of an array. Returns offset if no enum is provided.
+    static inline constexpr int GetOneShotIndex(int oneshot_data_index = 0) { return oneshot_enum_common_count_ + oneshot_data_index; }
+
     TState const* state_; // The state this reader is reading from
     Deltas deltas_; // An array of bools indicating which (if any) state data values have changed since the last SetReadPos<true>() call
+    OneShotDeltas oneshot_deltas_; // Same as deltas_ but for one-shots
     OrderRowPosition cur_pos_; // The current read position in terms of order and pattern row. (The write position is the end of the state data vector)
     std::array<int, enum_total_count_> cur_indexes_; // array of state data vector indexes
+    std::array<int, oneshot_enum_total_count_> cur_indexes_oneshot_; // array of one-shot data vector indexes
     ChannelIndex channel_; // Which channel this reader is used for (if applicable)
 };
 
@@ -542,7 +677,11 @@ public:
     using typename R::StateData;
     using typename R::StateEnumCommon;
     using typename R::StateEnum;
+    using typename R::OneShotData;
+    using typename R::OneShotEnumCommon;
+    using typename R::OneShotEnum;
     template<int state_data_index> using get_data_t = typename R::template get_data_t<state_data_index>;
+    template<int oneshot_data_index> using get_oneshot_data_t = typename R::template get_oneshot_data_t<oneshot_data_index>;
 
     void AssignStateWrite(TState* state) { state_write_ = state; R::AssignState(state); }
     void AssignStateWrite(TState* state, ChannelIndex channel) { state_write_ = state; R::AssignState(state, channel); }
@@ -561,7 +700,7 @@ public:
             vec.push_back({R::cur_pos_, std::move(val)});
 
             // Adjust current index
-            int& index = R::cur_indexes_[state_data_index + R::enum_common_count_]; // Current index within state data for data type I
+            int& index = R::cur_indexes_[R::GetIndex(state_data_index)]; // Current index within state data for this data type
             ++index;
             return;
         }
@@ -583,7 +722,7 @@ public:
             vec.push_back({R::cur_pos_, std::move(val)});
 
             // Adjust current index
-            int& index = R::cur_indexes_[state_data_index + R::enum_common_count_]; // Current index within state data for data type I
+            int& index = R::cur_indexes_[R::GetIndex(state_data_index)]; // Current index within state data for this data type
             ++index;
         }
         else
@@ -598,7 +737,7 @@ public:
         Set<state_data_index, ignore_duplicates>(std::move(val_copy));
     }
 
-    // For non-persistent state values. Next time SetWritePos is called, nextVal will automatically be set.
+    // For non-persistent state values. Next time SetWritePos is called, next_val will automatically be set.
     template<int state_data_index, bool ignore_duplicates = false>
     inline void SetSingle(get_data_t<state_data_index>&& val, get_data_t<state_data_index>&& next_val)
     {
@@ -607,13 +746,56 @@ public:
         Set<state_data_index, ignore_duplicates>(std::move(val));
     }
 
-    // For non-persistent state values. Next time SetWritePos is called, nextVal will automatically be set.
+    // For non-persistent state values. Next time SetWritePos is called, next_val will automatically be set.
     template<int state_data_index, bool ignore_duplicates = false>
     inline void SetSingle(const get_data_t<state_data_index>& val, const get_data_t<state_data_index>& next_val)
     {
         std::get<state_data_index + R::enum_common_count_>(next_vals_) = next_val;
         has_next_vals_ = true;
         Set<state_data_index, ignore_duplicates>(val);
+    }
+
+    // Set the specified one-shot data (oneshot_data_index) at the current write position (the end of the vector) to val
+    template<int oneshot_data_index>
+    void SetOneShot(get_oneshot_data_t<oneshot_data_index>&& val)
+    {
+        assert(state_write_);
+        auto& vec = state_write_->template GetOneShot<oneshot_data_index>();
+
+        // For the 1st time setting this state. TODO: Use SetInitial() for this for greater efficiency?
+        if (vec.empty())
+        {
+            // Add new element
+            vec.push_back({R::cur_pos_, std::move(val)});
+
+            // Adjust current index
+            int& index = R::cur_indexes_oneshot_[R::GetOneShotIndex(oneshot_data_index)]; // Current index within one-shot data for this data type
+            ++index;
+            return;
+        }
+
+        auto& vec_elem = vec.back(); // Current vec element (always the end when writing)
+
+        // There can only be one one-shot data value for a given OrderRowPosition, so we won't always be adding a new element to the vector
+        if (vec_elem.first != R::cur_pos_)
+        {
+            // Add new element
+            vec.push_back({R::cur_pos_, std::move(val)});
+
+            // Adjust current index
+            int& index = R::cur_indexes_oneshot_[R::GetOneShotIndex(oneshot_data_index)]; // Current index within one-shot data for this data type
+            ++index;
+        }
+        else
+            vec_elem.second = std::move(val); // Update current element
+    }
+
+    // Set the specified state data (oneshot_data_index) at the current write position (the end of the vector) to val
+    template<int oneshot_data_index>
+    inline void SetOneShot(const get_oneshot_data_t<oneshot_data_index>& val)
+    {
+        get_oneshot_data_t<oneshot_data_index> val_copy = val;
+        SetOneShot<oneshot_data_index>(std::move(val_copy));
     }
 
     // Sets the initial state

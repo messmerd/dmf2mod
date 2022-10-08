@@ -326,8 +326,8 @@ private:
 
     // Conversion from DMF:
     void ConvertFromDMF(const DMF& dmf);
-    void DMFConvertSamples(const DMF& dmf, SampleMap& sampleMap);
-    void DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap);
+    void DMFConvertSamples(const DMF& dmf, SampleMap& sample_map);
+    void DMFConvertSampleData(const DMF& dmf, const SampleMap& sample_map);
 
     void DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map);
     mod::PriorityEffect DMFConvertEffects(ChannelStateReader<DMF>& state);

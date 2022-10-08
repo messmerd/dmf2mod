@@ -174,30 +174,4 @@ struct GeneratedData : public GeneratedDataStorage<GeneratedDataCommonDefinition
     enum GenDataEnum {};
 };
 
-// This is used by Module classes
-template<class ModuleClass>
-class ModuleGeneratedData : public GeneratedData<ModuleClass>
-{
-private:
-
-    ModuleBase const* module_class_;
-
-public:
-
-    ModuleGeneratedData() = delete;
-    ModuleGeneratedData(ModuleBase const* moduleClass) : module_class_(moduleClass) {}
-
-    // Bring in dependencies from parent:
-    using typename GeneratedData<ModuleClass>::GenDataEnumCommon;
-    using typename GeneratedData<ModuleClass>::GenDataEnum;
-    //using typename GeneratedData<ModuleClass>::Parent;
-
-    size_t Generate(size_t dataFlags)
-    {
-        assert(module_class_);
-        return module_class_->GenerateDataImpl(dataFlags);
-    }
-
-};
-
 } // namespace d2m

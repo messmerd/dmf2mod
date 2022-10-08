@@ -909,7 +909,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
     auto& channel_states = state_reader_writers->channel_reader_writers;
 
     // Initialize other generated data
-    using GenDataEnumCommon = ModuleGeneratedData<DMF>::GenDataEnumCommon;
+    using GenDataEnumCommon = GeneratedData<DMF>::GenDataEnumCommon;
     auto& sound_indexes_used = gen_data.Get<GenDataEnumCommon::kSoundIndexesUsed>().emplace();
     auto& sound_index_note_extremes = gen_data.Get<GenDataEnumCommon::kSoundIndexNoteExtremes>().emplace();
     //auto& channel_note_extremes = gen_data.Get<GenDataEnumCommon::kChannelNoteExtremes>().emplace();
@@ -917,9 +917,11 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
     gen_data.Get<GenDataEnumCommon::kNoteOffUsed>() = false;
 
     // For convenience:
-    using GlobalEnumCommon = GlobalState<DMF>::StateEnumCommon;
+    using GlobalCommon = GlobalState<DMF>::StateEnumCommon;
+    using GlobalOneShotCommon = GlobalState<DMF>::OneShotEnumCommon;
     //using GlobalEnum = GlobalState<DMF>::StateEnum;
-    using ChannelEnumCommon = ChannelState<DMF>::StateEnumCommon;
+    using ChannelCommon = ChannelState<DMF>::StateEnumCommon;
+    using ChannelOneShotCommon = ChannelState<DMF>::OneShotEnumCommon;
     //using ChannelEnum = ChannelState<DMF>::StateEnum;
 
     // For portamento auto-off: -1 = port not on; 0 = need to turn port off; >0 = rows until port auto off
@@ -970,9 +972,9 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
 
     // Set initial state (global)
     global_state.Reset(); // Just in case
-    global_state.Set<GlobalEnumCommon::kSpeedA>(m_ModuleInfo.tickTime1); // * timebase?
-    global_state.Set<GlobalEnumCommon::kSpeedB>(m_ModuleInfo.tickTime2); // * timebase?
-    global_state.Set<GlobalEnumCommon::kTempo>(0); // TODO: How should tempo/speed info be stored?
+    global_state.Set<GlobalCommon::kSpeedA>(m_ModuleInfo.tickTime1); // * timebase?
+    global_state.Set<GlobalCommon::kSpeedB>(m_ModuleInfo.tickTime2); // * timebase?
+    global_state.Set<GlobalCommon::kTempo>(0); // TODO: How should tempo/speed info be stored?
 
     // Set initial state (per-channel)
     for (unsigned i = 0; i < channel_states.size(); ++i)
@@ -998,17 +1000,17 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
             break;
         }
 
-        channel_state.Set<ChannelEnumCommon::kSoundIndex>(si);
-        channel_state.Set<ChannelEnumCommon::kNoteSlot>(NoteTypes::Empty{});
-        channel_state.Set<ChannelEnumCommon::kVolume>(15);
-        channel_state.Set<ChannelEnumCommon::kArp>(0);
-        channel_state.Set<ChannelEnumCommon::kPort>({PortamentoStateData::kNone, 0});
-        channel_state.Set<ChannelEnumCommon::kVibrato>(0);
-        channel_state.Set<ChannelEnumCommon::kPort2NoteVolSlide>(0);
-        channel_state.Set<ChannelEnumCommon::kVibratoVolSlide>(0);
-        channel_state.Set<ChannelEnumCommon::kTremolo>(0);
-        channel_state.Set<ChannelEnumCommon::kPanning>(127);
-        channel_state.Set<ChannelEnumCommon::kVolSlide>(0);
+        channel_state.Set<ChannelCommon::kSoundIndex>(si);
+        channel_state.Set<ChannelCommon::kNoteSlot>(NoteTypes::Empty{});
+        channel_state.Set<ChannelCommon::kVolume>(15);
+        channel_state.Set<ChannelCommon::kArp>(0);
+        channel_state.Set<ChannelCommon::kPort>({PortamentoStateData::kNone, 0});
+        channel_state.Set<ChannelCommon::kVibrato>(0);
+        channel_state.Set<ChannelCommon::kPort2NoteVolSlide>(0);
+        channel_state.Set<ChannelCommon::kVibratoVolSlide>(0);
+        channel_state.Set<ChannelCommon::kTremolo>(0);
+        channel_state.Set<ChannelCommon::kPanning>(127);
+        channel_state.Set<ChannelCommon::kVolSlide>(0);
     }
 
     // Main loop
@@ -1035,8 +1037,8 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                 if (!NoteIsEmpty(row_data.note))
                 {
                     // Portamento to note stops when next note is reached or on Note OFF
-                    if (channel_state.Get<ChannelEnumCommon::kPort>().type == PortamentoStateData::kToNote)
-                        channel_state.Set<ChannelEnumCommon::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0});
+                    if (channel_state.Get<ChannelCommon::kPort>().type == PortamentoStateData::kToNote)
+                        channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0});
                 }
 
                 if (rows_until_port_auto_off[channel] != -1)
@@ -1044,14 +1046,14 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                     if (rows_until_port_auto_off[channel] == 0)
                     {
                         // Automatically turn port effects off by using the previous port type and setting the value to 0
-                        PortamentoStateData temp_prev_port = channel_state.Get<ChannelEnumCommon::kPort>();
+                        PortamentoStateData temp_prev_port = channel_state.Get<ChannelCommon::kPort>();
                         temp_prev_port.value = 0;
-                        channel_state.Set<ChannelEnumCommon::kPort>(temp_prev_port);
+                        channel_state.Set<ChannelCommon::kPort>(temp_prev_port);
                         rows_until_port_auto_off[channel] = -1;
                     }
                     else if (NoteHasPitch(row_data.note))
                     {
-                        const auto& temp_port = channel_state.Get<ChannelEnumCommon::kPort>();
+                        const auto& temp_port = channel_state.Get<ChannelCommon::kPort>();
                         // Reset the time until port effects automatically turn off
                         if (temp_port.type == PortamentoStateData::kUp)
                             rows_until_port_auto_off[channel] = RowsUntilPortUpAutoOff(ticks_per_row_pair, row_data.note, temp_port.value);
@@ -1083,14 +1085,14 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                     // on the current row, if the left-most Port2Note were to be used with value > 0, that note will not play.
                     // In addition, all subsequent notes in the channel will also be cancelled until the port2note is stopped by
                     // a future port effect, note OFF, or it auto-off's. Port2Note auto-off is not implemented here though.
-                    const bool port2note_note_cancellation_possible = channel_state.GetSize<ChannelEnumCommon::kNoteSlot>() == 1 && NoteHasPitch(row_data.note);
+                    const bool port2note_note_cancellation_possible = channel_state.GetSize<ChannelCommon::kNoteSlot>() == 1 && NoteHasPitch(row_data.note);
                     bool just_cancelled_note = false;
                     bool temp_note_cancelled = note_cancelled[channel];
 
                     // Other effects:
                     int16_t vibrato = -1, port2note_volslide = -1, vibrato_volslide = -1, tremolo = -1, panning = -1, volslide = -1, retrigger = -1, note_cut = -1, note_delay = -1;
 
-                    auto sound_index = channel_state.Get<ChannelEnumCommon::kSoundIndex>();
+                    auto sound_index = channel_state.Get<ChannelCommon::kSoundIndex>();
 
                     // Loop right to left because left-most effects in effects column have priority
                     for (auto iter = std::crbegin(row_data.effect); iter != std::crend(row_data.effect); ++iter)
@@ -1105,7 +1107,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                         switch (effect.code)
                         {
                         case Effects::kArp:
-                            channel_state.Set<ChannelEnumCommon::kArp>(effect_value > 0 ? effect_value : 0); break;
+                            channel_state.Set<ChannelCommon::kArp>(effect_value > 0 ? effect_value : 0); break;
                         case Effects::kPortUp:
                             prev_port_cancelled = true;
                             temp_note_cancelled = false; // Will "uncancel" notes if a port2note in this row isn't cancelling them
@@ -1204,34 +1206,34 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                         // Set port effects in order of priority:
                         if (port2note != -1)
                         {
-                            channel_state.Set<ChannelEnumCommon::kPort>(PortamentoStateData{PortamentoStateData::kToNote, static_cast<uint8_t>(port2note)});
+                            channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kToNote, static_cast<uint8_t>(port2note)});
                             rows_until_port_auto_off[channel] = -1; // ???
                             // TODO: Handle port2note auto-off
                         }
                         else if (port_down != -1)
                         {
-                            channel_state.Set<ChannelEnumCommon::kPort>(PortamentoStateData{PortamentoStateData::kDown, static_cast<uint8_t>(port_down)});
+                            channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kDown, static_cast<uint8_t>(port_down)});
                             if (rows_until_port_auto_off[channel] == -1)
                             {
-                                NoteSlot temp_note_slot = NoteHasPitch(row_data.note) ? row_data.note : channel_state.Get<ChannelEnumCommon::kNoteSlot>();
+                                NoteSlot temp_note_slot = NoteHasPitch(row_data.note) ? row_data.note : channel_state.Get<ChannelCommon::kNoteSlot>();
                                 rows_until_port_auto_off[channel] = RowsUntilPortDownAutoOff(ticks_per_row_pair, temp_note_slot, port_down);
                             }
                         }
                         else if (port_up != -1)
                         {
-                            channel_state.Set<ChannelEnumCommon::kPort>(PortamentoStateData{PortamentoStateData::kUp, static_cast<uint8_t>(port_up)});
+                            channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kUp, static_cast<uint8_t>(port_up)});
                             if (rows_until_port_auto_off[channel] == -1)
                             {
-                                NoteSlot temp_note_slot = NoteHasPitch(row_data.note) ? row_data.note : channel_state.Get<ChannelEnumCommon::kNoteSlot>();
+                                NoteSlot temp_note_slot = NoteHasPitch(row_data.note) ? row_data.note : channel_state.Get<ChannelCommon::kNoteSlot>();
                                 rows_until_port_auto_off[channel] = RowsUntilPortUpAutoOff(ticks_per_row_pair, temp_note_slot, port_up);
                             }
                         }
                         else if (prev_port_cancelled)
                         {
                             // Cancel the previous port by using the same port type and setting the value to 0
-                            PortamentoStateData prev_port = channel_state.Get<ChannelEnumCommon::kPort>();
+                            PortamentoStateData prev_port = channel_state.Get<ChannelCommon::kPort>();
                             prev_port.value = 0;
-                            channel_state.Set<ChannelEnumCommon::kPort>(prev_port);
+                            channel_state.Set<ChannelCommon::kPort>(prev_port);
                         }
                     }
 
@@ -1243,48 +1245,48 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
 
                     // Set other effects' states (WIP)
                     if (vibrato != -1)
-                        channel_state.Set<ChannelEnumCommon::kVibrato>(vibrato);
+                        channel_state.Set<ChannelCommon::kVibrato>(vibrato);
                     if (port2note_volslide != -1)
-                        channel_state.Set<ChannelEnumCommon::kPort2NoteVolSlide>(port2note_volslide);
+                        channel_state.Set<ChannelCommon::kPort2NoteVolSlide>(port2note_volslide);
                     if (vibrato_volslide != -1)
-                        channel_state.Set<ChannelEnumCommon::kVibratoVolSlide>(vibrato_volslide);
+                        channel_state.Set<ChannelCommon::kVibratoVolSlide>(vibrato_volslide);
                     if (tremolo != -1)
-                        channel_state.Set<ChannelEnumCommon::kTremolo>(tremolo);
+                        channel_state.Set<ChannelCommon::kTremolo>(tremolo);
                     if (panning != -1)
-                        channel_state.Set<ChannelEnumCommon::kPanning>(panning);
+                        channel_state.Set<ChannelCommon::kPanning>(panning);
                     if (volslide != -1)
-                        channel_state.Set<ChannelEnumCommon::kVolSlide>(volslide);
+                        channel_state.Set<ChannelCommon::kVolSlide>(volslide);
                     if (retrigger != -1)
-                        channel_state.Set<ChannelEnumCommon::kRetrigger>(retrigger);
+                        channel_state.SetOneShot<ChannelOneShotCommon::kRetrigger>(retrigger);
                     if (note_cut != -1)
-                        channel_state.Set<ChannelEnumCommon::kNoteCut>(note_cut);
+                        channel_state.SetOneShot<ChannelOneShotCommon::kNoteCut>(note_cut);
                     if (note_delay != -1)
-                        channel_state.Set<ChannelEnumCommon::kNoteDelay>(note_delay);
+                        channel_state.SetOneShot<ChannelOneShotCommon::kNoteDelay>(note_delay);
 
                     // TODO: This sound index may end up being unused but we have no way of knowing right now.
                     //       Should compare with sound_indexes_used at the end and remove entries that aren't used?
-                    channel_state.Set<ChannelEnumCommon::kSoundIndex>(sound_index);
+                    channel_state.Set<ChannelCommon::kSoundIndex>(sound_index);
                 }
 
                 // CHANNEL STATE - NOTES AND SOUND INDEXES
                 const NoteSlot& note_slot = row_data.note;
                 if (NoteIsEmpty(note_slot))
                 {
-                    channel_state.Set<ChannelEnumCommon::kNoteSlot>(note_slot);
+                    channel_state.Set<ChannelCommon::kNoteSlot>(note_slot);
                 }
                 if (NoteIsOff(note_slot))
                 {
-                    channel_state.Set<ChannelEnumCommon::kNoteSlot>(note_slot);
+                    channel_state.Set<ChannelCommon::kNoteSlot>(note_slot);
                     gen_data.Get<GenDataEnumCommon::kNoteOffUsed>() = true;
                     note_cancelled[channel] = false; // An OFF also "uncancels" notes cancelled by a port2note effect
                 }
                 else if (NoteHasPitch(note_slot) && channel != dmf::GameBoyChannel::NOISE && !note_cancelled[channel])
                 {
                     // NoteTypes::Empty should never appear in state data (but can in initial state)
-                    channel_state.Set<ChannelEnumCommon::kNoteSlot, true>(note_slot);
+                    channel_state.Set<ChannelCommon::kNoteSlot, true>(note_slot);
                     const Note& note = GetNote(note_slot);
 
-                    const auto& sound_index = channel_state.Get<ChannelEnumCommon::kSoundIndex>();
+                    const auto& sound_index = channel_state.Get<ChannelCommon::kSoundIndex>();
 
                     // Mark this square wave or wavetable as used
                     sound_indexes_used.insert(sound_index);
@@ -1321,13 +1323,13 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                         switch (row_data.volume)
                         {
                             case 0: case 1: case 2: case 3:
-                                channel_state.Set<ChannelEnumCommon::kVolume>(0); break;
+                                channel_state.Set<ChannelCommon::kVolume>(0); break;
                             case 4: case 5: case 6: case 7:
-                                channel_state.Set<ChannelEnumCommon::kVolume>(5); break;
+                                channel_state.Set<ChannelCommon::kVolume>(5); break;
                             case 8: case 9: case 10: case 11:
-                                channel_state.Set<ChannelEnumCommon::kVolume>(10); break;
+                                channel_state.Set<ChannelCommon::kVolume>(10); break;
                             case 12: case 13: case 14: case 15:
-                                channel_state.Set<ChannelEnumCommon::kVolume>(15); break;
+                                channel_state.Set<ChannelCommon::kVolume>(15); break;
                             default:
                                 assert(false && "Invalid DMF volume");
                                 break;
@@ -1335,7 +1337,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                     }
                     else if (NoteHasPitch(row_data.note))
                     {
-                        channel_state.Set<ChannelEnumCommon::kVolume>(row_data.volume);
+                        channel_state.Set<ChannelCommon::kVolume>(row_data.volume);
                     }
                 }
 
@@ -1398,11 +1400,11 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                     // Set the global state if needed
 
                     if (speed_a >= 0)
-                        global_state.Set<GlobalEnumCommon::kSpeedA>(speed_a);
+                        global_state.Set<GlobalCommon::kSpeedA>(speed_a);
                     if (speed_b >= 0)
-                        global_state.Set<GlobalEnumCommon::kSpeedB>(speed_b);
+                        global_state.Set<GlobalCommon::kSpeedB>(speed_b);
                     if (tempo >= 0)
-                        global_state.Set<GlobalEnumCommon::kTempo>(tempo);
+                        global_state.Set<GlobalCommon::kTempo>(tempo);
 
                     if (pat_break >= 0)
                     {
@@ -1410,7 +1412,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                         state_reader_writers->Save();
                         jump_destination_order = order + 1;
                         jump_destination_row = pat_break;
-                        global_state.Set<GlobalEnumCommon::kPatBreak>(pat_break); // Don't want the PatBreak in the copy
+                        global_state.SetOneShot<GlobalOneShotCommon::kPatBreak>(pat_break);
                     }
                     else if (pos_jump >= 0) // PosJump only takes effect if PatBreak isn't used
                     {
@@ -1427,7 +1429,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                             loopback_points[pos_jump] = GetOrderRowPosition(order, row);
                         }
 
-                        global_state.Set<GlobalEnumCommon::kPosJump>(pos_jump); // Don't want the PosJump in the copy
+                        global_state.SetOneShot<GlobalOneShotCommon::kPosJump>(pos_jump);
                     }
                 }
 

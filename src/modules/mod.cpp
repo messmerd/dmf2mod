@@ -66,7 +66,7 @@ void MOD::ConvertImpl(const ModulePtr& input)
     switch (input->GetType())
     {
         case ModuleType::DMF:
-            ConvertFromDMF(*(std::static_pointer_cast<DMF>(input)));
+            ConvertFromDMF(*input->Cast<const DMF>());
             break;
         // Add other input types here if support is added
         default:
@@ -89,65 +89,65 @@ void MOD::ConvertFromDMF(const DMF& dmf)
         throw MODException(ModuleException::Category::Convert, MOD::ConvertError::NotGameBoy);
     }
 
-    const auto& dmfData = dmf.GetData();
-    auto& modData = GetData();
-    const OrderIndex numOrders = dmfData.GetNumOrders() + (OrderIndex)m_UsingSetupPattern;
-    if (numOrders > 64) // numOrders is 1 more than it actually is
+    const auto& dmf_data = dmf.GetData();
+    auto& mod_data = GetData();
+    const OrderIndex num_orders = dmf_data.GetNumOrders() + (OrderIndex)m_UsingSetupPattern;
+    if (num_orders > 64) // num_orders is 1 more than it actually is
     {
         throw MODException(ModuleException::Category::Convert, MOD::ConvertError::TooManyPatternMatrixRows);
     }
 
-    if (dmfData.GetNumRows() > 64)
+    if (dmf_data.GetNumRows() > 64)
     {
         throw MODException(ModuleException::Category::Convert, MOD::ConvertError::Over64RowPattern);
     }
 
-    ChannelIndex numChannels = dmfData.GetNumChannels();
-    if (numChannels != 4)
+    ChannelIndex num_channels = dmf_data.GetNumChannels();
+    if (num_channels != 4)
     {
         throw ModuleException(ModuleException::Category::Convert, MOD::ConvertError::WrongChannelCount, "Wrong number of channels. There should be exactly 4.");
     }
 
     ///////////////// GET DMF GENERATED DATA
 
+    dmf.GenerateData();
     auto dmf_gen_data = dmf.GetGeneratedData();
-    dmf_gen_data->Generate(0);
 
     ///////////////// SET UP DATA
 
-    modData.AllocatePatternMatrix(numChannels, numOrders, 64);
+    mod_data.AllocatePatternMatrix(num_channels, num_orders, 64);
 
     // Fill pattern matrix with pattern ids 0,1,2,...,N
-    std::iota(modData.PatternMatrixRef().begin(), modData.PatternMatrixRef().end(), 0);
+    std::iota(mod_data.PatternMatrixRef().begin(), mod_data.PatternMatrixRef().end(), 0);
 
-    modData.AllocateChannels();
-    modData.AllocatePatterns();
+    mod_data.AllocateChannels();
+    mod_data.AllocatePatterns();
 
     ///////////////// CONVERT SONG TITLE AND AUTHOR
 
-    auto& modGlobalData = modData.GlobalData();
+    auto& mod_global_data = mod_data.GlobalData();
 
-    modGlobalData.title = dmfData.GlobalData().title;
-    if (modGlobalData.title.size() > 20)
-        modGlobalData.title.resize(20); // Don't pad with spaces b/c exporting to WAV in ProTracker will keep those spaces in the exported file name
+    mod_global_data.title = dmf_data.GlobalData().title;
+    if (mod_global_data.title.size() > 20)
+        mod_global_data.title.resize(20); // Don't pad with spaces b/c exporting to WAV in ProTracker will keep those spaces in the exported file name
 
-    modGlobalData.author = dmfData.GlobalData().author;
-    modGlobalData.author.resize(22, ' '); // Author will be displayed in 1st sample; sample names have 22 character limit
+    mod_global_data.author = dmf_data.GlobalData().author;
+    mod_global_data.author.resize(22, ' '); // Author will be displayed in 1st sample; sample names have 22 character limit
 
     ///////////////// CONVERT SAMPLES
 
     if (verbose)
         std::cout << "Converting samples...\n";
 
-    SampleMap sampleMap;
-    DMFConvertSamples(dmf, sampleMap);
+    SampleMap sample_map;
+    DMFConvertSamples(dmf, sample_map);
 
     ///////////////// CONVERT PATTERN DATA
 
     if (verbose)
         std::cout << "Converting pattern data...\n";
 
-    DMFConvertPatterns(dmf, sampleMap);
+    DMFConvertPatterns(dmf, sample_map);
 
     ///////////////// CLEAN UP
 
@@ -155,7 +155,7 @@ void MOD::ConvertFromDMF(const DMF& dmf)
         std::cout << "Done converting to MOD.\n\n";
 }
 
-void MOD::DMFConvertSamples(const DMF& dmf, SampleMap& sampleMap)
+void MOD::DMFConvertSamples(const DMF& dmf, SampleMap& sample_map)
 {
     // This method determines whether a DMF sound index will need to be split into low, middle,
     //  or high ranges in MOD, then assigns MOD sample numbers, sample lengths, etc.
@@ -168,14 +168,14 @@ void MOD::DMFConvertSamples(const DMF& dmf, SampleMap& sampleMap)
     // Init silent sample if needed. It is always sample #1 if used.
     if (dmf.GetGeneratedData()->Get<GeneratedData<DMF>::kNoteOffUsed>().value())
     {
-        auto& sample_mapper = sampleMap.insert({SoundIndex<DMF>::None{}, {}}).first->second;
+        auto& sample_mapper = sample_map.insert({SoundIndex<DMF>::None{}, {}}).first->second;
         mod_current_sound_index = sample_mapper.InitSilence();
     }
 
     // Map the DMF Square and WAVE sound indexes to MOD sample ids
     for (const auto& dmf_sound_index : dmf_sound_indexes)
     {
-        auto& sample_mapper = sampleMap.insert({dmf_sound_index, {}}).first->second;
+        auto& sample_mapper = sample_map.insert({dmf_sound_index, {}}).first->second;
         const auto& note_extremes = dmf_sound_index_note_extremes.at(dmf_sound_index);
         mod_current_sound_index = sample_mapper.Init(dmf_sound_index, mod_current_sound_index, note_extremes);
 
@@ -189,15 +189,15 @@ void MOD::DMFConvertSamples(const DMF& dmf, SampleMap& sampleMap)
 
     // TODO: Check if there are too many samples needed here, and throw exception if so
 
-    DMFConvertSampleData(dmf, sampleMap);
+    DMFConvertSampleData(dmf, sample_map);
 }
 
-void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sampleMap)
+void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sample_map)
 {
     // Fill out information needed to define a MOD sample
     m_Samples.clear();
 
-    for (const auto& [dmf_sound_index, sample_mapper] : sampleMap)
+    for (const auto& [dmf_sound_index, sample_mapper] : sample_map)
     {
         for (int note_range_int = 0; note_range_int < sample_mapper.GetNumMODSamples(); ++note_range_int)
         {
@@ -421,12 +421,12 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
 
             // Global effects, highest priority first:
 
-            if (global_reader.GetDelta(GlobalState<DMF>::kPatBreak))
+            if (global_reader.GetOneShotDelta(GlobalState<DMF>::kPatBreak))
                 global_effects.push_back({ EffectPriorityStructureRelated, { Effects::kPatBreak, global_reader.Get<GlobalState<DMF>::kPatBreak>() } });
             else if (dmf_num_rows < 64 && dmf_row + 1 == dmf_num_rows)
                 global_effects.push_back({ EffectPriorityStructureRelated, { Effects::kPatBreak, 0 } });  // Use PatBreak to allow patterns under 64 rows
 
-            if (global_reader.GetDelta(GlobalState<DMF>::kPosJump))
+            if (global_reader.GetOneShotDelta(GlobalState<DMF>::kPosJump))
                 global_effects.push_back({ EffectPriorityStructureRelated, { Effects::kPosJump, static_cast<EffectValue>(global_reader.Get<GlobalState<DMF>::kPosJump>() + m_UsingSetupPattern) } });
 
             std::array<Row<MOD>, 4> mod_row_data;
@@ -1157,7 +1157,6 @@ DMFSampleMapper::NoteRangeName DMFSampleMapper::GetMODNoteRangeName(NoteRange mo
             throw std::range_error("In SampleMapper::GetMODNoteRangeName: The provided MOD note range is invalid for this SampleMapper object.");
     }
 }
-
 
 ///////// EXPORT /////////
 

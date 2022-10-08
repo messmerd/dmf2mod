@@ -26,35 +26,33 @@ namespace d2m {
 template<class Derived>
 class ModuleInterface : public EnableFactory<Derived, ModuleBase>
 {
-protected:
-
-    ModuleInterface() : m_GeneratedData(std::make_shared<ModuleGeneratedData<Derived>>(static_cast<Derived const*>(this))) {}
-
 public:
 
     virtual ~ModuleInterface() = default;
 
-    inline const ModuleData<Derived>& GetData() const { return m_Data; }
+    inline const ModuleData<Derived>& GetData() const { return m_data; }
     inline const ModuleGlobalData<Derived>& GetGlobalData() const { return GetData().GlobalData(); }
-    inline const std::shared_ptr<ModuleGeneratedData<Derived>>& GetGeneratedData() const { return m_GeneratedData; }
+    inline const std::shared_ptr<GeneratedData<Derived>>& GetGeneratedData() const { return m_generated_data; }
 
-    std::string GetTitle() const override { return GetGlobalData().title; }
-    std::string GetAuthor() const override { return GetGlobalData().author; }
+    const std::string& GetTitle() const override { return GetGlobalData().title; }
+    const std::string& GetAuthor() const override { return GetGlobalData().author; }
 
 protected:
 
-    inline ModuleData<Derived>& GetData() { return m_Data; }
+    ModuleInterface() : m_generated_data(std::make_shared<GeneratedData<Derived>>()) {}
+
+    inline ModuleData<Derived>& GetData() { return m_data; }
     inline ModuleGlobalData<Derived>& GetGlobalData() { return GetData().GlobalData(); }
-    inline std::shared_ptr<ModuleGeneratedData<Derived>>& GetGeneratedData() { return m_GeneratedData; }
+    inline std::shared_ptr<GeneratedData<Derived>>& GetGeneratedData() { return m_generated_data; }
 
 private:
 
     // Song information for a particular module file
-    ModuleData<Derived> m_Data;
+    ModuleData<Derived> m_data;
 
     // Information about a module file which must be calculated.
     // Cannot be stored directly because other Modules need to modify its contents without modifying the Module
-    std::shared_ptr<ModuleGeneratedData<Derived>> m_GeneratedData;
+    std::shared_ptr<GeneratedData<Derived>> m_generated_data;
 };
 
 } // namespace d2m

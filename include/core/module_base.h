@@ -85,6 +85,11 @@ public:
     ModulePtr Convert(ModuleType type, const ConversionOptionsPtr& options);
 
     /*
+     * Generates the generated data using optional data flags
+     */
+    size_t GenerateData(size_t data_flags = 0) const { return GenerateDataImpl(data_flags); }
+
+    /*
      * Gets the Status object for the last import/export/convert
      */
     const Status& GetStatus() const { return m_Status; }
@@ -97,12 +102,12 @@ public:
     /*
      * Get the title of the module
      */
-    virtual std::string GetTitle() const = 0;
+    virtual const std::string& GetTitle() const = 0;
 
     /*
      * Get the author of the module
      */
-    virtual std::string GetAuthor() const = 0;
+    virtual const std::string& GetAuthor() const = 0;
 
 protected:
     // Import() and Export() and Convert() are wrappers for these methods, which must be implemented by a module class:

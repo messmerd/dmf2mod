@@ -18,6 +18,7 @@
 #include <exception>
 #include <stdexcept>
 #include <type_traits>
+#include <optional>
 
 namespace d2m {
 
@@ -136,7 +137,7 @@ public:
         m_Category = Category::None;
     }
 
-    bool ErrorOccurred() const { return m_Error.first; }
+    bool ErrorOccurred() const { return m_Error.has_value(); }
     bool WarningsIssued() const { return !m_WarningMessages.empty(); }
     
     void PrintError(bool useStdErr = true) const;
@@ -148,13 +149,12 @@ public:
     void Clear()
     {
         m_WarningMessages.clear();
-        m_Error.first = false;
+        m_Error.reset();
     }
 
     void AddError(ModuleException&& error)
     {
-        m_Error.second = std::move(error);
-        m_Error.first = true;
+        m_Error = std::move(error);
     }
 
     void AddWarning(const std::string& warningMessage)
@@ -170,10 +170,7 @@ public:
 
 private:
 
-    template <typename T>
-    using poor_mans_optional = std::pair<bool, T>;
-    
-    poor_mans_optional<ModuleException> m_Error;
+    std::optional<ModuleException> m_Error;
     std::vector<std::string> m_WarningMessages;
     Category m_Category;
 };

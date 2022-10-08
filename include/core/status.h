@@ -18,7 +18,7 @@
 #include <exception>
 #include <stdexcept>
 #include <type_traits>
-#include <optional>
+#include <memory>
 
 namespace d2m {
 
@@ -76,7 +76,7 @@ public:
     ModuleException(ModuleException&& other) noexcept = default;
     ModuleException& operator=(ModuleException&& other) = default;
 
-public: // Should this be private once DMF gets its own DMFException class?
+public: // Should this be protected once DMF gets its own DMFException class?
 
     ModuleException() = default;
     ModuleException(const ModuleException& other) = default;
@@ -137,7 +137,7 @@ public:
         m_Category = Category::None;
     }
 
-    bool ErrorOccurred() const { return m_Error.has_value(); }
+    bool ErrorOccurred() const { return m_Error.get(); }
     bool WarningsIssued() const { return !m_WarningMessages.empty(); }
     
     void PrintError(bool useStdErr = true) const;
@@ -154,7 +154,10 @@ public:
 
     void AddError(ModuleException&& error)
     {
-        m_Error = std::move(error);
+        if (!m_Error)
+            m_Error = std::make_unique<ModuleException>(std::move(error));
+        else
+            *m_Error = std::move(error);
     }
 
     void AddWarning(const std::string& warningMessage)
@@ -170,7 +173,7 @@ public:
 
 private:
 
-    std::optional<ModuleException> m_Error;
+    std::unique_ptr<ModuleException> m_Error;
     std::vector<std::string> m_WarningMessages;
     Category m_Category;
 };

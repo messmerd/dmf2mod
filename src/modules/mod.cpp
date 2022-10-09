@@ -611,10 +611,10 @@ Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMappe
 
     Row<MOD> row_data{};
 
-    const NoteSlot& dmf_note = state.Get<ChannelState<DMF>::kNoteSlot>();
+    NoteSlot dmf_note = state.Get<ChannelState<DMF>::kNoteSlot>();
     switch (dmf_note.index())
     {
-        // Convert note - No note playing
+        // Convert note - Empty
         case NoteTypes::kEmpty:
             row_data.sample = 0; // Keeps previous sample id
             row_data.note = dmf_note;
@@ -630,13 +630,21 @@ Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMappe
         // Convert note - Note with pitch
         case NoteTypes::kNote:
         {
+            if (!state.GetDelta(ChannelState<DMF>::kNoteSlot))
+            {
+                // This is actually an Empty note slot
+                row_data.sample = 0; // Keeps previous sample id
+                row_data.note = NoteTypes::Empty{};
+                return row_data;
+            }
+
             const SoundIndexType<DMF>& dmf_sound_index = state.Get<ChannelState<DMF>::kSoundIndex>();
             const DMFSampleMapper& sample_mapper = sample_map.at(dmf_sound_index);
 
             DMFSampleMapper::NoteRange new_note_range;
             row_data.note = sample_mapper.GetMODNote(GetNote(dmf_note), new_note_range);
 
-            bool mod_sample_changed = state.GetDelta(ChannelState<DMF>::kNoteSlot);
+            bool mod_sample_changed = state.GetDelta(ChannelState<DMF>::kSoundIndex);
             if (note_range != new_note_range)
             {
                 // Switching to a different note range also requires the use of a different MOD sample

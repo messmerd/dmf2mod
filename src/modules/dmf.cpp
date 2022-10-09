@@ -924,42 +924,64 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
     using ChannelOneShotCommon = ChannelState<DMF>::OneShotEnumCommon;
     //using ChannelEnum = ChannelState<DMF>::StateEnum;
 
-    // For portamento auto-off: -1 = port not on; 0 = need to turn port off; >0 = rows until port auto off
-    std::vector<int> rows_until_port_auto_off(data.GetNumChannels(), -1);
-
     /*
      * In spite of what the Deflemask manual says, portamento effects are automatically turned off if they
      *  stay on long enough without a new note being played. I believe it's until C-2 is reached for port down
-     *  and C-8 for port up. Port2Note also seems to have an "auto-off" point, but I haven't looked into it.
+     *  and C-8 for port up. Port2Note also seems to have an "auto-off" point.
      * See order 0x14 in the "i wanna eat my ice cream alone (reprise)" demo song for an example of "auto-off" behavior.
      * In that order, for the F-2 note on SQ2, the port down effect turns off automatically if the next note
      *   comes 21 or more rows later. The number of rows it takes depends on the note pitch, port effect parameter,
      * and the tempo denominator (Speed A/B and the base time).
-     * The lambda functions below return the number of rows until auto-off given this information.
-     * While they are based on the formulas apparently used by Deflemask, they are still not 100% accurate.
+     * The UpdatePeriod function below updates the note period on each row, taking portamentos into account.
+     * While it is based on the formulas apparently used by Deflemask, it is still not 100% accurate.
      */
-    auto RowsUntilPortUpAutoOff = [](unsigned ticksPerRowPair, const NoteSlot& note, int portUpParam)
+
+    const int ticks[2] = {m_ModuleInfo.timeBase * m_ModuleInfo.tickTime1, m_ModuleInfo.timeBase * m_ModuleInfo.tickTime2}; // even, odd
+
+    constexpr double lowest_period = GetPeriod({NotePitch::C, 2}); // C-2
+    constexpr double highest_period = GetPeriod({NotePitch::C, 8}); // C-8
+
+    // Given the current note period, 0/1 for even/odd row, the current portamento effect, and the target note (for port2note),
+    //  calculates and returns the next note period.
+    auto UpdatePeriod = [&, ticks, lowest_period, highest_period]
+        (double period, int even_odd_row, const PortamentoStateData& port, double target_period) -> double
     {
-        // Note: This is not always 100% accurate, probably due to differences in rounding/truncating at intermediate steps of the calculation, but it's very close.
-        // TODO: Need to take into account odd/even rows rather than using the average ticks per row
-        if (!NoteHasPitch(note)) return 0;
-        assert((int)GetNote(note).pitch >= 0);
-        constexpr double highestPeriod = GetPeriod({NotePitch::C, 8}); // C-8
-        // Not sure why the 0.75 is needed
-        return static_cast<int>(std::max(std::ceil(0.75 * (highestPeriod - GetPeriod(GetNote(note))) / ((ticksPerRowPair / 2.0) * portUpParam * -1.0)), 1.0));
+        switch (port.type)
+        {
+            case PortamentoStateData::kUp:
+                return std::max(period - (port.value * ticks[even_odd_row] * 4 / 3.0), highest_period);
+            case PortamentoStateData::kDown:
+                return std::min(period + (port.value * ticks[even_odd_row]), lowest_period);
+            case PortamentoStateData::kToNote:
+            {
+                assert(target_period >= highest_period && target_period <= lowest_period);
+                if (target_period < period)
+                {
+                    // Target is a higher pitch
+                    const int amount = port.value * ticks[even_odd_row] * 4 / 3.0;
+                    if (std::abs(target_period - period) < amount) // Close enough to target - snap to it
+                        return target_period;
+                    return period - amount;
+                }
+                else
+                {
+                    // Target is a lower pitch
+                    const int amount = port.value * ticks[even_odd_row];
+                    if (std::abs(target_period - period) < amount) // Close enough to target - snap to it
+                        return target_period;
+                    return period + amount;
+                }
+            }
+            default:
+                return period;
+        }
     };
 
-    auto RowsUntilPortDownAutoOff = [](unsigned ticksPerRowPair, const NoteSlot& note, int portDownParam)
-    {
-        // Note: This is not always 100% accurate, probably due to differences in rounding/truncating at intermediate steps of the calculation, but it's very close.
-        // TODO: Need to take into account odd/even rows rather than using the average ticks per row
-        if (!NoteHasPitch(note)) return 0;
-        assert((int)GetNote(note).pitch >= 0);
-        constexpr double lowestPeriod = GetPeriod({NotePitch::C, 2}); // C-2
-        return static_cast<int>(std::max(std::ceil((lowestPeriod - GetPeriod(GetNote(note))) / ((ticksPerRowPair / 2.0) * portDownParam)), 1.0));
-    };
+    // The current period of the note playing in each channel. Is affected by portamentos. 0 is off.
+    std::vector<double> periods(data.GetNumChannels(), 0.0);
 
-    const unsigned ticks_per_row_pair = m_ModuleInfo.timeBase * (m_ModuleInfo.tickTime1 + m_ModuleInfo.tickTime2);
+    // The target period for an active port2note effect
+    std::vector<double> target_periods(data.GetNumChannels(), lowest_period);
 
     // Notes can be "cancelled" by Port2Note effects under certain conditions
     std::vector<bool> note_cancelled(data.GetNumChannels(), false);
@@ -1041,37 +1063,29 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                         channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0});
                 }
 
-                if (rows_until_port_auto_off[channel] != -1)
+                // CHANNEL STATE - PORT2NOTE
+                if (periods[channel] == target_periods[channel])
                 {
-                    if (rows_until_port_auto_off[channel] == 0)
+                    // Portamento to note stops when it reaches its target period
+                    if (channel_state.Get<ChannelCommon::kPort>().type == PortamentoStateData::kToNote)
                     {
-                        // Automatically turn port effects off by using the previous port type and setting the value to 0
-                        PortamentoStateData temp_prev_port = channel_state.Get<ChannelCommon::kPort>();
-                        temp_prev_port.value = 0;
-                        channel_state.Set<ChannelCommon::kPort>(temp_prev_port);
-                        rows_until_port_auto_off[channel] = -1;
+                        channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0});
                     }
-                    else if (NoteHasPitch(row_data.note))
+                }
+
+                // CHANNEL STATE - PORTAMENTOS
+                if (periods[channel] >= lowest_period || periods[channel] <= highest_period)
+                {
+                    // If the period is at the highest or lowest value, automatically stop any portamento effects
+                    if (channel_state.Get<ChannelCommon::kPort>().type != PortamentoStateData::kNone)
                     {
-                        const auto& temp_port = channel_state.Get<ChannelCommon::kPort>();
-                        // Reset the time until port effects automatically turn off
-                        if (temp_port.type == PortamentoStateData::kUp)
-                            rows_until_port_auto_off[channel] = RowsUntilPortUpAutoOff(ticks_per_row_pair, row_data.note, temp_port.value);
-                        else if (temp_port.type == PortamentoStateData::kDown)
-                            rows_until_port_auto_off[channel] = RowsUntilPortDownAutoOff(ticks_per_row_pair, row_data.note, temp_port.value);
-                        else
-                        {
-                            throw std::runtime_error{"Invalid portamento type."};
-                        }
-                    }
-                    else
-                    {
-                        --rows_until_port_auto_off[channel];
+                        channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0});
                     }
                 }
 
                 // CHANNEL STATE - EFFECTS
                 // TODO: Could this be done during the import step for greater efficiency?
+                bool port2note_used = false;
                 if (channel != dmf::GameBoyChannel::NOISE) // Currently not using per-channel effects on noise channel
                 {
                     // -1 means the port effect wasn't used in this row, else it is the active (left-most) port's effect value.
@@ -1203,37 +1217,38 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
 
                     if (!just_cancelled_note) // No port effects are set if port2note just cancelled notes
                     {
+                        bool need_to_set_port = false;
+                        PortamentoStateData temp_port;
+
                         // Set port effects in order of priority:
                         if (port2note != -1)
                         {
-                            channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kToNote, static_cast<uint8_t>(port2note)});
-                            rows_until_port_auto_off[channel] = -1; // ???
-                            // TODO: Handle port2note auto-off
+                            need_to_set_port = true;
+                            temp_port = { PortamentoStateData::kToNote, static_cast<uint8_t>(port2note) };
+                            port2note_used = true;
                         }
                         else if (port_down != -1)
                         {
-                            channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kDown, static_cast<uint8_t>(port_down)});
-                            if (rows_until_port_auto_off[channel] == -1)
-                            {
-                                NoteSlot temp_note_slot = NoteHasPitch(row_data.note) ? row_data.note : channel_state.Get<ChannelCommon::kNoteSlot>();
-                                rows_until_port_auto_off[channel] = RowsUntilPortDownAutoOff(ticks_per_row_pair, temp_note_slot, port_down);
-                            }
+                            need_to_set_port = true;
+                            temp_port = { PortamentoStateData::kDown, static_cast<uint8_t>(port_down) };
                         }
                         else if (port_up != -1)
                         {
-                            channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kUp, static_cast<uint8_t>(port_up)});
-                            if (rows_until_port_auto_off[channel] == -1)
-                            {
-                                NoteSlot temp_note_slot = NoteHasPitch(row_data.note) ? row_data.note : channel_state.Get<ChannelCommon::kNoteSlot>();
-                                rows_until_port_auto_off[channel] = RowsUntilPortUpAutoOff(ticks_per_row_pair, temp_note_slot, port_up);
-                            }
+                            need_to_set_port = true;
+                            temp_port = { PortamentoStateData::kUp, static_cast<uint8_t>(port_up) };
                         }
                         else if (prev_port_cancelled)
                         {
-                            // Cancel the previous port by using the same port type and setting the value to 0
-                            PortamentoStateData prev_port = channel_state.Get<ChannelCommon::kPort>();
-                            prev_port.value = 0;
-                            channel_state.Set<ChannelCommon::kPort>(prev_port);
+                            need_to_set_port = true;
+                            temp_port = { PortamentoStateData::kNone, 0 };
+                        }
+
+                        if (need_to_set_port)
+                        {
+                            if (temp_port.value != 0)
+                                channel_state.Set<ChannelCommon::kPort>(temp_port);
+                            else
+                                channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0});
                         }
                     }
 
@@ -1270,20 +1285,23 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
 
                 // CHANNEL STATE - NOTES AND SOUND INDEXES
                 const NoteSlot& note_slot = row_data.note;
-                if (NoteIsEmpty(note_slot))
+                if (NoteIsOff(note_slot))
                 {
-                    channel_state.Set<ChannelCommon::kNoteSlot>(note_slot);
-                }
-                else if (NoteIsOff(note_slot))
-                {
-                    channel_state.Set<ChannelCommon::kNoteSlot>(note_slot);
+                    channel_state.SetSingle<ChannelCommon::kNoteSlot>(note_slot, NoteTypes::Empty{});
                     gen_data.Get<GenDataEnumCommon::kNoteOffUsed>() = true;
                     note_cancelled[channel] = false; // An OFF also "uncancels" notes cancelled by a port2note effect
+                    // NOTE: Note OFF does not affect the current note period
                 }
                 else if (NoteHasPitch(note_slot) && channel != dmf::GameBoyChannel::NOISE && !note_cancelled[channel])
                 {
                     channel_state.Set<ChannelCommon::kNoteSlot, true>(note_slot);
                     const Note& note = GetNote(note_slot);
+
+                    // Update the period
+                    if (!port2note_used)
+                        periods[channel] = GetPeriod(note);
+                    else
+                        target_periods[channel] = GetPeriod(note);
 
                     const auto& sound_index = channel_state.Get<ChannelCommon::kSoundIndex>();
 
@@ -1311,6 +1329,8 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                     }
                 }
 
+                // Update current period
+                periods[channel] = UpdatePeriod(periods[channel], row % 2, channel_state.Get<ChannelCommon::kPort>(), target_periods[channel]);
 
                 // CHANNEL STATE - VOLUME
                 if (row_data.volume != kDMFNoVolume)

@@ -110,7 +110,7 @@ void MOD::ConvertFromDMF(const DMF& dmf)
 
     ///////////////// GET DMF GENERATED DATA
 
-    dmf.GenerateData();
+    dmf.GenerateData(0x1); // MOD-compatibility flag
     auto dmf_gen_data = dmf.GetGeneratedData();
 
     ///////////////// SET UP DATA
@@ -417,7 +417,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
         // Loop through rows in a pattern:
         for (RowIndex dmf_row = 0; dmf_row < dmf_num_rows; ++dmf_row)
         {
-            global_reader.SetReadPos<true>(dmf_order, dmf_row);
+            global_reader.SetReadPos(dmf_order, dmf_row);
 
             // Global effects, highest priority first:
 
@@ -429,14 +429,14 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
             if (global_reader.GetOneShotDelta(GlobalState<DMF>::kPosJump))
                 global_effects.push_back({ EffectPriorityStructureRelated, { Effects::kPosJump, static_cast<EffectValue>(global_reader.GetOneShot<GlobalState<DMF>::kPosJump>() + m_UsingSetupPattern) } });
 
-            std::array<Row<MOD>, 4> mod_row_data;
-            std::array<PriorityEffect, 4> mod_effects;
+            std::array<Row<MOD>, 4> mod_row_data{};
+            std::array<PriorityEffect, 4> mod_effects{};
 
             // Loop through channels:
             for (ChannelIndex channel = 0; channel < mod_data.GetNumChannels(); ++channel)
             {
                 auto& channel_reader = channel_readers[channel];
-                channel_reader.SetReadPos<true>(dmf_order, dmf_row);
+                channel_reader.SetReadPos(dmf_order, dmf_row);
 
                 if (channel != dmf::GameBoyChannel::NOISE)
                 {
@@ -521,11 +521,11 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
 
         if (pos_jump_dest != 0) // If not jumping to the very start of the song
         {
-            channel_reader.SetReadPos(pos_jump_dest - 1, dmf_last_row); // Read at row just before destination
+            channel_reader.SetReadPos<false>(pos_jump_dest - 1, dmf_last_row); // Read at row just before destination
             note_playing_before_dest = NoteHasPitch(channel_reader.Get<ChannelState<DMF>::kNoteSlot>()); // TODO: Check volume too?
         }
 
-        channel_reader.SetReadPos(pos_jump_dest, 0); // Go to destination
+        channel_reader.SetReadPos<false>(pos_jump_dest, 0); // Go to destination
         switch (channel_reader.Get<ChannelState<DMF>::kNoteSlot>().index())
         {
             case NoteTypes::kEmpty:

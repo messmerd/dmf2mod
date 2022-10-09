@@ -83,21 +83,6 @@ struct GeneratedDataCommonDefinition : public detail::GenDataDefinitionTag
         SoundIndexesUsedGenData<ModuleClass>,
         StateGenData<ModuleClass>
         >;
-
-    // Not necessary, but could be used for potential performance improvements when calling Generate()
-    //  by only generating the data which is needed.
-    enum GenDataFlagsCommon : size_t
-    {
-        kFlagAll                    = 0, // 0 as a template parameter to Generate() means calculate all generated data
-        kFlagState                  = 1,
-        kFlagSoundIndexesUsed       = 2,
-        kFlagSoundIndexNoteExtremes = 4,
-        kFlagChannelNoteExtremes    = 8,
-        kFlagLoopbackPoints         = 16,
-        kFlagNoteOffUsed            = 32,
-        kFlagDuplicateOrders        = 64
-        // ...
-    };
 };
 
 ///////////////////////////////////////////////////////////

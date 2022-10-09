@@ -890,14 +890,21 @@ int DMF::GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const NoteSlot& n
     return static_cast<int>(std::max(std::ceil((lowestPeriod - GetPeriod(GetNote(note))) / ((ticksPerRowPair / 2.0) * portDownParam)), 1.0));
 }
 
-size_t DMF::GenerateDataImpl(size_t dataFlags) const
+/*
+ * Currently only supports the Game Boy system.
+ *
+ * Flags:
+ * 0:  Default generation (generates all data)
+ * 1:  MOD-compatible (no port2note auto-off, ...)
+ */
+size_t DMF::GenerateDataImpl(size_t data_flags) const
 {
     auto& gen_data = *GetGeneratedData();
     const auto& data = GetData();
 
     // Currently can only generate data for the Game Boy system
     if (GetSystem().type != System::Type::GameBoy)
-        return 0;
+        return 1;
 
     // Initialize state
     auto& state_data = gen_data.GetState().emplace();
@@ -990,8 +997,6 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
     int jump_destination_order = -1;
     int jump_destination_row = -1;
 
-    // TODO: Remove InitialState methods and just use 1st row of state?
-
     // Set initial state (global)
     global_state.Reset(); // Just in case
     global_state.Set<GlobalCommon::kSpeedA>(m_ModuleInfo.tickTime1); // * timebase?
@@ -1064,12 +1069,18 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                 }
 
                 // CHANNEL STATE - PORT2NOTE
-                if (periods[channel] == target_periods[channel])
+                if ((data_flags & 0x1) == 0) // If not MOD-compatible
                 {
-                    // Portamento to note stops when it reaches its target period
-                    if (channel_state.Get<ChannelCommon::kPort>().type == PortamentoStateData::kToNote)
+                    // This breaks bergentruckung.dmf --> MOD because while the port2note effects are being automatically stopped
+                    // at the correct time in Deflemask, in ProTracker the effects need to stay on for an extra row to reach
+                    // their target period. I think this is due to the sample splitting
+                    if (periods[channel] == target_periods[channel])
                     {
-                        channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0});
+                        // Portamento to note stops when it reaches its target period
+                        if (channel_state.Get<ChannelCommon::kPort>().type == PortamentoStateData::kToNote)
+                        {
+                            channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0});
+                        }
                     }
                 }
 
@@ -1104,7 +1115,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                     bool temp_note_cancelled = note_cancelled[channel];
 
                     // Other effects:
-                    int16_t vibrato = -1, port2note_volslide = -1, vibrato_volslide = -1, tremolo = -1, panning = -1, volslide = -1, retrigger = -1, note_cut = -1, note_delay = -1;
+                    int16_t arp = -1, vibrato = -1, port2note_volslide = -1, vibrato_volslide = -1, tremolo = -1, panning = -1, volslide = -1, retrigger = -1, note_cut = -1, note_delay = -1;
 
                     auto sound_index = channel_state.Get<ChannelCommon::kSoundIndex>();
 
@@ -1121,7 +1132,8 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                         switch (effect.code)
                         {
                         case Effects::kArp:
-                            channel_state.Set<ChannelCommon::kArp>(effect_value > 0 ? effect_value : 0); break;
+                            arp = effect_value_normal;
+                            break;
                         case Effects::kPortUp:
                             prev_port_cancelled = true;
                             temp_note_cancelled = false; // Will "uncancel" notes if a port2note in this row isn't cancelling them
@@ -1139,11 +1151,6 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                             {
                                 note_cancelled[channel] = effect_value > 0;
                                 just_cancelled_note = effect_value > 0;
-                            }
-                            else
-                            {
-                                // Will "uncancel" notes
-                                temp_note_cancelled = false;
                             }
                             port2note = effect_value_normal;
                             break;
@@ -1209,18 +1216,15 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                         }
                     }
 
-                    if (!just_cancelled_note && !temp_note_cancelled)
+                    if (!just_cancelled_note && !temp_note_cancelled) // No port effects are set if port2note just cancelled notes
                     {
                         // A port up/down/2note "uncancelled" the notes
                         note_cancelled[channel] = false;
-                    }
 
-                    if (!just_cancelled_note) // No port effects are set if port2note just cancelled notes
-                    {
                         bool need_to_set_port = false;
                         PortamentoStateData temp_port;
 
-                        // Set port effects in order of priority:
+                        // Set port effects in order of priority (highest to lowest):
                         if (port2note != -1)
                         {
                             need_to_set_port = true;
@@ -1245,6 +1249,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
 
                         if (need_to_set_port)
                         {
+                            // If setting a port to a value of zero, use kNone instead
                             if (temp_port.value != 0)
                                 channel_state.Set<ChannelCommon::kPort>(temp_port);
                             else
@@ -1254,11 +1259,13 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
 
                     if (just_cancelled_note)
                     {
-                        // TODO: Set warning here
-                        // Port2Note auto-off's are not handled, so notes may be cancelled for longer than they should be.
+                        // TODO: Set warning here?
+                        // Can notes be cancelled for longer than they should be?
                     }
 
                     // Set other effects' states (WIP)
+                    if (arp != -1)
+                        channel_state.Set<ChannelCommon::kArp>(arp);
                     if (vibrato != -1)
                         channel_state.Set<ChannelCommon::kVibrato>(vibrato);
                     if (port2note_volslide != -1)
@@ -1284,6 +1291,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                 }
 
                 // CHANNEL STATE - NOTES AND SOUND INDEXES
+                // NOTE: Empty notes are not added to state between notes with pitch
                 const NoteSlot& note_slot = row_data.note;
                 if (NoteIsOff(note_slot))
                 {

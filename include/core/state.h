@@ -256,12 +256,8 @@ public:
         return std::get<state_data_index + CommonDef::kCommonCount>(data_);
     }
 
-    constexpr const StateData& GetInitialState() const { return initial_state_; }
-    constexpr StateData& GetInitialState() { return initial_state_; }
-
 private:
     StateDataWrapped data_; // Stores all state data
-    StateData initial_state_; // Default values which are used when nothing is specified
 };
 
 template<class CommonDef, typename... Ts>
@@ -490,13 +486,6 @@ public:
         return true;
     }
 
-    // Gets the initial state
-    inline constexpr const StateData& GetInitialState() const
-    {
-        assert(state_);
-        return state_->GetInitialState();
-    }
-
     // Returns a tuple of all the state values at the current read position
     StateData Copy() const
     {
@@ -516,7 +505,7 @@ public:
      * If set_deltas == true, sets an array of bools specifying which state values have changed since last iteration.
      * These delta values can then be obtained by calling GetDeltas() or GetOneShotDeltas().
      */
-    template<bool set_deltas = false>
+    template<bool set_deltas = true>
     void SetReadPos(OrderRowPosition pos)
     {
         cur_pos_ = pos;
@@ -585,7 +574,7 @@ public:
      * If set_deltas == true, sets an array of bools specifying which state values have changed since last iteration.
      * These delta values can then be obtained by calling GetDeltas() or GetOneShotDeltas().
      */
-    template<bool set_deltas = false>
+    template<bool set_deltas = true>
     inline void SetReadPos(OrderIndex order, RowIndex row)
     {
         SetReadPos<set_deltas>(GetOrderRowPosition(order, row));
@@ -813,20 +802,6 @@ public:
     {
         get_oneshot_data_t<oneshot_data_index> val_copy = val;
         SetOneShot<oneshot_data_index>(std::move(val_copy));
-    }
-
-    // Sets the initial state
-    void SetInitialState(StateData&& vals)
-    {
-        assert(state_write_);
-        state_write_->GetInitialState() = std::move(vals);
-    }
-
-    // Sets the initial state
-    inline void SetInitialState(const StateData& vals)
-    {
-        StateData vals_copy = vals;
-        SetInitialState(std::move(vals_copy));
     }
 
     // Inserts state data at current position. Use with Copy() in order to "resume" a state.

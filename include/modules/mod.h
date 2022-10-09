@@ -34,10 +34,6 @@ struct ModuleGlobalData<MOD> : public ModuleGlobalDataDefault<DataStorageType::O
 template<>
 struct Row<MOD>
 {
-    //uint8_t SampleNumber;
-    //uint16_t SamplePeriod;
-    //unsigned EffectCode;
-    //unsigned EffectValue;
     SoundIndexType<MOD> sample;
     NoteSlot note;
     Effect effect;

@@ -416,8 +416,8 @@ public:
     using OneShotDeltas = std::array<bool, oneshot_enum_total_count_>;
 
 public:
-    StateReader() : state_(nullptr), deltas_{}, oneshot_deltas_{}, cur_pos_(0), cur_indexes_{}, cur_indexes_oneshot_{} {}
-    StateReader(TState* state) : state_(state), deltas_{}, oneshot_deltas_{}, cur_pos_(0), cur_indexes_{}, cur_indexes_oneshot_{} {}
+    StateReader() : state_(nullptr) { Reset(); }
+    StateReader(TState* state) : state_(state) { Reset(); }
     void AssignState(TState const* state) { state_ = state; channel_ = 0; }
     void AssignState(TState const* state, ChannelIndex channel) { state_ = state; channel_ = channel; }
 
@@ -426,7 +426,7 @@ public:
     {
         cur_pos_ = 0;
         cur_indexes_.fill(-1); // ???
-        cur_indexes_oneshot_.fill(-1); // ???
+        cur_indexes_oneshot_.fill(0);
         deltas_.fill(false);
         oneshot_deltas_.fill(false);
     }
@@ -451,7 +451,7 @@ public:
     template<int state_data_index>
     inline constexpr const get_data_t<state_data_index>& Get() const
     {
-        const int vec_index = cur_indexes_[state_data_index + enum_common_count_];
+        const int vec_index = cur_indexes_[GetIndex(state_data_index)];
         assert(vec_index >= 0 && "The initial state must be set before reading");
         return GetVec<state_data_index>().at(vec_index).second;
     }
@@ -461,6 +461,15 @@ public:
     inline constexpr const get_data_t<state_data_index>& Get(size_t vec_index) const
     {
         return GetVec<state_data_index>().at(vec_index).second;
+    }
+
+    // Get the specified one-shot data (oneshot_data_index) at the current read position. Only valid if GetOneShotDelta() returned true.
+    template<int oneshot_data_index>
+    inline constexpr const get_oneshot_data_t<oneshot_data_index>& GetOneShot() const
+    {
+        const int vec_index = cur_indexes_oneshot_[GetOneShotIndex(oneshot_data_index)];
+        assert(vec_index > 0 && "Only call GetOneShot() if GetOneShotDelta() returned true");
+        return GetOneShotVec<oneshot_data_index>().at(vec_index-1).second;
     }
 
     // Gets the specified one-shot data (oneshot_data_index) if it is exactly at the current read position.
@@ -473,7 +482,7 @@ public:
             return false;
 
         const int vec_index = cur_indexes_oneshot_[GetOneShotIndex(oneshot_data_index)];
-        const auto& elem = vec.at(vec_index);
+        const auto& elem = vec.at(vec_index-1);
         if (elem.first != cur_pos_)
             return false;
 
@@ -514,15 +523,16 @@ public:
         if constexpr (set_deltas)
         {
             deltas_.fill(false);
+            oneshot_deltas_.fill(false);
         }
 
         detail::NextState<enum_lower_bound_, enum_upper_bound_, false>(this, [&, this](const auto& vec, int state_data_index) constexpr
         {
-            int& index = cur_indexes_[GetIndex(state_data_index)]; // Current index within state data
             const int vec_size = vec.size();
-
             if (vec_size == 0)
                 return; // No state data for data type state_data_index
+
+            int& index = cur_indexes_[GetIndex(state_data_index)]; // Current index within state data
 
             // While there's a next state that we need to advance to
             while (index + 1 != vec_size && cur_pos_ >= vec.at(index+1).first)
@@ -540,23 +550,30 @@ public:
 
         detail::NextState<oneshot_enum_lower_bound_, oneshot_enum_upper_bound_, true>(this, [&, this](const auto& vec, int oneshot_data_index) constexpr
         {
-            int& index = cur_indexes_oneshot_[GetOneShotIndex(oneshot_data_index)]; // Current index within one-shot data
             const int vec_size = vec.size();
-
             if (vec_size == 0)
                 return; // No one-shot data for data type oneshot_data_index
 
-            // While there's a next state that we need to advance to
-            while (index + 1 != vec_size && cur_pos_ >= vec.at(index+1).first)
-            {
-                // Need to advance
-                ++index;
+            int& index = cur_indexes_oneshot_[GetOneShotIndex(oneshot_data_index)]; // Current index within one-shot data
+            if (index == vec_size)
+                return;
 
+            // While we need to advance the state
+            while (cur_pos_ >= vec.at(index).first)
+            {
                 if constexpr (set_deltas)
                 {
-                    // NOTE: If Set() is called with ignore_duplicates == true, delta could be true even if nothing changed.
-                    oneshot_deltas_[GetOneShotIndex(oneshot_data_index)] = true;
+                    // If we've reached the position of the current one-shot data
+                    if (cur_pos_ == vec.at(index).first)
+                        oneshot_deltas_[GetOneShotIndex(oneshot_data_index)] = true;
                 }
+
+                // Advance to next index
+                ++index;
+
+                // Break if there is no more one-shot data left to read
+                if (index == vec_size)
+                    break;
             }
         });
     }

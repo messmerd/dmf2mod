@@ -1274,7 +1274,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                 {
                     channel_state.Set<ChannelCommon::kNoteSlot>(note_slot);
                 }
-                if (NoteIsOff(note_slot))
+                else if (NoteIsOff(note_slot))
                 {
                     channel_state.Set<ChannelCommon::kNoteSlot>(note_slot);
                     gen_data.Get<GenDataEnumCommon::kNoteOffUsed>() = true;
@@ -1282,7 +1282,6 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                 }
                 else if (NoteHasPitch(note_slot) && channel != dmf::GameBoyChannel::NOISE && !note_cancelled[channel])
                 {
-                    // NoteTypes::Empty should never appear in state data (but can in initial state)
                     channel_state.Set<ChannelCommon::kNoteSlot, true>(note_slot);
                     const Note& note = GetNote(note_slot);
 
@@ -1355,7 +1354,8 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                     // Want to check all channels to update the global state for this row
                     for (ChannelIndex channel2 = 0; channel2 < data.GetNumChannels(); ++channel2)
                     {
-                        for (const auto& effect : row_data.effect)
+                        const auto& row_data2 = data.GetRow(channel2, order, row);
+                        for (const auto& effect : row_data2.effect)
                         {
                             switch (effect.code)
                             {
@@ -1368,6 +1368,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                                         break;
                                     }
                                     pos_jump = effect.value;
+                                    ignore_pos_jump = true;
                                     break;
                                 case Effects::kPatBreak:
                                     if (ignore_pat_break)
@@ -1378,6 +1379,7 @@ size_t DMF::GenerateDataImpl(size_t dataFlags) const
                                         break;
                                     }
                                     pat_break = effect.value;
+                                    ignore_pat_break = true;
                                     break;
                                 case Effects::kSpeedA:
                                     // TODO

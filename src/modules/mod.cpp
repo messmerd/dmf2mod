@@ -422,12 +422,12 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
             // Global effects, highest priority first:
 
             if (global_reader.GetOneShotDelta(GlobalState<DMF>::kPatBreak))
-                global_effects.push_back({ EffectPriorityStructureRelated, { Effects::kPatBreak, global_reader.Get<GlobalState<DMF>::kPatBreak>() } });
+                global_effects.push_back({ EffectPriorityStructureRelated, { Effects::kPatBreak, global_reader.GetOneShot<GlobalState<DMF>::kPatBreak>() } });
             else if (dmf_num_rows < 64 && dmf_row + 1 == dmf_num_rows)
                 global_effects.push_back({ EffectPriorityStructureRelated, { Effects::kPatBreak, 0 } });  // Use PatBreak to allow patterns under 64 rows
 
             if (global_reader.GetOneShotDelta(GlobalState<DMF>::kPosJump))
-                global_effects.push_back({ EffectPriorityStructureRelated, { Effects::kPosJump, static_cast<EffectValue>(global_reader.Get<GlobalState<DMF>::kPosJump>() + m_UsingSetupPattern) } });
+                global_effects.push_back({ EffectPriorityStructureRelated, { Effects::kPosJump, static_cast<EffectValue>(global_reader.GetOneShot<GlobalState<DMF>::kPosJump>() + m_UsingSetupPattern) } });
 
             std::array<Row<MOD>, 4> mod_row_data;
             std::array<PriorityEffect, 4> mod_effects;
@@ -465,12 +465,47 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
         }
     }
 
-    // Add Note OFF to the loopback point for any channels where the sound would carry over
+    // If needed, add PosJump to end of song to prevent jumping back to the setup pattern in ProTracker
 
     global_reader.Reset();
-    global_reader.SetReadPos(dmf.GetData().GetNumOrders() - 1, dmf.GetData().GetNumRows() - 1);
+
+    const OrderIndex dmf_last_order = dmf.GetData().GetNumOrders() - 1;
+    const RowIndex dmf_last_row = dmf.GetData().GetNumRows() - 1;
+    const OrderIndex mod_last_order = dmf_last_order + (m_UsingSetupPattern ? 1 : 0);
+    const RowIndex mod_last_row = dmf_last_row;
+
+    global_reader.SetReadPos(dmf_last_order, dmf_last_row);
+
     PosJumpStateData pos_jump_dest = 0;
-    global_reader.GetOnCurrentRow<GlobalState<DMF>::kPosJump>(&pos_jump_dest); // Gets PosJump value, else it remains 0
+    if (global_reader.GetOneShotDelta(GlobalState<DMF>::kPosJump))
+    {
+        pos_jump_dest = global_reader.GetOneShot<GlobalState<DMF>::kPosJump>(); // Is this returning the right value? Possible intellisense bug?
+    }
+    else if (m_UsingSetupPattern)
+    {
+        // No PosJump exists at the end of the song, so it would loop back to the setup pattern in ProTracker if nothing is done
+        bool success = false;
+        for (ChannelIndex channel = 0; channel < mod_data.GetNumChannels(); ++channel)
+        {
+            const auto& row_data = mod_data.GetRow(channel, mod_last_order, mod_last_row);
+            if (row_data.effect.code == Effects::kNoEffect)
+            {
+                // Add PosJump to end of song
+                auto row_data_copy = row_data;
+                row_data_copy.effect = { Effects::kPosJump, EffectValue(m_UsingSetupPattern ? 1 : 0) };
+                mod_data.SetRow(channel, mod_last_order, mod_last_row, row_data_copy);
+                success = true;
+                break;
+            }
+        }
+
+        if (!success)
+        {
+            // TODO: Add warning message here. Failed to add PosJump to end of song to prevent jumping back to the setup pattern
+        }
+    }
+
+    // Add Note OFF to the loopback point for any channels where the sound would carry over
 
     for (ChannelIndex channel = 0; channel < mod_data.GetNumChannels(); ++channel)
     {
@@ -486,7 +521,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
 
         if (pos_jump_dest != 0) // If not jumping to the very start of the song
         {
-            channel_reader.SetReadPos(pos_jump_dest - 1, dmf.GetData().GetNumRows() - 1); // Read at row just before destination
+            channel_reader.SetReadPos(pos_jump_dest - 1, dmf_last_row); // Read at row just before destination
             note_playing_before_dest = NoteHasPitch(channel_reader.Get<ChannelState<DMF>::kNoteSlot>()); // TODO: Check volume too?
         }
 

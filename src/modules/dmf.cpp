@@ -840,7 +840,7 @@ void DMF::GetBPM(unsigned& numerator, unsigned& denominator) const
 
     // Experimentally determined equation for BPM:
     numerator = 15 * globalTick;
-    denominator = GetTicksPerRowPair();
+    denominator = m_ModuleInfo.timeBase * (m_ModuleInfo.tickTime1 + m_ModuleInfo.tickTime2);
 
     if (denominator == 0)
         throw std::runtime_error("Tried to divide by zero when calculating BPM.\n");
@@ -852,42 +852,6 @@ double DMF::GetBPM() const
     unsigned numerator, denominator;
     GetBPM(numerator, denominator);
     return numerator * 1.0 / denominator;
-}
-
-int DMF::GetRowsUntilPortUpAutoOff(const NoteSlot& note, int portUpParam) const
-{
-    const unsigned ticksPerRowPair = GetTicksPerRowPair();
-    return GetRowsUntilPortUpAutoOff(ticksPerRowPair, note, portUpParam);
-}
-
-int DMF::GetRowsUntilPortUpAutoOff(unsigned ticksPerRowPair, const NoteSlot& note, int portUpParam)
-{
-    // Note: This is not always 100% accurate, probably due to differences in rounding/truncating at intermediate steps of the calculation, but it's very close.
-    // TODO: Need to take into account odd/even rows rather than using the average ticks per row
-    if (!NoteHasPitch(note))
-        return 0;
-
-    constexpr double highestPeriod = GetPeriod({NotePitch::C, 8}); // C-8
-
-    // Not sure why the 0.75 is needed
-    return static_cast<int>(std::max(std::ceil(0.75 * (highestPeriod - GetPeriod(GetNote(note))) / ((ticksPerRowPair / 2.0) * portUpParam * -1.0)), 1.0));
-}
-
-int DMF::GetRowsUntilPortDownAutoOff(const NoteSlot& note, int portDownParam) const
-{
-    const unsigned ticksPerRowPair = GetTicksPerRowPair();
-    return GetRowsUntilPortDownAutoOff(ticksPerRowPair, note, portDownParam);
-}
-
-int DMF::GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const NoteSlot& note, int portDownParam)
-{
-    // Note: This is not always 100% accurate, probably due to differences in rounding/truncating at intermediate steps of the calculation, but it's very close.
-    // TODO: Need to take into account odd/even rows rather than using the average ticks per row
-    if (!NoteHasPitch(note))
-        return 0;
-
-    constexpr double lowestPeriod = GetPeriod({NotePitch::C, 2}); // C-2
-    return static_cast<int>(std::max(std::ceil((lowestPeriod - GetPeriod(GetNote(note))) / ((ticksPerRowPair / 2.0) * portDownParam)), 1.0));
 }
 
 /*
@@ -999,6 +963,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
 
     // Set initial state (global)
     global_state.Reset(); // Just in case
+    global_state.SetWritePos(-1); // Initial state
     global_state.Set<GlobalCommon::kSpeedA>(m_ModuleInfo.tickTime1); // * timebase?
     global_state.Set<GlobalCommon::kSpeedB>(m_ModuleInfo.tickTime2); // * timebase?
     global_state.Set<GlobalCommon::kTempo>(0); // TODO: How should tempo/speed info be stored?
@@ -1008,6 +973,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
     {
         auto& channel_state = channel_states[i];
         channel_state.Reset(); // Just in case
+        channel_state.SetWritePos(-1); // Initial state
 
         SoundIndex<DMF>::type si;
         switch (i)

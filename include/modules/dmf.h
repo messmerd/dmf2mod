@@ -335,21 +335,6 @@ public:
     void GetBPM(unsigned& numerator, unsigned& denominator) const;
     double GetBPM() const;
 
-    /*
-     * In spite of what the Deflemask manual says, portamento effects are automatically turned off if they
-     * stay on long enough without a new note being played. These methods help handle those edge cases.
-     * TODO: Remove these methods once Generated Data stuff is finished
-     */
-    int GetRowsUntilPortUpAutoOff(const NoteSlot& note, int portUpParam) const;
-    static int GetRowsUntilPortUpAutoOff(unsigned ticksPerRowPair, const NoteSlot& note, int portUpParam);
-    int GetRowsUntilPortDownAutoOff(const NoteSlot& note, int portDownParam) const;
-    static int GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const NoteSlot& note, int portDownParam);
-
-    inline unsigned GetTicksPerRowPair() const
-    {
-        return m_ModuleInfo.timeBase * (m_ModuleInfo.tickTime1 + m_ModuleInfo.tickTime2);
-    }
-
     const dmf::System& GetSystem() const { return m_System; }
 
     uint8_t GetTotalWavetables() const { return m_TotalWavetables; }
@@ -361,7 +346,7 @@ private:
     void ImportImpl(const std::string& filename) override;
     void ExportImpl(const std::string& filename) override;
     void ConvertImpl(const ModulePtr& input) override;
-    size_t GenerateDataImpl(size_t dataFlags) const override;
+    size_t GenerateDataImpl(size_t data_flags) const override;
 
     using Reader = StreamReader<zstr::ifstream, Endianness::Little>;
 

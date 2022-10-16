@@ -25,7 +25,7 @@
 namespace d2m {
 
 // Unique, quickly calculated value encoding order # (not pattern #!) and pattern row #. Easily and quickly comparable.
-using OrderRowPosition = uint32_t;
+using OrderRowPosition = int32_t;
 
 using GlobalOrderRowPosition = OrderRowPosition;
 using ChannelOrderRowPosition = OrderRowPosition;

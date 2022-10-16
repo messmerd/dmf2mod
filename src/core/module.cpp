@@ -20,15 +20,7 @@ ModulePtr ModuleBase::CreateAndImport(const std::string& filename)
     if (!m)
         return nullptr;
 
-    try
-    {
-        m->Import(filename);
-    }
-    catch (ModuleException& e)
-    {
-        m->m_Status.AddError(std::move(e));
-    }
-
+    m->Import(filename);
     return m;
 }
 

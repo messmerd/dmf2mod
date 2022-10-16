@@ -407,7 +407,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
     auto& channel_readers = state_readers->channel_readers;
 
     // Extra state info needed:
-    std::array<bool, 4> note_playing;
+    std::array<bool, 4> note_playing{ false };
     std::array<DMFSampleMapper::NoteRange, 4> note_range{ DMFSampleMapper::NoteRange::kFirst }; // ???
     std::vector<PriorityEffect> global_effects;
 
@@ -441,7 +441,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
                 if (channel != dmf::GameBoyChannel::NOISE)
                 {
                     mod_effects[channel] = DMFConvertEffects(channel_reader);
-                    mod_row_data[channel] = DMFConvertNote(channel_reader, note_range[channel], note_playing[channel], sample_map, mod_effects[channel]);
+                    mod_row_data[channel] = DMFConvertNote(channel_reader, note_range[channel], note_playing[channel], false, sample_map, mod_effects[channel]);
                 }
             }
 
@@ -603,7 +603,7 @@ mod::PriorityEffect MOD::DMFConvertEffects(ChannelStateReader<DMF>& state)
     return { EffectPriorityUnsupportedEffect, { Effects::kNoEffect, 0 } };
 }
 
-Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMapper::NoteRange& note_range, bool& note_playing, const MOD::SampleMap& sample_map, mod::PriorityEffect& mod_effect)
+Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMapper::NoteRange& note_range, bool& note_playing, bool on_jump_destination, const MOD::SampleMap& sample_map, mod::PriorityEffect& mod_effect)
 {
     // Do not call this when on the noise channel
 
@@ -652,7 +652,7 @@ Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMappe
                 note_range = new_note_range;
             }
 
-            if (mod_sample_changed || !note_playing)
+            if (mod_sample_changed || !note_playing || on_jump_destination)
             {
                 row_data.sample = sample_mapper.GetMODSampleId(new_note_range);
                 mod_sample_changed = false; // Just changed the sample, so resetting this for next time
@@ -1301,17 +1301,17 @@ void MOD::ExportSampleInfo(std::ofstream& fout) const
 
 void MOD::ExportModuleInfo(std::ofstream& fout) const
 {
-    const uint8_t numOrders = static_cast<uint8_t>(GetData().GetNumOrders());
+    const uint8_t num_orders = static_cast<uint8_t>(GetData().GetNumOrders());
 
-    fout.put(numOrders); // Song length in patterns (not total number of patterns)
+    fout.put(num_orders); // Song length in patterns (not total number of patterns)
     fout.put(127);       // 0x7F - Useless byte that has to be here
 
     // Pattern matrix (Each ProTracker pattern number is the same as its pattern matrix row number)
-    for (PatternIndex patternId : GetData().PatternMatrixRef())
+    for (PatternIndex pattern_id : GetData().PatternMatrixRef())
     {
-        fout.put(static_cast<uint8_t>(patternId));
+        fout.put(static_cast<uint8_t>(pattern_id));
     }
-    for (uint8_t i = numOrders; i < 128; ++i)
+    for (uint8_t i = num_orders; i < 128; ++i)
     {
         fout.put(0);
     }
@@ -1321,12 +1321,12 @@ void MOD::ExportModuleInfo(std::ofstream& fout) const
 
 void MOD::ExportPatterns(std::ofstream& fout) const
 {
-    const auto& modData = GetData();
-    for (const auto& pattern : modData.PatternsRef())
+    const auto& mod_data = GetData();
+    for (const auto& pattern : mod_data.PatternsRef())
     {
-        for (RowIndex row = 0; row < modData.GetNumRows(); ++row)
+        for (RowIndex row = 0; row < mod_data.GetNumRows(); ++row)
         {
-            for (ChannelIndex channel = 0; channel < modData.GetNumChannels(); ++channel)
+            for (ChannelIndex channel = 0; channel < mod_data.GetNumChannels(); ++channel)
             {
                 const Row<MOD>& row_data = pattern[row][channel];
                 uint16_t period = 0;
@@ -1360,10 +1360,10 @@ void MOD::ExportPatterns(std::ofstream& fout) const
 
 void MOD::ExportSampleData(std::ofstream& fout) const
 {
-    for (const auto& sampleInfo : m_Samples)
+    for (const auto& sample_info : m_Samples)
     {
-        const auto& sampleData = sampleInfo.second.data;
-        for (int8_t value : sampleData)
+        const auto& sample_data = sample_info.second.data;
+        for (int8_t value : sample_data)
         {
             fout.put(value);
         }
@@ -1403,7 +1403,7 @@ static std::string GetWarningMessage(MOD::ConvertWarning warning, const std::str
     }
 }
 
-std::string MODException::CreateErrorMessage(Category category, int errorCode, const std::string& arg)
+std::string MODException::CreateErrorMessage(Category category, int error_code, const std::string& arg)
 {
     switch (category)
     {
@@ -1414,7 +1414,7 @@ std::string MODException::CreateErrorMessage(Category category, int errorCode, c
         case Category::Export:
             return "No error.";
         case Category::Convert:
-            switch (errorCode)
+            switch (error_code)
             {
                 case (int)MOD::ConvertError::Success:
                     return "No error.";

@@ -214,24 +214,17 @@ using PriorityEffect = std::pair<mod::EffectPriority, d2m::Effect>;
 class MODException : public ModuleException
 {
 public:
-    template <class T, class = std::enable_if_t<std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>>>
-    MODException(Category category, T errorCode, const std::string& args = "")
-        : ModuleException(category, static_cast<int>(errorCode), CreateErrorMessage(category, (int)errorCode, args)) {}
+    template<class T>
+    MODException(Category category, T error_code, const std::string& args = "")
+        : ModuleException(category, static_cast<int>(error_code), CreateErrorMessage(category, static_cast<int>(error_code), args)) {}
 
 private:
     // Creates module-specific error message from an error code and string argument
-    std::string CreateErrorMessage(Category category, int errorCode, const std::string& arg);
+    std::string CreateErrorMessage(Category category, int error_code, const std::string& arg);
 };
 
 class MODConversionOptions : public ConversionOptionsInterface<MODConversionOptions>
 {
-private:
-
-    // Only allow the Factory to construct this class
-    friend class Builder<MODConversionOptions, ConversionOptionsBase>;
-
-    MODConversionOptions() = default;
-
 public:
 
     // Factory requires destructor to be public
@@ -263,18 +256,14 @@ public:
 
 private:
 
+    // Only allow the Factory to construct this class
+    friend class Builder<MODConversionOptions, ConversionOptionsBase>;
+
+    MODConversionOptions() = default;
 };
 
 class MOD : public ModuleInterface<MOD>
 {
-private:
-
-    // Only allow the Factory to construct this class
-    friend class Builder<MOD, ModuleBase>;
-
-    MOD();
-    void CleanUp() {};
-
 public:
 
     // Factory requires destructor to be public
@@ -312,22 +301,28 @@ public:
     static constexpr unsigned kVolumeMax = 64u; // Yes, there are 65 different values for the volume
 
 private:
+
+    // Only allow the Factory to construct this class
+    friend class Builder<MOD, ModuleBase>;
+
+    MOD();
+    void CleanUp() {};
+
     using SampleMap = std::map<SoundIndexType<DMF>, mod::DMFSampleMapper>;
 
     // Module requirements:
     void ImportImpl(const std::string& filename) override;
     void ExportImpl(const std::string& filename) override;
     void ConvertImpl(const ModulePtr& input) override;
-    size_t GenerateDataImpl(size_t dataFlags) const override { return 0; }
+    size_t GenerateDataImpl(size_t data_flags) const override { return 1; }
 
     // Conversion from DMF:
     void ConvertFromDMF(const DMF& dmf);
     void DMFConvertSamples(const DMF& dmf, SampleMap& sample_map);
     void DMFConvertSampleData(const DMF& dmf, const SampleMap& sample_map);
-
     void DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map);
     mod::PriorityEffect DMFConvertEffects(ChannelStateReader<DMF>& state);
-    Row<MOD> DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMapper::NoteRange& note_range, bool& note_playing, const SampleMap& sample_map, mod::PriorityEffect& mod_effect);
+    Row<MOD> DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMapper::NoteRange& note_range, bool& note_playing, bool on_jump_destination, const SampleMap& sample_map, mod::PriorityEffect& mod_effect);
     void ApplyEffects(std::array<Row<MOD>, 4>& row_data, const std::array<mod::PriorityEffect, 4>& mod_effect, std::vector<mod::PriorityEffect>& global_effects);
 
     void DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed);
@@ -339,7 +334,6 @@ private:
     void ExportPatterns(std::ofstream& fout) const;
     void ExportSampleData(std::ofstream& fout) const;
 
-private:
     //////////// Temporaries used during DMF-->MOD conversion
     const bool m_UsingSetupPattern = true; // Whether to use a pattern at the start of the module to set up the initial tempo and other stuff.
 

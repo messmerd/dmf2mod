@@ -120,7 +120,7 @@ protected:
     template<typename> friend class ModuleGeneratedData;
 
     // dataFlags specifies what data was requested to be generated
-    virtual size_t GenerateDataImpl(size_t dataFlags) const = 0;
+    virtual size_t GenerateDataImpl(size_t data_flags) const = 0;
 
     ConversionOptionsPtr GetOptions() const { return m_Options; }
 

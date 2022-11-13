@@ -91,11 +91,6 @@ void MOD::ConvertFromDMF(const DMF& dmf)
 
     const auto& dmf_data = dmf.GetData();
     auto& mod_data = GetData();
-    const OrderIndex num_orders = dmf_data.GetNumOrders() + (OrderIndex)m_UsingSetupPattern;
-    if (num_orders > 64) // num_orders is 1 more than it actually is
-    {
-        throw MODException(ModuleException::Category::Convert, MOD::ConvertError::TooManyPatternMatrixRows);
-    }
 
     if (dmf_data.GetNumRows() > 64)
     {
@@ -112,6 +107,12 @@ void MOD::ConvertFromDMF(const DMF& dmf)
 
     dmf.GenerateData(0x1); // MOD-compatibility flag
     auto dmf_gen_data = dmf.GetGeneratedData();
+
+    const OrderIndex num_orders = dmf_gen_data->GetNumOrders().value() + (OrderIndex)m_UsingSetupPattern;
+    if (num_orders > 64) // num_orders is 1 more than it actually is
+    {
+        throw MODException(ModuleException::Category::Convert, MOD::ConvertError::TooManyPatternMatrixRows);
+    }
 
     ///////////////// SET UP DATA
 
@@ -399,7 +400,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
         // All other channel rows in the pattern are already zeroed out so nothing needs to be done for them
     }
 
-    const OrderIndex dmf_num_orders = dmf.GetData().GetNumOrders();
+    const OrderIndex dmf_num_orders = dmf.GetGeneratedData()->GetNumOrders().value();
     const RowIndex dmf_num_rows = dmf.GetData().GetNumRows();
 
     auto state_readers = dmf.GetGeneratedData()->GetState().value().GetReaders();
@@ -465,47 +466,15 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
         }
     }
 
-    // If needed, add PosJump to end of song to prevent jumping back to the setup pattern in ProTracker
+    // Add Note OFF to the loopback point for any channels where the sound would carry over
 
     global_reader.Reset();
+    const auto& loopback_vec = global_reader.GetOneShotVec<GlobalState<DMF>::kLoopback>();
+    assert(loopback_vec.size() == 1);
 
-    const OrderIndex dmf_last_order = dmf.GetData().GetNumOrders() - 1;
-    const RowIndex dmf_last_row = dmf.GetData().GetNumRows() - 1;
-    const OrderIndex mod_last_order = dmf_last_order + (m_UsingSetupPattern ? 1 : 0);
-    const RowIndex mod_last_row = dmf_last_row;
-
-    global_reader.SetReadPos(dmf_last_order, dmf_last_row);
-
-    PosJumpStateData pos_jump_dest = 0;
-    if (global_reader.GetOneShotDelta(GlobalState<DMF>::kPosJump))
-    {
-        pos_jump_dest = global_reader.GetOneShot<GlobalState<DMF>::kPosJump>(); // Is this returning the right value? Possible intellisense bug?
-    }
-    else if (m_UsingSetupPattern)
-    {
-        // No PosJump exists at the end of the song, so it would loop back to the setup pattern in ProTracker if nothing is done
-        bool success = false;
-        for (ChannelIndex channel = 0; channel < mod_data.GetNumChannels(); ++channel)
-        {
-            const auto& row_data = mod_data.GetRow(channel, mod_last_order, mod_last_row);
-            if (row_data.effect.code == Effects::kNoEffect)
-            {
-                // Add PosJump to end of song
-                auto row_data_copy = row_data;
-                row_data_copy.effect = { Effects::kPosJump, EffectValue(m_UsingSetupPattern ? 1 : 0) };
-                mod_data.SetRow(channel, mod_last_order, mod_last_row, row_data_copy);
-                success = true;
-                break;
-            }
-        }
-
-        if (!success)
-        {
-            // TODO: Add warning message here. Failed to add PosJump to end of song to prevent jumping back to the setup pattern
-        }
-    }
-
-    // Add Note OFF to the loopback point for any channels where the sound would carry over
+    // The only loopback should be the one at the end of the song
+    const auto [dmf_last_order, dmf_last_row] = GetOrderRowPosition(loopback_vec.at(0).second);
+    const auto [pos_jump_dest, _] = GetOrderRowPosition(loopback_vec.at(0).first);
 
     for (ChannelIndex channel = 0; channel < mod_data.GetNumChannels(); ++channel)
     {

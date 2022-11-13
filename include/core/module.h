@@ -32,7 +32,7 @@ public:
 
     inline const ModuleData<Derived>& GetData() const { return m_data; }
     inline const ModuleGlobalData<Derived>& GetGlobalData() const { return GetData().GlobalData(); }
-    inline const std::shared_ptr<GeneratedData<Derived>>& GetGeneratedData() const { return m_generated_data; }
+    inline std::shared_ptr<const GeneratedData<Derived>> GetGeneratedData() const { return m_generated_data; }
 
     const std::string& GetTitle() const override { return GetGlobalData().title; }
     const std::string& GetAuthor() const override { return GetGlobalData().author; }
@@ -43,7 +43,7 @@ protected:
 
     inline ModuleData<Derived>& GetData() { return m_data; }
     inline ModuleGlobalData<Derived>& GetGlobalData() { return GetData().GlobalData(); }
-    inline std::shared_ptr<GeneratedData<Derived>>& GetGeneratedData() { return m_generated_data; }
+    inline std::shared_ptr<GeneratedData<Derived>> GetGeneratedDataMut() const { return m_generated_data; }
 
 private:
 
@@ -52,7 +52,7 @@ private:
 
     // Information about a module file which must be calculated.
     // Cannot be stored directly because other Modules need to modify its contents without modifying the Module
-    std::shared_ptr<GeneratedData<Derived>> m_generated_data;
+    const std::shared_ptr<GeneratedData<Derived>> m_generated_data;
 };
 
 } // namespace d2m

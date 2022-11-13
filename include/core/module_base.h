@@ -62,12 +62,6 @@ public:
     }
 
     /*
-     * Create and import a new module given a filename. Module type is inferred from the file extension.
-     * Returns pointer to the module or nullptr if a module registration error occurred.
-     */
-    static ModulePtr CreateAndImport(const std::string& filename);
-
-    /*
      * Import the specified module file
      * Returns true upon failure
      */

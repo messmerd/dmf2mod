@@ -135,6 +135,7 @@ void DMF::CleanUp()
     }
 
     GetData().CleanUp();
+    GetGeneratedDataMut()->ClearAll();
 }
 
 void DMF::ImportImpl(const std::string& filename)
@@ -863,12 +864,15 @@ double DMF::GetBPM() const
  */
 size_t DMF::GenerateDataImpl(size_t data_flags) const
 {
-    auto& gen_data = *GetGeneratedData();
+    auto& gen_data = *GetGeneratedDataMut();
     const auto& data = GetData();
 
     // Currently can only generate data for the Game Boy system
     if (GetSystem().type != System::Type::GameBoy)
         return 1;
+
+    // Clear all generated data
+    gen_data.ClearAll();
 
     // Initialize state
     auto& state_data = gen_data.GetState().emplace();
@@ -884,8 +888,8 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
     auto& sound_indexes_used = gen_data.Get<GenDataEnumCommon::kSoundIndexesUsed>().emplace();
     auto& sound_index_note_extremes = gen_data.Get<GenDataEnumCommon::kSoundIndexNoteExtremes>().emplace();
     //auto& channel_note_extremes = gen_data.Get<GenDataEnumCommon::kChannelNoteExtremes>().emplace();
-    auto& loopback_points = gen_data.Get<GenDataEnumCommon::kLoopbackPoints>().emplace();
     gen_data.Get<GenDataEnumCommon::kNoteOffUsed>() = false;
+    gen_data.Get<GenDataEnumCommon::kTotalOrders>() = data.GetNumOrders();
 
     // For convenience:
     using GlobalCommon = GlobalState<DMF>::StateEnumCommon;
@@ -957,9 +961,17 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
     // Notes can be "cancelled" by Port2Note effects under certain conditions
     std::vector<bool> note_cancelled(data.GetNumChannels(), false);
 
-    // Set up for suspending/restoring states:
-    int jump_destination_order = -1;
-    int jump_destination_row = -1;
+    // Loopback points - take note of them during the main loop then set the state afterward
+    std::vector<std::pair<OrderRowPosition, OrderRowPosition>> loopbacks_temp; // From/To
+
+    // The following variables are used for order/row and PosJump/PatBreak-related stuff
+    std::vector<OrderIndex> order_map(data.GetNumOrders(), (OrderIndex)-1); // Maps DMF order to DMF state order (-1 = not set, though use skipped_orders instead)
+    order_map[0] = 0;
+    std::vector<bool> skipped_orders(data.GetNumOrders(), false); // DMF orders as indexes
+    std::vector<RowIndex> starting_row(data.GetNumOrders(), 0); // DMF orders as indexes
+    std::vector<RowIndex> last_row(data.GetNumOrders(), data.GetNumRows()); // DMF orders as indexes
+    OrderIndex total_gen_data_orders = 0;
+    OrderIndex num_orders_skipped = 0; // TODO: May be unnecessary now that there's skipped_orders
 
     // Set initial state (global)
     global_state.Reset(); // Just in case
@@ -1009,22 +1021,22 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
     // Main loop
     for (ChannelIndex channel = 0; channel < data.GetNumChannels(); ++channel)
     {
+        global_state.Reset();
         auto& channel_state = channel_states[channel];
         for (OrderIndex order = 0; order < data.GetNumOrders(); ++order)
         {
-            for (RowIndex row = 0; row < data.GetNumRows(); ++row)
-            {
-                state_reader_writers->SetWritePos(order, row);
-                const auto& row_data = data.GetRow(channel, order, row);
+            // Handle skipped orders for PosJump
+            if (skipped_orders[order])
+                continue;
 
-                // If just arrived at jump destination:
-                if (static_cast<int>(order) == jump_destination_order && static_cast<int>(row) == jump_destination_row)
-                {
-                    // Restore state copies
-                    state_reader_writers->Restore();
-                    jump_destination_order = -1;
-                    jump_destination_row = -1;
-                }
+            OrderIndex gen_data_order = order_map[order];
+            RowIndex row_offset = starting_row[order];
+
+            for (RowIndex row = row_offset; row < last_row[order]; ++row)
+            {
+                RowIndex gen_data_row = row - row_offset;
+                channel_state.SetWritePos(gen_data_order, gen_data_row);
+                const auto& row_data = data.GetRow(channel, order, row);
 
                 // CHANNEL STATE - PORT2NOTE
                 if (!NoteIsEmpty(row_data.note))
@@ -1335,8 +1347,10 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                 }
 
                 // GLOBAL STATE
-                if (channel == data.GetNumChannels() - 1) // Only update global state after all channel states for this row have been updated
+                if (channel == 0) // Only update global state once, the first time this order/row is encountered
                 {
+                    global_state.SetWritePos(gen_data_order, gen_data_row);
+
                     // Deflemask PosJump/PatBreak behavior (experimentally determined in Deflemask 1.1.3):
                     // The left-most PosJump or PatBreak in a given row is the one that takes effect.
                     // If the left-most PosJump or PatBreak is invalid (no value or invalid value),
@@ -1367,6 +1381,8 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                                 case Effects::kPatBreak:
                                     if (ignore_pat_break)
                                         break;
+                                    if (order + 1 == data.GetNumOrders())
+                                        break; // PatBreak on last order has no effect
                                     if (pat_break < 0 && (effect.value < 0 || effect.value >= data.GetNumRows()))
                                     {
                                         ignore_pat_break = true;
@@ -1393,6 +1409,18 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                         }
                     }
 
+                    // If we're on an order that starts on a row > 0 (due to a PatBreak),
+                    // and we're at the end the order, and PatBreak/PosJump isn't already used,
+                    // then we need to add a PatBreak/PosJump to ensure row_offset extra rows aren't played.
+                    if (row_offset > 0 && pat_break < 0 && pos_jump < 0 && row == data.GetNumRows() - row_offset)
+                    {
+                        // If we're on the last order, a PosJump should be used instead
+                        if (order + 1 != data.GetNumOrders())
+                            pat_break = 0;
+                        else
+                            pos_jump = 0;
+                    }
+
                     // Set the global state if needed
 
                     if (speed_a >= 0)
@@ -1404,32 +1432,123 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
 
                     if (pat_break >= 0)
                     {
-                        // All state data for this row (besides PatBreak) must be ready when Copy occurs
-                        state_reader_writers->Save();
-                        jump_destination_order = order + 1;
-                        jump_destination_row = pat_break;
-                        global_state.SetOneShot<GlobalOneShotCommon::kPatBreak>(pat_break);
+                        // Always 0 b/c we're using row offsets
+                        global_state.SetOneShot<GlobalOneShotCommon::kPatBreak>(0);
+
+                        // If PatBreak value > 0, rows in gen data will shifted by an offset so that they start on row 0.
+                        assert(order < data.GetNumOrders());
+                        starting_row[order + 1] = pat_break;
+
+                        // Any further rows in this order/pattern are skipped because they unreachable.
+                        last_row[order] = row + 1;
+                        break;
                     }
                     else if (pos_jump >= 0) // PosJump only takes effect if PatBreak isn't used
                     {
-                        if (pos_jump >= order) // If not a loop
+                        if (pos_jump > order) // If not a loop
                         {
-                            // All state data for this row (besides PosJump) must be ready when Copy occurs
-                            state_reader_writers->Save();
-                            jump_destination_order = pos_jump;
-                            jump_destination_row = 0;
-                        }
-                        else
-                        {
-                            // TODO: This could be overwritten by future PosJumps to the same order
-                            loopback_points[pos_jump] = GetOrderRowPosition(order, row);
-                        }
+                            // In Deflemask, orders skipped by a forward PosJump are unplayable.
+                            // For generated data, those orders will be omitted, so no PosJump is needed.
+                            unsigned orders_to_skip = pos_jump - order - 1;
+                            num_orders_skipped += orders_to_skip;
+                            while (orders_to_skip != 0)
+                            {
+                                skipped_orders[order + orders_to_skip] = true;
+                                --orders_to_skip;
+                            }
 
-                        global_state.SetOneShot<GlobalOneShotCommon::kPosJump>(pos_jump);
+                            // If not on the last row, use a PatBreak. PosJump is not needed.
+                            if (row + 1 != data.GetNumRows())
+                            {
+                                global_state.SetOneShot<GlobalOneShotCommon::kPatBreak>(0);
+                            }
+
+                            // Any further rows in this order/pattern are skipped because they unreachable.
+                            last_row[order] = row + 1;
+                            break;
+                        }
+                        else // A loop
+                        {
+                            // If we attempt to jump back to an order that was skipped,
+                            // the next non-skipped order after that is used instead.
+                            while (skipped_orders[pos_jump])
+                            {
+                                ++pos_jump;
+                                assert(pos_jump < data.GetNumOrders());
+                            }
+
+                            // TODO: Could two PosJumps go to the same destination, creating situation with two loopback oneshots with the same order/row pos? Currently only allowing one loopback.
+                            loopbacks_temp.push_back({ GetOrderRowPosition(gen_data_order, gen_data_row), GetOrderRowPosition(order_map.at(pos_jump), 0) }); // From/To
+                            global_state.SetOneShot<GlobalOneShotCommon::kPosJump>(order_map.at(pos_jump));
+
+                            // Any further orders or rows in this song are ignored because they unreachable.
+                            // Break out of entire nested loop.
+                            last_row[order] = row + 1;
+                            for (OrderIndex i = order + 1; i < data.GetNumOrders(); ++i)
+                            {
+                                skipped_orders[i] = true;
+                            }
+                            break;
+                        }
                     }
                 }
 
                 // TODO: Would COR and ORC affect this? EDIT: Shouldn't matter as long as O comes before R?
+            }
+
+            // Handle data order to gen data order mapping
+            if (channel == 0)
+            {
+                ++total_gen_data_orders;
+
+                if (order + 1 < data.GetNumOrders() && !skipped_orders[order + 1])
+                {
+                    order_map[order + 1] = total_gen_data_orders;
+                }
+            }
+        }
+    }
+
+    // Gen data's total orders may be less than data's if any orders are skipped due to PosJump or
+    // unreachable due to being an order after a loopback.
+    gen_data.Get<GenDataEnumCommon::kTotalOrders>().value() -= num_orders_skipped;
+
+    const auto last_order_temp = data.GetNumOrders() - 1 - num_orders_skipped;
+    const auto last_row_temp = last_row[last_order_temp] - 1;
+    const auto last_order_row = GetOrderRowPosition(last_order_temp, last_row_temp);
+
+    // Handle loopback at end of song
+    if (loopbacks_temp.empty())
+    {
+        // No pos jump + loopback has been added for the end of the song - need to add them here
+        global_state.Reset();
+        global_state.SetWritePos(last_order_row);
+        global_state.SetOneShot<GlobalOneShotCommon::kPosJump>(0);
+        loopbacks_temp.push_back({last_order_row, 0});
+    }
+
+    // Write loopbacks to state
+    if (!loopbacks_temp.empty())
+    {
+        global_state.Reset();
+
+        // These must be ordered by increasing OrderRowPosition in second pair element (the "to" order)
+        using ElementType = std::pair<OrderRowPosition, OrderRowPosition>;
+        std::sort(loopbacks_temp.begin(), loopbacks_temp.end(), [](const ElementType& lhs, const ElementType& rhs)
+        {
+            // If the "to" order/rows are identical, compare the "from" order/rows
+            return lhs.second == rhs.second ? lhs.first < rhs.first : lhs.second < rhs.second;
+        });
+
+        OrderRowPosition last = -1;
+        for (const auto& [from, to] : loopbacks_temp)
+        {
+            assert(last != to && "More than one oneshot is being written to the same order/row which might cause issues when reading");
+            if (last != to)
+            {
+                global_state.SetWritePos(to);
+                global_state.SetOneShot<GlobalOneShotCommon::kLoopback>(from);
+                last = to;
             }
         }
     }

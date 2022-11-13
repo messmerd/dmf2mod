@@ -78,6 +78,7 @@ using EffectValueXXYY = uint8_t; //std::pair<uint8_t, uint8_t>;
 
 // Global state data types
 
+using LoopbackStateData = OrderRowPosition; // Order/Row where the PosJump occurred
 using TempoStateData = EffectValueXX;
 using SpeedAStateData = EffectValueXX;
 using SpeedBStateData = EffectValueXX;
@@ -139,13 +140,14 @@ struct GlobalStateCommonDefinition : public detail::StateDefinitionTag
 
 struct GlobalOneShotCommonDefinition : public detail::OneShotDefinitionTag
 {
-    static constexpr int kOneShotCommonCount = 2; // # of variants in OneShotEnumCommon (remember to update this after changing the enum)
+    static constexpr int kOneShotCommonCount = 3; // # of variants in OneShotEnumCommon (remember to update this after changing the enum)
     static constexpr int kOneShotLowerBound = -kOneShotCommonCount;
 
     // Common one-shot data have negative indexes
     enum OneShotEnumCommon
     {
         // Add additional variants here
+        kLoopback           =-3,
         kPatBreak           =-2,
         kPosJump            =-1
         // OneShotEnum contains values >= 0
@@ -153,6 +155,7 @@ struct GlobalOneShotCommonDefinition : public detail::OneShotDefinitionTag
 
     // Lowest to highest
     using OneShotDataCommon = std::tuple<
+        LoopbackStateData,
         PatBreakStateData,
         PosJumpStateData
         >;
@@ -372,53 +375,42 @@ void NextState(Reader const* reader, Function f)
 
 
 // Allows easy, efficient reading/traversal of GlobalState/ChannelState
-template<class TState, std::enable_if_t<std::is_base_of_v<detail::StateDefinitionTag, TState> && std::is_base_of_v<detail::OneShotDefinitionTag, TState>, bool> = true>
+template<class StateClass, std::enable_if_t<std::is_base_of_v<detail::StateDefinitionTag, StateClass> && std::is_base_of_v<detail::OneShotDefinitionTag, StateClass>, bool> = true>
 class StateReader
 {
-protected:
-
-    // TODO: Rename these:
-    static constexpr int enum_lower_bound_ = TState::kLowerBound;
-    static constexpr int enum_common_count_ = TState::kCommonCount;
-    static constexpr int enum_upper_bound_ = TState::kUpperBound;
-    static constexpr int enum_total_count_ = enum_common_count_ + enum_upper_bound_;
-
-    static constexpr int oneshot_enum_lower_bound_ = TState::kOneShotLowerBound;
-    static constexpr int oneshot_enum_common_count_ = TState::kOneShotCommonCount;
-    static constexpr int oneshot_enum_upper_bound_ = TState::kOneShotUpperBound;
-    static constexpr int oneshot_enum_total_count_ = oneshot_enum_common_count_ + oneshot_enum_upper_bound_;
-
 public:
 
     // Bring in dependencies:
-    using StateData = typename TState::StateData;
-    using StateDataWrapped = typename TState::StateDataWrapped;
-    using StateEnumCommon = typename TState::StateEnumCommon;
-    using StateEnum = typename TState::StateEnum;
+    using State = StateClass;
+    using StateData = typename State::StateData;
+    using StateDataWrapped = typename State::StateDataWrapped;
+    using StateEnumCommon = typename State::StateEnumCommon;
+    using StateEnum = typename State::StateEnum;
 
-    using OneShotData = typename TState::OneShotData;
-    using OneShotDataWrapped = typename TState::OneShotDataWrapped;
-    using OneShotEnumCommon = typename TState::OneShotEnumCommon;
-    using OneShotEnum = typename TState::OneShotEnum;
+    using OneShotData = typename State::OneShotData;
+    using OneShotDataWrapped = typename State::OneShotDataWrapped;
+    using OneShotEnumCommon = typename State::OneShotEnumCommon;
+    using OneShotEnum = typename State::OneShotEnum;
 
     // Helpers:
-    template<int state_data_index> using get_data_t = std::tuple_element_t<state_data_index + enum_common_count_, StateData>;
-    template<int state_data_index> using get_data_wrapped_t = std::tuple_element_t<state_data_index + enum_common_count_, StateDataWrapped>;
+    template<int state_data_index> using get_data_t = std::tuple_element_t<state_data_index + State::kCommonCount, StateData>;
+    template<int state_data_index> using get_data_wrapped_t = std::tuple_element_t<state_data_index + State::kCommonCount, StateDataWrapped>;
 
-    template<int oneshot_data_index> using get_oneshot_data_t = std::tuple_element_t<oneshot_data_index + oneshot_enum_common_count_, OneShotData>;
-    template<int oneshot_data_index> using get_oneshot_data_wrapped_t = std::tuple_element_t<oneshot_data_index + oneshot_enum_common_count_, OneShotDataWrapped>;
+    template<int oneshot_data_index> using get_oneshot_data_t = std::tuple_element_t<oneshot_data_index + State::kOneShotCommonCount, OneShotData>;
+    template<int oneshot_data_index> using get_oneshot_data_wrapped_t = std::tuple_element_t<oneshot_data_index + State::kOneShotCommonCount, OneShotDataWrapped>;
 
-    using Deltas = std::array<bool, enum_total_count_>;
-    using OneShotDeltas = std::array<bool, oneshot_enum_total_count_>;
+    using Deltas = std::array<bool, State::kCommonCount + State::kUpperBound>;
+    using OneShotDeltas = std::array<bool, State::kOneShotCommonCount + State::kOneShotUpperBound>;
 
-public:
-    StateReader() : state_(nullptr) { Reset(); }
-    StateReader(TState* state) : state_(state) { Reset(); }
-    void AssignState(TState const* state) { state_ = state; channel_ = 0; }
-    void AssignState(TState const* state, ChannelIndex channel) { state_ = state; channel_ = channel; }
+    StateReader() : state_{nullptr} { Reset(); }
+    StateReader(State* state) : state_{state} { Reset(); }
+    virtual ~StateReader() = default;
+
+    void AssignState(State const* state) { state_ = state; channel_ = 0; }
+    void AssignState(State const* state, ChannelIndex channel) { state_ = state; channel_ = channel; }
 
     // Set current read position to the beginning of the Module's state data
-    void Reset()
+    virtual void Reset()
     {
         cur_pos_ = 0;
         cur_indexes_.fill(-1); // ???
@@ -490,7 +482,7 @@ public:
     StateData Copy() const
     {
         StateData retVal;
-        detail::CopyState<enum_lower_bound_, enum_upper_bound_>(this, retVal,
+        detail::CopyState<State::kLowerBound, State::kUpperBound>(this, retVal,
             [](auto& retValElem, const auto& val) constexpr
         {
             retValElem = val;
@@ -515,7 +507,7 @@ public:
             oneshot_deltas_.fill(false);
         }
 
-        detail::NextState<enum_lower_bound_, enum_upper_bound_, false>(this, [&, this](const auto& vec, int state_data_index) constexpr
+        detail::NextState<State::kLowerBound, State::kUpperBound, false>(this, [&, this](const auto& vec, int state_data_index) constexpr
         {
             const int vec_size = vec.size();
             if (vec_size == 0)
@@ -537,7 +529,7 @@ public:
             }
         });
 
-        detail::NextState<oneshot_enum_lower_bound_, oneshot_enum_upper_bound_, true>(this, [&, this](const auto& vec, int oneshot_data_index) constexpr
+        detail::NextState<State::kOneShotLowerBound, State::kOneShotUpperBound, true>(this, [&, this](const auto& vec, int oneshot_data_index) constexpr
         {
             const int vec_size = vec.size();
             if (vec_size == 0)
@@ -603,17 +595,17 @@ public:
 protected:
 
     // Converts StateEnumCommon or StateEnum variants into a zero-based index of an array. Returns offset if no enum is provided.
-    static inline constexpr int GetIndex(int state_data_index = 0) { return enum_common_count_ + state_data_index; }
+    static inline constexpr int GetIndex(int state_data_index = 0) { return State::kCommonCount + state_data_index; }
 
     // Converts OneShotEnumCommon or OneShotEnum variants into a zero-based index of an array. Returns offset if no enum is provided.
-    static inline constexpr int GetOneShotIndex(int oneshot_data_index = 0) { return oneshot_enum_common_count_ + oneshot_data_index; }
+    static inline constexpr int GetOneShotIndex(int oneshot_data_index = 0) { return State::kOneShotCommonCount + oneshot_data_index; }
 
-    TState const* state_; // The state this reader is reading from
+    State const* state_; // The state this reader is reading from
     Deltas deltas_; // An array of bools indicating which (if any) state data values have changed since the last SetReadPos<true>() call
     OneShotDeltas oneshot_deltas_; // Same as deltas_ but for one-shots
     OrderRowPosition cur_pos_; // The current read position in terms of order and pattern row. (The write position is the end of the state data vector)
-    std::array<int, enum_total_count_> cur_indexes_; // array of state data vector indexes
-    std::array<int, oneshot_enum_total_count_> cur_indexes_oneshot_; // array of one-shot data vector indexes
+    std::array<int, State::kCommonCount + State::kUpperBound> cur_indexes_; // array of state data vector indexes
+    std::array<int, State::kOneShotCommonCount + State::kOneShotUpperBound> cur_indexes_oneshot_; // array of one-shot data vector indexes
     ChannelIndex channel_; // Which channel this reader is used for (if applicable)
 };
 
@@ -670,16 +662,14 @@ void InsertStateOptional(TWriter* writer, const TTuple& t)
 
 } // namespace detail
 
-template<class TState>
-class StateReaderWriter : public StateReader<TState>
+template<class StateClass>
+class StateReaderWriter : public StateReader<StateClass>
 {
 public:
 
-    // Inherit constructors
-    using StateReader<TState>::StateReader;
-
-    // Bring in dependencies from parent:
-    using R = StateReader<TState>;
+    // Bring in dependencies:
+    using R = StateReader<StateClass>;
+    using typename R::State;
     using typename R::StateData;
     using typename R::StateEnumCommon;
     using typename R::StateEnum;
@@ -689,8 +679,27 @@ public:
     template<int state_data_index> using get_data_t = typename R::template get_data_t<state_data_index>;
     template<int oneshot_data_index> using get_oneshot_data_t = typename R::template get_oneshot_data_t<oneshot_data_index>;
 
-    void AssignStateWrite(TState* state) { state_write_ = state; R::AssignState(state); }
-    void AssignStateWrite(TState* state, ChannelIndex channel) { state_write_ = state; R::AssignState(state, channel); }
+    StateReaderWriter() : R()
+    {
+        next_vals_ = {};
+        has_next_vals_ = false;
+    }
+    StateReaderWriter(State* state) : R(state)
+    {
+        next_vals_ = {};
+        has_next_vals_ = false;
+    }
+    ~StateReaderWriter() = default;
+
+    void AssignStateWrite(State* state) { state_write_ = state; R::AssignState(state); }
+    void AssignStateWrite(State* state, ChannelIndex channel) { state_write_ = state; R::AssignState(state, channel); }
+
+    void Reset() override
+    {
+        next_vals_ = {};
+        has_next_vals_ = false;
+        R::Reset();
+    }
 
     // Set the specified state data (state_data_index) at the current write position (the end of the vector) to val
     template<int state_data_index, bool ignore_duplicates = false>
@@ -747,7 +756,7 @@ public:
     template<int state_data_index, bool ignore_duplicates = false>
     inline void SetSingle(get_data_t<state_data_index>&& val, get_data_t<state_data_index>&& next_val)
     {
-        std::get<state_data_index + R::enum_common_count_>(next_vals_) = std::move(next_val);
+        std::get<state_data_index + State::kCommonCount>(next_vals_) = std::move(next_val);
         has_next_vals_ = true;
         Set<state_data_index, ignore_duplicates>(std::move(val));
     }
@@ -756,7 +765,7 @@ public:
     template<int state_data_index, bool ignore_duplicates = false>
     inline void SetSingle(const get_data_t<state_data_index>& val, const get_data_t<state_data_index>& next_val)
     {
-        std::get<state_data_index + R::enum_common_count_>(next_vals_) = next_val;
+        std::get<state_data_index + State::kCommonCount>(next_vals_) = next_val;
         has_next_vals_ = true;
         Set<state_data_index, ignore_duplicates>(val);
     }
@@ -808,7 +817,7 @@ public:
     void Insert(const StateData& vals)
     {
         // Calls Set() for each element in vals
-        detail::InsertState<R::enum_lower_bound_, R::enum_upper_bound_>(this, vals);
+        detail::InsertState<State::kLowerBound, State::kUpperBound>(this, vals);
     }
 
     // Call this at the start of an inner loop before Set() is called
@@ -819,7 +828,7 @@ public:
         // If SetSingle() was used, the next values are set here
         if (has_next_vals_)
         {
-            detail::InsertStateOptional<R::enum_lower_bound_, R::enum_upper_bound_>(this, next_vals_);
+            detail::InsertStateOptional<State::kLowerBound, State::kUpperBound>(this, next_vals_);
             next_vals_ = {}; // Clear the tuple and reset optionals
             has_next_vals_ = false;
         }
@@ -833,7 +842,7 @@ public:
 
 private:
 
-    TState* state_write_; // The state this reader is writing to
+    State* state_write_; // The state this reader is writing to
     detail::optional_state_data_t<StateData> next_vals_;
     bool has_next_vals_{false};
 };

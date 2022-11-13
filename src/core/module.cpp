@@ -10,20 +10,6 @@
 
 using namespace d2m;
 
-ModulePtr ModuleBase::CreateAndImport(const std::string& filename)
-{
-    const ModuleType type = Utils::GetTypeFromFilename(filename);
-    if (type == ModuleType::NONE)
-        return nullptr;
-
-    ModulePtr m = Factory<ModuleBase>::Create(type);
-    if (!m)
-        return nullptr;
-
-    m->Import(filename);
-    return m;
-}
-
 bool ModuleBase::Import(const std::string& filename)
 {
     m_Status.Reset(Status::Category::Import);

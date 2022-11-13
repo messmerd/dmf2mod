@@ -103,7 +103,9 @@ std::vector<OptionDefinitionWrapper> GetOptionDefinitionsWrapper(int moduleType)
 bool ModuleImport(std::string filename)
 {
     SetStatusType(true);
-    if (Utils::GetTypeFromFilename(filename) == ModuleType::NONE)
+
+    const ModuleType input_type = Utils::GetTypeFromFilename(filename);
+    if (input_type == ModuleType::NONE)
     {
         std::cerr << "The input file is not recognized as a supported module type.\n\n";
         return true;
@@ -111,13 +113,15 @@ bool ModuleImport(std::string filename)
 
     G_InputFilename = filename;
 
-    G_Module = Module::CreateAndImport(filename);
+    G_Module = Factory<ModuleBase>::Create(input_type);
     if (!G_Module)
     {
         std::cerr << "Error during import:\n";
-        std::cerr << "ERROR: The module type may not be registered.\n\n";
-        return true;
+        std::cerr << "ERROR: Not enough memory.\n";
+        return 1;
     }
+
+    G_Module->Import(filename);
 
     if (G_Module->GetStatus().ErrorOccurred())
     {

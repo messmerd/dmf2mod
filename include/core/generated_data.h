@@ -45,12 +45,12 @@ using wrapped_gen_data_t = typename wrapped_gen_data<T...>::type;
 // COMMON GENERATED DATA TYPES
 ///////////////////////////////////////////////////////////
 
-template<class T> using StateGenData = ModuleState<T>;
-template<class T> using SoundIndexNoteExtremesGenData = std::map<typename SoundIndex<T>::type, std::pair<Note, Note>>;
-using ChannelNoteExtremesGenData = std::map<ChannelIndex, std::pair<Note, Note>>;
+using TotalOrdersGenData = OrderIndex;
 using NoteOffUsedGenData = bool;
+using ChannelNoteExtremesGenData = std::map<ChannelIndex, std::pair<Note, Note>>;
+template<class T> using SoundIndexNoteExtremesGenData = std::map<typename SoundIndex<T>::type, std::pair<Note, Note>>;
 template<class T> using SoundIndexesUsedGenData = std::set<typename SoundIndex<T>::type>;
-using LoopbackPointsGenData = std::map<OrderIndex, OrderRowPosition>; // Jump destination order --> Order/Row where the PosJump occurred
+template<class T> using StateGenData = ModuleState<T>;
 
 ///////////////////////////////////////////////////////////
 // COMMON GENERATED DATA DEFINITION
@@ -66,8 +66,8 @@ struct GeneratedDataCommonDefinition : public detail::GenDataDefinitionTag
     enum GenDataEnumCommon
     {
         //kDuplicateOrders        =-7,
-        kNoteOffUsed            =-6,
-        kLoopbackPoints         =-5,
+        kTotalOrders            =-6,
+        kNoteOffUsed            =-5,
         kChannelNoteExtremes    =-4,
         kSoundIndexNoteExtremes =-3,
         kSoundIndexesUsed       =-2,
@@ -76,8 +76,8 @@ struct GeneratedDataCommonDefinition : public detail::GenDataDefinitionTag
 
     // Lowest to highest
     using GenDataCommon = std::tuple<
+        TotalOrdersGenData, // Gen data's total orders <= data's total orders
         NoteOffUsedGenData,
-        LoopbackPointsGenData,
         ChannelNoteExtremesGenData,
         SoundIndexNoteExtremesGenData<ModuleClass>,
         SoundIndexesUsedGenData<ModuleClass>,
@@ -88,6 +88,24 @@ struct GeneratedDataCommonDefinition : public detail::GenDataDefinitionTag
 ///////////////////////////////////////////////////////////
 // GENERATED DATA STORAGE
 ///////////////////////////////////////////////////////////
+
+namespace detail {
+
+// Compile-time for loop helper
+template<int start, class Storage, int... Is>
+void ClearAllGenDataHelper(Storage* storage, std::integer_sequence<int, Is...>)
+{
+    (storage->template Clear<start + Is>(), ...);
+}
+
+// Calls GeneratedDataStorage::Clear() for every type of generated data
+template<int start, int end, class Storage>
+void ClearAllGenData(Storage* storage)
+{
+    ClearAllGenDataHelper<start>(storage, std::make_integer_sequence<int, gcem::abs(start) + end>{});
+}
+
+} // namespace detail
 
 template<class CommonDef, typename... Ts>
 class GeneratedDataStorage : public CommonDef
@@ -126,12 +144,19 @@ public:
     // For convenience:
     constexpr const std::optional<ModuleState<ModuleClass>>& GetState() const { return Get<GenDataEnumCommon::kState>(); }
     constexpr std::optional<ModuleState<ModuleClass>>& GetState() { return Get<GenDataEnumCommon::kState>(); }
+    constexpr const std::optional<OrderIndex>& GetNumOrders() const { return Get<GenDataEnumCommon::kTotalOrders>(); }
 
     // Destroys any generated data at index gen_data_index. Call this after any change which would make the data invalid.
     template<int gen_data_index>
     void Clear()
     {
         std::get<gen_data_index + CommonDef::kCommonCount>(data_).reset();
+    }
+
+    // Destroys all generated data
+    void ClearAll()
+    {
+        detail::ClearAllGenData<-CommonDef::kCommonCount, kUpperBound>(this);
     }
 
 protected:

@@ -83,16 +83,17 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    ////////// IMPORT //////////
-
-    // Import the input file by inferring module type:
-    ModulePtr input = Module::CreateAndImport(io.InputFile);
+    ModulePtr input = Factory<ModuleBase>::Create(io.InputType);
     if (!input)
     {
-        std::cerr << "ERROR: The input module type is not registered.\n";
+        std::cerr << "ERROR: Not enough memory.\n";
         return 1;
     }
 
+    ////////// IMPORT //////////
+
+    // Import the input file by inferring module type:
+    input->Import(io.InputFile);
     if (input->HandleResults())
         return 1;
 
@@ -102,7 +103,7 @@ int main(int argc, char *argv[])
     ModulePtr output = input->Convert(io.OutputType, options);
     if (!output)
     {
-        std::cerr << "ERROR: The output module type is not registered.\n";
+        std::cerr << "ERROR: Not enough memory or input and output types are the same.\n";
         return 1;
     }
 

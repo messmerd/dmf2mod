@@ -295,7 +295,8 @@ public:
         TempoAccuracy,
         EffectIgnored,
         WaveDownsample,
-        MultipleEffects
+        MultipleEffects,
+        LoopbackInaccuracy
     };
 
     static constexpr unsigned kVolumeMax = 64u; // Yes, there are 65 different values for the volume
@@ -322,7 +323,7 @@ private:
     void DMFConvertSampleData(const DMF& dmf, const SampleMap& sample_map);
     void DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map);
     mod::PriorityEffect DMFConvertEffects(ChannelStateReader<DMF>& state);
-    Row<MOD> DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMapper::NoteRange& note_range, bool& note_playing, bool on_jump_destination, const SampleMap& sample_map, mod::PriorityEffect& mod_effect);
+    Row<MOD> DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMapper::NoteRange& note_range, bool& set_sample, int& set_vol_if_not, const SampleMap& sample_map, mod::PriorityEffect& mod_effect);
     void ApplyEffects(std::array<Row<MOD>, 4>& row_data, const std::array<mod::PriorityEffect, 4>& mod_effect, std::vector<mod::PriorityEffect>& global_effects);
 
     void DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed);

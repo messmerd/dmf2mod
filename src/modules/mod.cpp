@@ -105,7 +105,10 @@ void MOD::ConvertFromDMF(const DMF& dmf)
 
     ///////////////// GET DMF GENERATED DATA
 
-    dmf.GenerateData(0x1); // MOD-compatibility flag
+    const size_t error_code = dmf.GenerateData(1 | 2); // MOD-compatibility flags
+    if (error_code & 2)
+        m_Status.AddWarning(GetWarningMessage(ConvertWarning::LoopbackInaccuracy));
+
     auto dmf_gen_data = dmf.GetGeneratedData();
 
     const OrderIndex num_orders = dmf_gen_data->GetNumOrders().value() + (OrderIndex)m_UsingSetupPattern;
@@ -408,9 +411,11 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
     auto& channel_readers = state_readers->channel_readers;
 
     // Extra state info needed:
-    std::array<bool, 4> note_playing{ false };
-    std::array<DMFSampleMapper::NoteRange, 4> note_range{ DMFSampleMapper::NoteRange::kFirst }; // ???
+    std::array<DMFSampleMapper::NoteRange, 4> note_range;
+    note_range.fill(DMFSampleMapper::NoteRange::kFirst); // ???
     std::vector<PriorityEffect> global_effects;
+    std::array set_sample{ false, false, false, false };
+    std::array set_volume_if_not{ -1, -1, -1, -1 }; // Signifies the channel volume needs to be set if the current channel volume is not this value. Volume in DMF units.
 
     // Main loop
     for (OrderIndex dmf_order = 0; dmf_order < dmf_num_orders; ++dmf_order)
@@ -441,8 +446,43 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
 
                 if (channel != dmf::GameBoyChannel::NOISE)
                 {
+                    if (global_reader.GetOneShotDelta(GlobalState<DMF>::kLoopback))
+                    {
+                        // When looping back, the sound index and channel volume could be different before
+                        // and after the PosJump, which would require them to be set at the next note played after the
+                        // loopback point else the sound index and channel volume from before the PosJump would carry over.
+                        // In addition, notes might carry over and need to be stopped with a Note OFF.
+                        const OrderRowPosition looping_back_from = global_reader.GetOneShot<GlobalState<DMF>::kLoopback>();
+                        const auto state_before_loop = channel_reader.ReadAt(looping_back_from);
+
+                        // Set the volume if it changed
+                        const auto volume_before = channel_reader.GetValue<ChannelState<DMF>::kVolume>(state_before_loop);
+                        if (channel_reader.Get<ChannelState<DMF>::kVolume>() != volume_before)
+                        {
+                            set_volume_if_not[channel] = volume_before;
+                            // set_volume_if_not will be reset to -1 if a volume change occurs after this row, or anything that would
+                            // cause a volume change, such as a sample change.
+                        }
+
+                        // Explicitly set the sample if needed
+                        const auto sound_index_before = channel_reader.GetValue<ChannelState<DMF>::kSoundIndex>(state_before_loop);
+                        if (channel_reader.Get<ChannelState<DMF>::kSoundIndex>() != sound_index_before)
+                        {
+                            set_sample[channel] = true;
+                            // set_sample will be reset to false once a sample change occurs or a note is used after this row
+                        }
+                    }
+
+                    if (channel_reader.GetDelta(ChannelState<DMF>::kVolume))
+                    {
+                        // set_volume_if_not is essentially used to insert an extra volume change into the state
+                        // because in Protracker, the channel volume at the end of a song can carry over when looping back
+                        // and this behavior is not specified in the generated state data.
+                        set_volume_if_not[channel] = -1; // New volume change encountered; set_volume_if_not is now irrelevant
+                    }
+
                     mod_effects[channel] = DMFConvertEffects(channel_reader);
-                    mod_row_data[channel] = DMFConvertNote(channel_reader, note_range[channel], note_playing[channel], false, sample_map, mod_effects[channel]);
+                    mod_row_data[channel] = DMFConvertNote(channel_reader, note_range[channel], set_sample[channel], set_volume_if_not[channel], sample_map, mod_effects[channel]);
                 }
             }
 
@@ -463,61 +503,6 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
                 Row<MOD> temp_row_data{ 0, NoteTypes::Empty{}, { Effects::kNoEffect, 0 } };
                 mod_data.SetRow(channel, dmf_order + (int)m_UsingSetupPattern, dmf_row, temp_row_data);
             }
-        }
-    }
-
-    // Add Note OFF to the loopback point for any channels where the sound would carry over
-
-    global_reader.Reset();
-    const auto& loopback_vec = global_reader.GetOneShotVec<GlobalState<DMF>::kLoopback>();
-    assert(loopback_vec.size() == 1);
-
-    // The only loopback should be the one at the end of the song
-    const auto [dmf_last_order, dmf_last_row] = GetOrderRowPosition(loopback_vec.at(0).second);
-    const auto [pos_jump_dest, _] = GetOrderRowPosition(loopback_vec.at(0).first);
-
-    for (ChannelIndex channel = 0; channel < mod_data.GetNumChannels(); ++channel)
-    {
-        // If no note was playing in this channel at the very end of the song, nothing needs to be done
-        if (!note_playing[channel])
-            continue;
-
-        auto& channel_reader = channel_readers[channel];
-        channel_reader.Reset();
-
-        bool note_playing_before_dest = false;
-        bool note_playing_at_dest = false;
-
-        if (pos_jump_dest != 0) // If not jumping to the very start of the song
-        {
-            channel_reader.SetReadPos<false>(pos_jump_dest - 1, dmf_last_row); // Read at row just before destination
-            note_playing_before_dest = NoteHasPitch(channel_reader.Get<ChannelState<DMF>::kNoteSlot>()); // TODO: Check volume too?
-        }
-
-        channel_reader.SetReadPos<false>(pos_jump_dest, 0); // Go to destination
-        switch (channel_reader.Get<ChannelState<DMF>::kNoteSlot>().index())
-        {
-            case NoteTypes::kEmpty:
-                note_playing_at_dest = note_playing_before_dest;
-                break;
-            case NoteTypes::kOff:
-                note_playing_at_dest = false;
-                break;
-            case NoteTypes::kNote:
-                note_playing_at_dest = true;
-                break;
-            default:
-                assert(0);
-                break;
-        }
-
-        if (!note_playing_at_dest)
-        {
-            // Get 1st row of the pattern we're looping back to and modify the note to use Note OFF (NOTE: This assumes silent sample exists)
-            Row<MOD> mod_row_data = GetData().GetRow(channel, pos_jump_dest + (m_UsingSetupPattern ? 1 : 0), 0);
-            mod_row_data.sample = 1; // Use silent sample
-            mod_row_data.note = NoteTypes::Off{};
-            GetData().SetRow(channel, pos_jump_dest + (m_UsingSetupPattern ? 1 : 0), 0, mod_row_data);
         }
     }
 }
@@ -572,7 +557,7 @@ mod::PriorityEffect MOD::DMFConvertEffects(ChannelStateReader<DMF>& state)
     return { EffectPriorityUnsupportedEffect, { Effects::kNoEffect, 0 } };
 }
 
-Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMapper::NoteRange& note_range, bool& note_playing, bool on_jump_destination, const MOD::SampleMap& sample_map, mod::PriorityEffect& mod_effect)
+Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMapper::NoteRange& note_range, bool& set_sample, int& set_vol_if_not, const MOD::SampleMap& sample_map, mod::PriorityEffect& mod_effect)
 {
     // Do not call this when on the noise channel
 
@@ -591,9 +576,17 @@ Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMappe
 
         // Convert note - Note OFF
         case NoteTypes::kOff:
+            if (!state.GetDelta(ChannelState<DMF>::kNoteSlot))
+            {
+                // This is actually an Empty note slot
+                row_data.sample = 0; // Keeps previous sample id
+                row_data.note = NoteTypes::Empty{};
+                return row_data;
+            }
             row_data.sample = sample_map.at(SoundIndex<DMF>::None{}).GetFirstMODSampleId(); // Use silent sample // TODO: Could use 1
             row_data.note = dmf_note; // Don't need a note for the silent sample to work
-            note_playing = false;
+            set_sample = false;
+            set_vol_if_not = -1; // On sample changes, Protracker resets the volume
             return row_data;
 
         // Convert note - Note with pitch
@@ -621,7 +614,9 @@ Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMappe
                 note_range = new_note_range;
             }
 
-            if (mod_sample_changed || !note_playing || on_jump_destination)
+            const auto dmf_volume = state.Get<ChannelState<DMF>::kVolume>();
+            const bool note_playing_rising_edge = state.GetImpulse<ChannelState<DMF>::kNotePlaying>().value_or(false);
+            if (mod_sample_changed || note_playing_rising_edge || set_sample)
             {
                 row_data.sample = sample_mapper.GetMODSampleId(new_note_range);
                 mod_sample_changed = false; // Just changed the sample, so resetting this for next time
@@ -629,7 +624,8 @@ Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMappe
                 // When you change ProTracker samples, the channel volume resets, so we need to check if
                 //  a volume change effect is needed to get the volume back to where it was.
 
-                const auto dmf_volume = state.Get<ChannelState<DMF>::kVolume>();
+                set_vol_if_not = -1; // On sample changes, Protracker resets the volume
+
                 if (dmf_volume != dmf::kDMFVolumeMax) // Currently, the default volume for all MOD samples is the maximum. TODO: Can optimize
                 {
                     const uint8_t mod_volume = (uint8_t)std::round(dmf_volume / (double)dmf::kDMFVolumeMax * (double)kVolumeMax); // Convert DMF volume to MOD volume
@@ -640,6 +636,23 @@ Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMappe
 
                     // TODO: If the default volume of the sample is selected in a smart way, we could potentially skip having to use a volume effect sometimes
                 }
+
+                set_sample = false; // Sample was just explicitly set; can reset this
+            }
+            else if (set_vol_if_not >= 0 && dmf_volume != set_vol_if_not)
+            {
+                // Need to explicitly set volume for this note because of channel volume carrying over when looping back
+                const uint8_t mod_volume = (uint8_t)std::round(dmf_volume / (double)dmf::kDMFVolumeMax * (double)kVolumeMax); // Convert DMF volume to MOD volume
+
+                // If this volume change effect has a higher priority, use it
+                if (mod_effect.first <= EffectPriorityVolumeChange)
+                {
+                    mod_effect = { EffectPriorityVolumeChange, { mod::Effects::kSetVolume, mod_volume } };
+                    set_vol_if_not = -1; // Volume was just set; can reset this
+                }
+
+                // Keeps the previous sample number and prevents channel volume from being reset
+                row_data.sample = 0;
             }
             else
             {
@@ -647,7 +660,6 @@ Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMappe
                 row_data.sample = 0;
             }
 
-            note_playing = true;
             return row_data;
         }
 
@@ -1367,6 +1379,8 @@ static std::string GetWarningMessage(MOD::ConvertWarning warning, const std::str
             return "Wavetable instrument #" + info + " was downsampled in MOD to allow higher notes to be played.";
         case MOD::ConvertWarning::MultipleEffects:
             return "No more than one volume change or effect can appear in the same row of the same channel. Important effects will be prioritized.";
+        case MOD::ConvertWarning::LoopbackInaccuracy:
+            return "Notes from one or more channels may erroneously carry over when looping back.";
         default:
             return "";
     }

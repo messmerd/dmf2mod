@@ -108,6 +108,7 @@ inline constexpr bool operator==(const PortamentoStateData& lhs, const Portament
 
 using ArpStateData = EffectValueXXYY;
 using VolumeStateData = EffectValueXX;
+using NotePlayingStateData = bool;
 using NoteSlotStateData = NoteSlot;
 template<class T> using SoundIndexStateData = typename SoundIndex<T>::type;
 
@@ -164,22 +165,23 @@ struct GlobalOneShotCommonDefinition : public detail::OneShotDefinitionTag
 template<class ModuleClass>
 struct ChannelStateCommonDefinition : public detail::StateDefinitionTag
 {
-    static constexpr int kCommonCount = 11; // # of variants in StateEnumCommon (remember to update this after changing the enum)
+    static constexpr int kCommonCount = 12; // # of variants in StateEnumCommon (remember to update this after changing the enum)
     static constexpr int kLowerBound = -kCommonCount;
 
     // Common state data have negative indexes
     enum StateEnumCommon
     {
         // Add additional variants here
-        kVolSlide           =-11,
-        kPanning            =-10,
-        kTremolo            =-9,
-        kVibratoVolSlide    =-8,
-        kPort2NoteVolSlide  =-7,
-        kVibrato            =-6,
-        kPort               =-5, // should this be split into port up, port down, and port2note?
-        kArp                =-4,
-        kVolume             =-3,
+        kVolSlide           =-12,
+        kPanning            =-11,
+        kTremolo            =-10,
+        kVibratoVolSlide    =-9,
+        kPort2NoteVolSlide  =-8,
+        kVibrato            =-7,
+        kPort               =-6, // should this be split into port up, port down, and port2note?
+        kArp                =-5,
+        kVolume             =-4,
+        kNotePlaying        =-3,
         kNoteSlot           =-2,
         kSoundIndex         =-1
         // StateEnum contains values >= 0
@@ -196,6 +198,7 @@ struct ChannelStateCommonDefinition : public detail::StateDefinitionTag
         PortamentoStateData,
         ArpStateData,
         VolumeStateData,
+        NotePlayingStateData,
         NoteSlotStateData,
         SoundIndexStateData<ModuleClass>
         >;
@@ -460,22 +463,22 @@ public:
         return GetOneShotVec<oneshot_data_index>().at(vec_index-1).second;
     }
 
-    // Gets the specified one-shot data (oneshot_data_index) if it is exactly at the current read position.
-    // TODO: Currently makes a copy of the data it places in out
-    template<int oneshot_data_index>
-    inline constexpr bool GetOnCurrentRow(get_oneshot_data_t<oneshot_data_index>* out) const
+    // Gets the specified state data (state_data_index) if it is exactly at the current read position.
+    // TODO: This makes a copy. Try using std::reference_wrapper
+    template<int state_data_index>
+    inline constexpr auto GetImpulse() const -> std::optional<get_data_t<state_data_index>>
     {
-        const auto& vec = GetOneShotVec<oneshot_data_index>();
+        const auto& vec = GetVec<state_data_index>();
         if (vec.empty())
-            return false;
+            return std::nullopt;
 
-        const int vec_index = cur_indexes_oneshot_[GetOneShotIndex(oneshot_data_index)];
-        const auto& elem = vec.at(vec_index-1);
+        const int vec_index = cur_indexes_[GetIndex(state_data_index)];
+        assert(vec_index >= 0 && "The initial state must be set before reading");
+        const auto& elem = vec.at(vec_index);
         if (elem.first != cur_pos_)
-            return false;
+            return std::nullopt;
 
-        *out = elem.second;
-        return true;
+        return elem.second;
     }
 
     // Returns a tuple of all the state values at the current read position
@@ -572,6 +575,34 @@ public:
         SetReadPos<set_deltas>(GetOrderRowPosition(order, row));
     }
 
+    // Returns state data at given position, then restores position to what it was previously
+    StateData ReadAt(OrderRowPosition pos)
+    {
+        const OrderRowPosition cur_pos_temp = cur_pos_;
+        const auto deltas_temp = deltas_;
+        const auto oneshot_deltas_temp = oneshot_deltas_;
+        const auto cur_indexes_temp = cur_indexes_;
+        const auto cur_indexes_oneshot_temp = cur_indexes_oneshot_;
+
+        Reset();
+        SetReadPos(pos);
+        auto state_data = Copy();
+
+        cur_pos_ = cur_pos_temp;
+        deltas_ = deltas_temp;
+        oneshot_deltas_ = oneshot_deltas_temp;
+        cur_indexes_ = cur_indexes_temp;
+        cur_indexes_oneshot_ = cur_indexes_oneshot_temp;
+
+        return state_data;
+    }
+
+    // Returns state data at given position, then restores position to what it was previously
+    inline StateData ReadAt(OrderIndex order, RowIndex row)
+    {
+        return ReadAt(GetOrderRowPosition(order, row));
+    }
+
     // Get the size of the specified state data vector (state_data_index)
     template<int state_data_index>
     inline constexpr size_t GetSize() const
@@ -591,6 +622,13 @@ public:
 
     // Only useful for ChannelStateReader
     inline ChannelIndex GetChannel() const { return channel_; }
+
+    // Gets a desired value from StateData
+    template<int state_data_index>
+    static constexpr get_data_t<state_data_index> GetValue(const StateData& data)
+    {
+        return std::get<GetIndex(state_data_index)>(data);
+    }
 
 protected:
 
@@ -621,16 +659,16 @@ namespace detail {
 
 // Compile-time for loop helper
 template<int start, class TWriter, class TTuple, int... Is>
-void InsertStateHelper(TWriter* writer, const TTuple& t, std::integer_sequence<int, Is...>)
+void ResumeStateHelper(TWriter* writer, const TTuple& t, std::integer_sequence<int, Is...>)
 {
     (writer->template Set<start + Is>(std::get<Is>(t)), ...);
 }
 
 // Calls writer->Set() for each element in the tuple t
 template<int start, int end, class TWriter, class TTuple>
-void InsertState(TWriter* writer, const TTuple& t)
+void ResumeState(TWriter* writer, const TTuple& t)
 {
-    InsertStateHelper<start>(writer, t, std::make_integer_sequence<int, gcem::abs(start) + end>{});
+    ResumeStateHelper<start>(writer, t, std::make_integer_sequence<int, gcem::abs(start) + end>{});
 }
 
 template<typename T>
@@ -752,7 +790,7 @@ public:
         Set<state_data_index, ignore_duplicates>(std::move(val_copy));
     }
 
-    // For non-persistent state values. Next time SetWritePos is called, next_val will automatically be set.
+    // For non-persistent state values. Next time SetWritePos is called, next_val will automatically be set. TODO: Not needed?
     template<int state_data_index, bool ignore_duplicates = false>
     inline void SetSingle(get_data_t<state_data_index>&& val, get_data_t<state_data_index>&& next_val)
     {
@@ -761,7 +799,7 @@ public:
         Set<state_data_index, ignore_duplicates>(std::move(val));
     }
 
-    // For non-persistent state values. Next time SetWritePos is called, next_val will automatically be set.
+    // For non-persistent state values. Next time SetWritePos is called, next_val will automatically be set. TODO: Not needed?
     template<int state_data_index, bool ignore_duplicates = false>
     inline void SetSingle(const get_data_t<state_data_index>& val, const get_data_t<state_data_index>& next_val)
     {
@@ -814,10 +852,49 @@ public:
     }
 
     // Inserts state data at current position. Use with Copy() in order to "resume" a state.
-    void Insert(const StateData& vals)
+    void Resume(const StateData& vals)
     {
         // Calls Set() for each element in vals
-        detail::InsertState<State::kLowerBound, State::kUpperBound>(this, vals);
+        detail::ResumeState<State::kLowerBound, State::kUpperBound>(this, vals);
+    }
+
+    // Inserts data into the state at the current read position. The read/write position is invalid afterwards, so it is reset.
+    template<int state_data_index, bool overwrite = false>
+    bool Insert(const get_data_t<state_data_index>& val)
+    {
+        assert(state_write_);
+        auto& vec = state_write_->template Get<state_data_index>();
+        const int vec_index = R::cur_indexes_[R::GetIndex(state_data_index)];
+        auto& vec_elem = vec[vec_index];
+
+        if (R::cur_pos_ == vec_elem.first)
+        {
+            // There's already an element at the position we want to insert val
+            if constexpr (overwrite)
+            {
+                vec_elem.second = val;
+                Reset();
+                return false;
+            }
+            Reset();
+            return true; // Failure
+        }
+
+        // pos > vec_elem.first
+        const auto iter_after = vec.begin() + vec_index + 1;
+        vec.insert(iter_after, std::pair{R::cur_pos_, val});
+        Reset();
+        return false;
+    }
+
+    // Inserts data into the state at a given position. The read/write position is invalid afterwards, so it is reset.
+    template<int state_data_index, bool overwrite = false>
+    bool Insert(OrderRowPosition pos, const get_data_t<state_data_index>& val)
+    {
+        Reset();
+        R::SetReadPos(pos);
+        SetWritePos(pos);
+        return Insert<state_data_index, overwrite>(val);
     }
 
     // Call this at the start of an inner loop before Set() is called
@@ -920,9 +997,9 @@ struct StateReaderWriters
     void Restore()
     {
         assert(saved_channel_states_.size() == channel_reader_writers.size());
-        global_reader_writer.Insert(saved_global_data_);
+        global_reader_writer.Restore(saved_global_data_);
         for (unsigned i = 0; i < channel_reader_writers.size(); ++i)
-            channel_reader_writers[i].Insert(saved_channel_states_[i]);
+            channel_reader_writers[i].Restore(saved_channel_states_[i]);
     }
 
 private:

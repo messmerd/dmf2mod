@@ -860,7 +860,10 @@ double DMF::GetBPM() const
  *
  * Flags:
  * 0:  Default generation (generates all data)
- * 1:  MOD-compatible (no port2note auto-off, ...)
+ * 1:  MOD-compatible portamentos (no port2note auto-off, ...)
+ * 2:  MOD-compatible loops (notes, sound index, and channel volume carry over)
+ *      Adds a Note OFF to loopback points if needed
+ *      Returns 2 flag if an extra "loopback order" would be needed (?)
  */
 size_t DMF::GenerateDataImpl(size_t data_flags) const
 {
@@ -890,6 +893,11 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
     //auto& channel_note_extremes = gen_data.Get<GenDataEnumCommon::kChannelNoteExtremes>().emplace();
     gen_data.Get<GenDataEnumCommon::kNoteOffUsed>() = false;
     gen_data.Get<GenDataEnumCommon::kTotalOrders>() = data.GetNumOrders();
+
+    // Data flags
+    size_t return_val = 0;
+    const bool no_port2note_auto_off = data_flags & 0x1;
+    const bool mod_compat_loops = data_flags & 0x2;
 
     // For convenience:
     using GlobalCommon = GlobalState<DMF>::StateEnumCommon;
@@ -1007,6 +1015,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
 
         channel_state.Set<ChannelCommon::kSoundIndex>(si);
         channel_state.Set<ChannelCommon::kNoteSlot>(NoteTypes::Empty{});
+        channel_state.Set<ChannelCommon::kNotePlaying>(false);
         channel_state.Set<ChannelCommon::kVolume>(15);
         channel_state.Set<ChannelCommon::kArp>(0);
         channel_state.Set<ChannelCommon::kPort>({PortamentoStateData::kNone, 0});
@@ -1047,11 +1056,11 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                 }
 
                 // CHANNEL STATE - PORT2NOTE
-                if ((data_flags & 0x1) == 0) // If not MOD-compatible
+                if (!no_port2note_auto_off) // If using port2note auto off
                 {
                     // This breaks bergentruckung.dmf --> MOD because while the port2note effects are being automatically stopped
                     // at the correct time in Deflemask, in ProTracker the effects need to stay on for an extra row to reach
-                    // their target period. I think this is due to the sample splitting
+                    // their target period. I think this is due to the sample splitting and/or inaccuracies.
                     if (periods[channel] == target_periods[channel])
                     {
                         // Portamento to note stops when it reaches its target period
@@ -1273,7 +1282,8 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                 const NoteSlot& note_slot = row_data.note;
                 if (NoteIsOff(note_slot))
                 {
-                    channel_state.SetSingle<ChannelCommon::kNoteSlot>(note_slot, NoteTypes::Empty{});
+                    channel_state.Set<ChannelCommon::kNoteSlot>(note_slot); // channel_state.SetSingle<ChannelCommon::kNoteSlot>(note_slot, NoteTypes::Empty{});
+                    channel_state.Set<ChannelCommon::kNotePlaying>(false);
                     gen_data.Get<GenDataEnumCommon::kNoteOffUsed>() = true;
                     note_cancelled[channel] = false; // An OFF also "uncancels" notes cancelled by a port2note effect
                     // NOTE: Note OFF does not affect the current note period
@@ -1281,6 +1291,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                 else if (NoteHasPitch(note_slot) && channel != dmf::GameBoyChannel::NOISE && !note_cancelled[channel])
                 {
                     channel_state.Set<ChannelCommon::kNoteSlot, true>(note_slot);
+                    channel_state.Set<ChannelCommon::kNotePlaying>(true);
                     const Note& note = GetNote(note_slot);
 
                     // Update the period
@@ -1528,30 +1539,70 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
     }
 
     // Write loopbacks to state
-    if (!loopbacks_temp.empty())
+    // loopbacks_temp is guaranteed to be non-empty at this point
+
+    global_state.Reset();
+
+    // These must be ordered by increasing OrderRowPosition in second pair element (the "to" order)
+    using ElementType = std::pair<OrderRowPosition, OrderRowPosition>;
+    std::sort(loopbacks_temp.begin(), loopbacks_temp.end(), [](const ElementType& lhs, const ElementType& rhs)
     {
-        global_state.Reset();
+        // If the "to" order/rows are identical, compare the "from" order/rows
+        return lhs.second == rhs.second ? lhs.first < rhs.first : lhs.second < rhs.second;
+    });
 
-        // These must be ordered by increasing OrderRowPosition in second pair element (the "to" order)
-        using ElementType = std::pair<OrderRowPosition, OrderRowPosition>;
-        std::sort(loopbacks_temp.begin(), loopbacks_temp.end(), [](const ElementType& lhs, const ElementType& rhs)
+    OrderRowPosition last = -1;
+    for (const auto& [from, to] : loopbacks_temp)
+    {
+        assert(last != to && "More than one oneshot is being written to the same order/row which might cause issues when reading");
+        if (last != to)
         {
-            // If the "to" order/rows are identical, compare the "from" order/rows
-            return lhs.second == rhs.second ? lhs.first < rhs.first : lhs.second < rhs.second;
-        });
+            global_state.SetWritePos(to);
+            global_state.SetOneShot<GlobalOneShotCommon::kLoopback>(from);
+            last = to;
 
-        OrderRowPosition last = -1;
-        for (const auto& [from, to] : loopbacks_temp)
-        {
-            assert(last != to && "More than one oneshot is being written to the same order/row which might cause issues when reading");
-            if (last != to)
+            // Only proceed if using MOD-compatible loops
+            if (!mod_compat_loops)
+                continue;
+
+            // When looping back, notes might carry over and need to be stopped with a Note OFF.
+            // This for-loop checks whether that is true for any channel, and inserts a Note OFF if needed and possible.
+            for (ChannelIndex channel = 0; channel < data.GetNumChannels(); ++channel)
             {
-                global_state.SetWritePos(to);
-                global_state.SetOneShot<GlobalOneShotCommon::kLoopback>(from);
-                last = to;
+                auto& channel_state = channel_states[channel];
+                channel_state.Reset();
+                channel_state.SetReadPos(to);
+                channel_state.SetWritePos(to);
+
+                const auto state_before_loop = channel_state.ReadAt(from);
+                const bool playing_before = channel_state.GetValue<ChannelCommon::kNotePlaying>(state_before_loop);
+                if (playing_before)
+                {
+                    // A note was playing just before looping back
+                    const auto current_row = channel_state.GetImpulse<ChannelCommon::kNoteSlot>();
+                    if (!current_row.has_value() || NoteIsEmpty(current_row.value()))
+                    {
+                        // There's an empty slot on this row
+                        const bool playing_now = channel_state.Get<ChannelCommon::kNotePlaying>();
+                        if (playing_now)
+                        {
+                            // In Deflemask, a note would be playing on this row the first time through, but when looping back
+                            // to this row, it would act as if there's a Note OFF here. Protracker doesn't do this.
+                            // An extra "loopback order" would be needed to emulate this behavior in Protracker.
+                            // For now, do nothing and just emit a warning.
+                            return_val |= 2; // Warning about loopback inaccuracy
+                        }
+                        else
+                        {
+                            // Can safely insert a Note OFF in this row to stop notes carrying over from the loop
+                            channel_state.Insert<ChannelCommon::kNoteSlot, true>(NoteTypes::Off{});
+                            gen_data.Get<GenDataEnumCommon::kNoteOffUsed>() = true;
+                        }
+                    }
+                }
             }
         }
     }
 
-    return 0;
+    return return_val;
 }

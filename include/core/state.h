@@ -671,33 +671,6 @@ void ResumeState(TWriter* writer, const TTuple& t)
     ResumeStateHelper<start>(writer, t, std::make_integer_sequence<int, gcem::abs(start) + end>{});
 }
 
-template<typename T>
-struct optional_state_data {};
-
-template<typename... Ts>
-struct optional_state_data<std::tuple<Ts...>>
-{
-    // type is a tuple with each Ts wrapped in std::optional
-    using type = std::tuple<std::optional<Ts>...>;
-};
-
-template<typename... T>
-using optional_state_data_t = typename optional_state_data<T...>::type;
-
-// Compile-time for loop helper
-template<int start, class TWriter, class TTuple, int... Is>
-void InsertStateOptionalHelper(TWriter* writer, const TTuple& t, std::integer_sequence<int, Is...>)
-{
-    ((std::get<Is>(t).has_value() ? writer->template Set<start + Is>(std::get<Is>(t).value()) : void(0)), ...);
-}
-
-// Calls writer->Set() for each element which has a value in the tuple of optionals t
-template<int start, int end, class TWriter, class TTuple>
-void InsertStateOptional(TWriter* writer, const TTuple& t)
-{
-    InsertStateOptionalHelper<start>(writer, t, std::make_integer_sequence<int, gcem::abs(start) + end>{});
-}
-
 } // namespace detail
 
 template<class StateClass>
@@ -717,16 +690,8 @@ public:
     template<int state_data_index> using get_data_t = typename R::template get_data_t<state_data_index>;
     template<int oneshot_data_index> using get_oneshot_data_t = typename R::template get_oneshot_data_t<oneshot_data_index>;
 
-    StateReaderWriter() : R()
-    {
-        next_vals_ = {};
-        has_next_vals_ = false;
-    }
-    StateReaderWriter(State* state) : R(state)
-    {
-        next_vals_ = {};
-        has_next_vals_ = false;
-    }
+    StateReaderWriter() : R() {}
+    StateReaderWriter(State* state) : R(state) {}
     ~StateReaderWriter() = default;
 
     void AssignStateWrite(State* state) { state_write_ = state; R::AssignState(state); }
@@ -734,8 +699,6 @@ public:
 
     void Reset() override
     {
-        next_vals_ = {};
-        has_next_vals_ = false;
         R::Reset();
     }
 
@@ -788,24 +751,6 @@ public:
     {
         get_data_t<state_data_index> val_copy = val;
         Set<state_data_index, ignore_duplicates>(std::move(val_copy));
-    }
-
-    // For non-persistent state values. Next time SetWritePos is called, next_val will automatically be set. TODO: Not needed?
-    template<int state_data_index, bool ignore_duplicates = false>
-    inline void SetSingle(get_data_t<state_data_index>&& val, get_data_t<state_data_index>&& next_val)
-    {
-        std::get<state_data_index + State::kCommonCount>(next_vals_) = std::move(next_val);
-        has_next_vals_ = true;
-        Set<state_data_index, ignore_duplicates>(std::move(val));
-    }
-
-    // For non-persistent state values. Next time SetWritePos is called, next_val will automatically be set. TODO: Not needed?
-    template<int state_data_index, bool ignore_duplicates = false>
-    inline void SetSingle(const get_data_t<state_data_index>& val, const get_data_t<state_data_index>& next_val)
-    {
-        std::get<state_data_index + State::kCommonCount>(next_vals_) = next_val;
-        has_next_vals_ = true;
-        Set<state_data_index, ignore_duplicates>(val);
     }
 
     // Set the specified one-shot data (oneshot_data_index) at the current write position (the end of the vector) to val
@@ -865,6 +810,7 @@ public:
         assert(state_write_);
         auto& vec = state_write_->template Get<state_data_index>();
         const int vec_index = R::cur_indexes_[R::GetIndex(state_data_index)];
+        assert(vec_index >= 0 && "The initial state must be set before reading");
         auto& vec_elem = vec[vec_index];
 
         if (R::cur_pos_ == vec_elem.first)
@@ -898,17 +844,9 @@ public:
     }
 
     // Call this at the start of an inner loop before Set() is called
-    void SetWritePos(OrderRowPosition pos)
+    inline void SetWritePos(OrderRowPosition pos)
     {
         R::cur_pos_ = pos;
-
-        // If SetSingle() was used, the next values are set here
-        if (has_next_vals_)
-        {
-            detail::InsertStateOptional<State::kLowerBound, State::kUpperBound>(this, next_vals_);
-            next_vals_ = {}; // Clear the tuple and reset optionals
-            has_next_vals_ = false;
-        }
     }
 
     // Call this at the start of an inner loop before Set() is called
@@ -920,8 +858,6 @@ public:
 private:
 
     State* state_write_; // The state this reader is writing to
-    detail::optional_state_data_t<StateData> next_vals_;
-    bool has_next_vals_{false};
 };
 
 // Type aliases for convenience

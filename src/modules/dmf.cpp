@@ -992,30 +992,28 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
 
     // Set initial state (global)
     global_state.Reset(); // Just in case
-    global_state.SetWritePos(-1); // Initial state
-    global_state.Set<GlobalCommon::kSpeedA>(m_ModuleInfo.tickTime1); // * timebase?
-    global_state.Set<GlobalCommon::kSpeedB>(m_ModuleInfo.tickTime2); // * timebase?
-    global_state.Set<GlobalCommon::kTempo>(0); // TODO: How should tempo/speed info be stored?
+    global_state.SetInitial<GlobalCommon::kSpeedA>(m_ModuleInfo.tickTime1); // * timebase?
+    global_state.SetInitial<GlobalCommon::kSpeedB>(m_ModuleInfo.tickTime2); // * timebase?
+    global_state.SetInitial<GlobalCommon::kTempo>(0); // TODO: How should tempo/speed info be stored?
 
     // Set initial state (per-channel)
     for (unsigned i = 0; i < channel_states.size(); ++i)
     {
         auto& channel_state = channel_states[i];
         channel_state.Reset(); // Just in case
-        channel_state.SetWritePos(-1); // Initial state
 
-        channel_state.Set<ChannelCommon::kSoundIndex>(current_sound_index[i].second);
-        channel_state.Set<ChannelCommon::kNoteSlot>(NoteTypes::Empty{});
-        channel_state.Set<ChannelCommon::kNotePlaying>(false);
-        channel_state.Set<ChannelCommon::kVolume>(kDMFGameBoyVolumeMax);
-        channel_state.Set<ChannelCommon::kArp>(0);
-        channel_state.Set<ChannelCommon::kPort>({PortamentoStateData::kNone, 0});
-        channel_state.Set<ChannelCommon::kVibrato>(0);
-        channel_state.Set<ChannelCommon::kPort2NoteVolSlide>(0);
-        channel_state.Set<ChannelCommon::kVibratoVolSlide>(0);
-        channel_state.Set<ChannelCommon::kTremolo>(0);
-        channel_state.Set<ChannelCommon::kPanning>(127);
-        channel_state.Set<ChannelCommon::kVolSlide>(0);
+        channel_state.SetInitial<ChannelCommon::kSoundIndex>(current_sound_index[i].second);
+        channel_state.SetInitial<ChannelCommon::kNoteSlot>(NoteTypes::Empty{});
+        channel_state.SetInitial<ChannelCommon::kNotePlaying>(false);
+        channel_state.SetInitial<ChannelCommon::kVolume>(kDMFGameBoyVolumeMax);
+        channel_state.SetInitial<ChannelCommon::kArp>(0);
+        channel_state.SetInitial<ChannelCommon::kPort>({PortamentoStateData::kNone, 0});
+        channel_state.SetInitial<ChannelCommon::kVibrato>(0);
+        channel_state.SetInitial<ChannelCommon::kPort2NoteVolSlide>(0);
+        channel_state.SetInitial<ChannelCommon::kVibratoVolSlide>(0);
+        channel_state.SetInitial<ChannelCommon::kTremolo>(0);
+        channel_state.SetInitial<ChannelCommon::kPanning>(127);
+        channel_state.SetInitial<ChannelCommon::kVolSlide>(0);
     }
 
     // Main loop

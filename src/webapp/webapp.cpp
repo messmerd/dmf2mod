@@ -118,7 +118,7 @@ bool ModuleImport(std::string filename)
     {
         std::cerr << "Error during import:\n";
         std::cerr << "ERROR: Not enough memory.\n";
-        return 1;
+        return true;
     }
 
     G_Module->Import(filename);

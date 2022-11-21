@@ -417,7 +417,7 @@ public:
     virtual void Reset()
     {
         cur_pos_ = 0;
-        cur_indexes_.fill(-1); // ???
+        cur_indexes_.fill(0);
         cur_indexes_oneshot_.fill(0);
         deltas_.fill(false);
         oneshot_deltas_.fill(false);
@@ -722,25 +722,32 @@ public:
         R::Reset();
     }
 
+    // Set the initial state
+    template<int state_data_index>
+    void SetInitial(get_data_t<state_data_index>&& val)
+    {
+        SetWritePos(-1);
+        assert(state_write_);
+        auto& vec = state_write_->template Get<state_data_index>();
+        assert(vec.empty());
+        vec.push_back({R::cur_pos_, std::move(val)});
+    }
+
+    // Set the initial state
+    template<int state_data_index>
+    inline void SetInitial(const get_data_t<state_data_index>& val)
+    {
+        get_data_t<state_data_index> val_copy = val;
+        SetInitial<state_data_index>(std::move(val_copy));
+    }
+
     // Set the specified state data (state_data_index) at the current write position (the end of the vector) to val
     template<int state_data_index, bool ignore_duplicates = false>
     void Set(get_data_t<state_data_index>&& val)
     {
         assert(state_write_);
         auto& vec = state_write_->template Get<state_data_index>();
-
-        // For the 1st time setting this state. TODO: Use SetInitial() for this for greater efficiency?
-        if (vec.empty())
-        {
-            // Add new element
-            vec.push_back({R::cur_pos_, std::move(val)});
-
-            // Adjust current index
-            int& index = R::cur_indexes_[R::GetIndex(state_data_index)]; // Current index within state data for this data type
-            ++index;
-            return;
-        }
-
+        assert(!vec.empty() && "Use SetInitial() to set the initial state before using Set()");
         auto& vec_elem = vec.back(); // Current vec element (always the end when writing)
 
         // There can only be one state data value for a given OrderRowPosition, so we won't always be adding a new element to the vector

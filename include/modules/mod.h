@@ -13,6 +13,7 @@
 #include <string>
 #include <sstream>
 #include <map>
+#include <array>
 
 namespace d2m {
 
@@ -180,8 +181,8 @@ public:
 
 private:
     SoundIndexType<DMF> dmf_sound_index_;
-    SoundIndexType<MOD> mod_sound_indexes_[3]; // Up to 3 MOD samples from one DMF sample
-    unsigned mod_sample_lengths_[3];
+    std::array<SoundIndexType<MOD>, 3> mod_sound_indexes_; // Up to 3 MOD samples from one DMF sample
+    std::array<unsigned, 3> mod_sample_lengths_;
     std::vector<Note> range_start_;
     int num_mod_samples_;
     SampleType sample_type_;

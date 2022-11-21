@@ -145,6 +145,7 @@ void MOD::ConvertFromDMF(const DMF& dmf)
 
     SampleMap sample_map;
     DMFConvertSamples(dmf, sample_map);
+    assert(sample_map.find(SoundIndex<DMF>::None{}) == sample_map.end() || sample_map.at(SoundIndex<DMF>::None{}).GetFirstMODSampleId() == 1);
 
     ///////////////// CONVERT PATTERN DATA
 
@@ -465,11 +466,21 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
                         }
 
                         // Explicitly set the sample if needed
-                        const auto sound_index_before = channel_reader.GetValue<ChannelState<DMF>::kSoundIndex>(state_before_loop);
-                        if (channel_reader.Get<ChannelState<DMF>::kSoundIndex>() != sound_index_before)
+                        const auto dmf_sound_index_before = channel_reader.GetValue<ChannelState<DMF>::kSoundIndex>(state_before_loop);
+                        const NoteSlot dmf_noteslot_before = channel_reader.GetValue<ChannelState<DMF>::kNoteSlot>(state_before_loop);
+                        const auto mod_sound_index_before = NoteHasPitch(dmf_noteslot_before) ? sample_map.at(dmf_sound_index_before).GetMODSampleId(GetNote(dmf_noteslot_before)) : 1;
+
+                        const auto next_note = channel_reader.Find<ChannelState<DMF>::kNoteSlot>([](const NoteSlot& n) { return NoteHasPitch(n); });
+                        if (next_note.has_value())
                         {
-                            set_sample[channel] = true;
-                            // set_sample will be reset to false once a sample change occurs or a note is used after this row
+                            const auto state_at_next_note = channel_reader.ReadAt(next_note.value().first);
+                            const auto dmf_sound_index_at_next_note = channel_reader.GetValue<ChannelState<DMF>::kSoundIndex>(state_at_next_note);
+                            const auto mod_sound_index_at_next_note = sample_map.at(dmf_sound_index_at_next_note).GetMODSampleId(GetNote(next_note.value().second));
+                            if (mod_sound_index_before != mod_sound_index_at_next_note)
+                            {
+                                // Tell DMFConvertNote to explicitly set the sample the next time a note is played
+                                set_sample[channel] = true;
+                            }
                         }
                     }
 
@@ -541,7 +552,7 @@ mod::PriorityEffect MOD::DMFConvertEffects(ChannelStateReader<DMF>& state)
     if (state.GetDelta(ChannelState<DMF>::kVolume))
     {
         VolumeStateData dmf_volume = state.Get<ChannelState<DMF>::kVolume>();
-        uint8_t mod_volume = (uint8_t)std::round(dmf_volume / (double)dmf::kDMFVolumeMax * (double)kVolumeMax); // Convert DMF volume to MOD volume
+        uint8_t mod_volume = (uint8_t)std::round(dmf_volume / (double)dmf::kDMFGameBoyVolumeMax * (double)kVolumeMax); // Convert DMF volume to MOD volume
 
         return { EffectPriorityVolumeChange, { mod::Effects::kSetVolume, mod_volume } };
     }
@@ -583,7 +594,7 @@ Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMappe
                 row_data.note = NoteTypes::Empty{};
                 return row_data;
             }
-            row_data.sample = sample_map.at(SoundIndex<DMF>::None{}).GetFirstMODSampleId(); // Use silent sample // TODO: Could use 1
+            row_data.sample = 1; // Use silent sample (always sample #1 if it is used)
             row_data.note = dmf_note; // Don't need a note for the silent sample to work
             set_sample = false;
             set_vol_if_not = -1; // On sample changes, Protracker resets the volume
@@ -626,9 +637,9 @@ Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMappe
 
                 set_vol_if_not = -1; // On sample changes, Protracker resets the volume
 
-                if (dmf_volume != dmf::kDMFVolumeMax) // Currently, the default volume for all MOD samples is the maximum. TODO: Can optimize
+                if (dmf_volume != dmf::kDMFGameBoyVolumeMax) // Currently, the default volume for all MOD samples is the maximum. TODO: Can optimize
                 {
-                    const uint8_t mod_volume = (uint8_t)std::round(dmf_volume / (double)dmf::kDMFVolumeMax * (double)kVolumeMax); // Convert DMF volume to MOD volume
+                    const uint8_t mod_volume = (uint8_t)std::round(dmf_volume / (double)dmf::kDMFGameBoyVolumeMax * (double)kVolumeMax); // Convert DMF volume to MOD volume
 
                     // If this volume change effect has a higher priority, use it
                     if (mod_effect.first <= EffectPriorityVolumeChange)
@@ -642,7 +653,7 @@ Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMappe
             else if (set_vol_if_not >= 0 && dmf_volume != set_vol_if_not)
             {
                 // Need to explicitly set volume for this note because of channel volume carrying over when looping back
-                const uint8_t mod_volume = (uint8_t)std::round(dmf_volume / (double)dmf::kDMFVolumeMax * (double)kVolumeMax); // Convert DMF volume to MOD volume
+                const uint8_t mod_volume = (uint8_t)std::round(dmf_volume / (double)dmf::kDMFGameBoyVolumeMax * (double)kVolumeMax); // Convert DMF volume to MOD volume
 
                 // If this volume change effect has a higher priority, use it
                 if (mod_effect.first <= EffectPriorityVolumeChange)
@@ -888,12 +899,8 @@ static inline uint8_t GetEffectCode(int effect_code)
 DMFSampleMapper::DMFSampleMapper()
 {
     dmf_sound_index_ = SoundIndex<DMF>::None{};
-    mod_sound_indexes_[0] = 0;
-    mod_sound_indexes_[1] = 0;
-    mod_sound_indexes_[2] = 0;
-    mod_sample_lengths_[0] = 0;
-    mod_sample_lengths_[1] = 0;
-    mod_sample_lengths_[2] = 0;
+    mod_sound_indexes_.fill(0);
+    mod_sample_lengths_.fill(0);
     range_start_.clear();
     num_mod_samples_ = 0;
     sample_type_ = SampleType::kSilence;
@@ -1052,11 +1059,11 @@ SoundIndexType<MOD> DMFSampleMapper::InitSilence()
     sample_type_ = SampleType::kSilence;
     range_start_.clear();
     num_mod_samples_ = 1;
-    mod_sample_lengths_[0] = 8;
+    mod_sample_lengths_ = {8, 0, 0};
     downsampling_needed_ = false;
     mod_octave_shift_ = 0;
     dmf_sound_index_ = SoundIndex<DMF>::None{};
-    mod_sound_indexes_[0] = 1; // Silent sample is always MOD sample #1
+    mod_sound_indexes_ = {1, 0, 0}; // Silent sample is always MOD sample #1
     return 2; // The next available MOD sample id
 }
 
@@ -1130,9 +1137,7 @@ SoundIndexType<MOD> DMFSampleMapper::GetMODSampleId(NoteRange mod_note_range) co
 {
     // Returns the MOD sample id of the given MOD sample in the collection (1st, 2nd, or 3rd)
     const int mod_note_range_int = static_cast<int>(mod_note_range);
-    if (mod_note_range_int + 1 > num_mod_samples_)
-        throw std::range_error("In SampleMapper::GetMODSampleId: The provided MOD note range is invalid for this SampleMapper object.");
-
+    assert(mod_note_range_int + 1 <= num_mod_samples_ && "In SampleMapper::GetMODSampleId: The provided MOD note range is invalid for this SampleMapper object.");
     return mod_sound_indexes_[mod_note_range_int];
 }
 
@@ -1140,9 +1145,7 @@ unsigned DMFSampleMapper::GetMODSampleLength(NoteRange mod_note_range) const
 {
     // Returns the sample length of the given MOD sample in the collection (1st, 2nd, or 3rd)
     const int mod_note_range_int = static_cast<int>(mod_note_range);
-    if (mod_note_range_int + 1 > num_mod_samples_)
-        throw std::range_error("In SampleMapper::GetMODSampleLength: The provided MOD note range is invalid for this SampleMapper object.");
-
+    assert(mod_note_range_int + 1 <= num_mod_samples_ && "In SampleMapper::GetMODSampleLength: The provided MOD note range is invalid for this SampleMapper object.");
     return mod_sample_lengths_[mod_note_range_int];
 }
 

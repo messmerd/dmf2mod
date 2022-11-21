@@ -18,6 +18,7 @@
 #include <memory>
 #include <cstdint>
 #include <type_traits>
+#include <functional>
 #include <cassert>
 
 #include "gcem.hpp"
@@ -628,6 +629,25 @@ public:
     static constexpr get_data_t<state_data_index> GetValue(const StateData& data)
     {
         return std::get<GetIndex(state_data_index)>(data);
+    }
+
+    template<int state_data_index>
+    constexpr auto Find(std::function<bool(const get_data_t<state_data_index>&)> cmp) const -> std::optional<std::pair<OrderRowPosition, get_data_t<state_data_index>>>
+    {
+        const auto& vec = GetVec<state_data_index>();
+        if (vec.empty())
+            return std::nullopt;
+
+        int vec_index = cur_indexes_[GetIndex(state_data_index)];
+        assert(vec_index >= 0 && "The initial state must be set before reading");
+        for (; vec_index < static_cast<int>(vec.size()); ++vec_index)
+        {
+            const auto& elem = vec.at(vec_index);
+            if (cmp(elem.second))
+                return elem;
+        }
+
+        return std::nullopt;
     }
 
 protected:

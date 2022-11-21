@@ -981,6 +981,15 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
     OrderIndex total_gen_data_orders = 0;
     OrderIndex num_orders_skipped = 0; // TODO: May be unnecessary now that there's skipped_orders
 
+    // Sound indexes
+    std::array<std::pair<OrderRowPosition, SoundIndexType<DMF>>, 4> current_sound_index
+    {
+        std::pair{-1, SoundIndex<DMF>::Square{0}},
+        std::pair{-1, SoundIndex<DMF>::Square{0}},
+        std::pair{-1, SoundIndex<DMF>::Wave{0}},
+        std::pair{-1, SoundIndex<DMF>::Noise{0}}
+    };
+
     // Set initial state (global)
     global_state.Reset(); // Just in case
     global_state.SetWritePos(-1); // Initial state
@@ -995,28 +1004,10 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
         channel_state.Reset(); // Just in case
         channel_state.SetWritePos(-1); // Initial state
 
-        SoundIndex<DMF>::type si;
-        switch (i)
-        {
-        case dmf::GameBoyChannel::SQW1:
-        case dmf::GameBoyChannel::SQW2:
-            si = SoundIndex<DMF>::Square{0}; // Default: 12.5% duty cycle
-            break;
-        case dmf::GameBoyChannel::WAVE:
-            si = SoundIndex<DMF>::Wave{0}; // Default: wavetable #0
-            break;
-        case dmf::GameBoyChannel::NOISE:
-            si = SoundIndex<DMF>::Noise{0}; // Placeholder
-            break;
-        default:
-            assert(0);
-            break;
-        }
-
-        channel_state.Set<ChannelCommon::kSoundIndex>(si);
+        channel_state.Set<ChannelCommon::kSoundIndex>(current_sound_index[i].second);
         channel_state.Set<ChannelCommon::kNoteSlot>(NoteTypes::Empty{});
         channel_state.Set<ChannelCommon::kNotePlaying>(false);
-        channel_state.Set<ChannelCommon::kVolume>(15);
+        channel_state.Set<ChannelCommon::kVolume>(kDMFGameBoyVolumeMax);
         channel_state.Set<ChannelCommon::kArp>(0);
         channel_state.Set<ChannelCommon::kPort>({PortamentoStateData::kNone, 0});
         channel_state.Set<ChannelCommon::kVibrato>(0);
@@ -1032,6 +1023,10 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
     {
         global_state.Reset();
         auto& channel_state = channel_states[channel];
+
+        if (channel == dmf::GameBoyChannel::NOISE)
+            continue;
+
         for (OrderIndex order = 0; order < data.GetNumOrders(); ++order)
         {
             // Handle skipped orders for PosJump
@@ -1084,7 +1079,6 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                 // CHANNEL STATE - EFFECTS
                 // TODO: Could this be done during the import step for greater efficiency?
                 bool port2note_used = false;
-                if (channel != dmf::GameBoyChannel::NOISE) // Currently not using per-channel effects on noise channel
                 {
                     // -1 means the port effect wasn't used in this row, else it is the active (left-most) port's effect value.
                     // If the left-most port effect was valueless, it is set to 0 since valueless/0 seem to have the same behavior in Deflemask.
@@ -1103,8 +1097,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
 
                     // Other effects:
                     int16_t arp = -1, vibrato = -1, port2note_volslide = -1, vibrato_volslide = -1, tremolo = -1, panning = -1, volslide = -1, retrigger = -1, note_cut = -1, note_delay = -1;
-
-                    auto sound_index = channel_state.Get<ChannelCommon::kSoundIndex>();
+                    SoundIndexType<DMF> sound_index{SoundIndex<DMF>::None{}};
 
                     // Loop right to left because left-most effects in effects column have priority
                     for (auto iter = std::crbegin(row_data.effect); iter != std::crend(row_data.effect); ++iter)
@@ -1187,8 +1180,10 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                         // DMF-specific effects
 
                         case dmf::Effects::kGameBoySetWave:
-                            if (channel != dmf::GameBoyChannel::WAVE || effect_value < 0 || effect_value >= GetTotalWavetables())
+                            if (channel != dmf::GameBoyChannel::WAVE || effect_value < 0)
                                 break; // TODO: Is this behavior correct?
+                            if (effect_value >= GetTotalWavetables())
+                                break; // TODO: An invalid SetWave parameter exhibits strange behavior in Deflemask
                             sound_index = SoundIndex<DMF>::Wave{effect_value_normal};
                             // TODO: If a sound index is set but a note with it is never played, it should later be removed from the channel state
                             break;
@@ -1272,9 +1267,10 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                     if (note_delay != -1)
                         channel_state.SetOneShot<ChannelOneShotCommon::kNoteDelay>(note_delay);
 
-                    // TODO: This sound index may end up being unused but we have no way of knowing right now.
-                    //       Should compare with sound_indexes_used at the end and remove entries that aren't used?
-                    channel_state.Set<ChannelCommon::kSoundIndex>(sound_index);
+                    if (sound_index.index() != SoundIndex<DMF>::kNone)
+                    {
+                        current_sound_index[channel] = { GetOrderRowPosition(gen_data_order, gen_data_row), sound_index };
+                    }
                 }
 
                 // CHANNEL STATE - NOTES AND SOUND INDEXES
@@ -1288,7 +1284,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                     note_cancelled[channel] = false; // An OFF also "uncancels" notes cancelled by a port2note effect
                     // NOTE: Note OFF does not affect the current note period
                 }
-                else if (NoteHasPitch(note_slot) && channel != dmf::GameBoyChannel::NOISE && !note_cancelled[channel])
+                else if (NoteHasPitch(note_slot) && !note_cancelled[channel])
                 {
                     channel_state.Set<ChannelCommon::kNoteSlot, true>(note_slot);
                     channel_state.Set<ChannelCommon::kNotePlaying>(true);
@@ -1300,10 +1296,17 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                     else
                         target_periods[channel] = GetPeriod(note);
 
-                    const auto& sound_index = channel_state.Get<ChannelCommon::kSoundIndex>();
+                    const auto& sound_index = current_sound_index[channel].second;
 
                     // Mark this square wave or wavetable as used
                     sound_indexes_used.insert(sound_index);
+
+                    // Write the sound index. Might set the order/row write position back a bit
+                    // temporarily, but it will still be guaranteed to write to the end of the
+                    // underlying vector and not mess up the always-increasing position ordering.
+                    channel_state.SetWritePos(current_sound_index[channel].first);
+                    channel_state.Set<ChannelCommon::kSoundIndex>(sound_index);
+                    channel_state.SetWritePos(gen_data_order, gen_data_row);
 
                     // Get lowest/highest notes
                     if (sound_index_note_extremes.count(sound_index) == 0) // 1st time

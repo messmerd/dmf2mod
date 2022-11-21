@@ -72,6 +72,7 @@ namespace dmf {
 inline constexpr int kDMFNoInstrument = -1;
 inline constexpr int kDMFNoVolume = -1;
 inline constexpr int kDMFVolumeMax = 15; /* ??? */
+inline constexpr int kDMFGameBoyVolumeMax = 15;
 inline constexpr int kDMFNoEffectVal = -1;
 
 // Effect codes used by the DMF format:

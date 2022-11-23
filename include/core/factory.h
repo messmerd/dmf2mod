@@ -235,12 +235,12 @@ struct EnableReflection : public detail::EnableReflectionBase
 template<class Derived, class Base>
 struct ReflectionImpl : public Base
 {
-    TypeEnum GetType() const override
+    TypeEnum GetType() const final override
     {
-        static TypeEnum classType = Factory<Base>::template GetEnumFromType<Derived>();
+        static const TypeEnum classType = Factory<Base>::template GetEnumFromType<Derived>();
         return classType;
     }
-    Info<Base> const* GetInfo() const override
+    Info<Base> const* GetInfo() const final override
     {
         return Factory<Base>::GetInfo(GetType());
     }

@@ -576,6 +576,14 @@ Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMappe
 
     Row<MOD> row_data{};
 
+    if (!state.GetDelta(ChannelState<DMF>::kNoteSlot))
+    {
+        // This is actually an Empty note slot
+        row_data.sample = 0; // Keeps previous sample id
+        row_data.note = NoteTypes::Empty{};
+        return row_data;
+    }
+
     NoteSlot dmf_note = state.Get<ChannelState<DMF>::kNoteSlot>();
     switch (dmf_note.index())
     {
@@ -587,13 +595,6 @@ Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMappe
 
         // Convert note - Note OFF
         case NoteTypes::kOff:
-            if (!state.GetDelta(ChannelState<DMF>::kNoteSlot))
-            {
-                // This is actually an Empty note slot
-                row_data.sample = 0; // Keeps previous sample id
-                row_data.note = NoteTypes::Empty{};
-                return row_data;
-            }
             row_data.sample = 1; // Use silent sample (always sample #1 if it is used)
             row_data.note = dmf_note; // Don't need a note for the silent sample to work
             set_sample = false;
@@ -603,14 +604,6 @@ Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMappe
         // Convert note - Note with pitch
         case NoteTypes::kNote:
         {
-            if (!state.GetDelta(ChannelState<DMF>::kNoteSlot))
-            {
-                // This is actually an Empty note slot
-                row_data.sample = 0; // Keeps previous sample id
-                row_data.note = NoteTypes::Empty{};
-                return row_data;
-            }
-
             const SoundIndexType<DMF>& dmf_sound_index = state.Get<ChannelState<DMF>::kSoundIndex>();
             const DMFSampleMapper& sample_mapper = sample_map.at(dmf_sound_index);
 

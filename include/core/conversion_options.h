@@ -9,7 +9,6 @@
 #pragma once
 
 #include "factory.h"
-#include "module.h"
 #include "utils.h"
 #include "options.h"
 

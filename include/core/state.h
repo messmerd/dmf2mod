@@ -444,8 +444,9 @@ public:
     inline constexpr const get_data_t<state_data_index>& Get() const
     {
         const int vec_index = cur_indexes_[GetIndex(state_data_index)];
-        assert(vec_index >= 0 && "The initial state must be set before reading");
-        return GetVec<state_data_index>().at(vec_index).second;
+        const auto& vec = GetVec<state_data_index>();
+        assert(!vec.empty() && "The initial state must be set before reading");
+        return vec.at(vec_index).second;
     }
 
     // Get the specified state data (state_data_index) at the specified read index (vec_index) within the vector
@@ -474,7 +475,6 @@ public:
             return std::nullopt;
 
         const int vec_index = cur_indexes_[GetIndex(state_data_index)];
-        assert(vec_index >= 0 && "The initial state must be set before reading");
         const auto& elem = vec.at(vec_index);
         if (elem.first != cur_pos_)
             return std::nullopt;
@@ -635,11 +635,9 @@ public:
     constexpr auto Find(std::function<bool(const get_data_t<state_data_index>&)> cmp) const -> std::optional<std::pair<OrderRowPosition, get_data_t<state_data_index>>>
     {
         const auto& vec = GetVec<state_data_index>();
-        if (vec.empty())
-            return std::nullopt;
+        assert(!vec.empty() && "The initial state must be set before reading");
 
         int vec_index = cur_indexes_[GetIndex(state_data_index)];
-        assert(vec_index >= 0 && "The initial state must be set before reading");
         for (; vec_index < static_cast<int>(vec.size()); ++vec_index)
         {
             const auto& elem = vec.at(vec_index);
@@ -836,8 +834,8 @@ public:
     {
         assert(state_write_);
         auto& vec = state_write_->template Get<state_data_index>();
+        assert(!vec.empty() && "The initial state must be set before reading");
         const int vec_index = R::cur_indexes_[R::GetIndex(state_data_index)];
-        assert(vec_index >= 0 && "The initial state must be set before reading");
         auto& vec_elem = vec[vec_index];
 
         if (R::cur_pos_ == vec_elem.first)
@@ -901,15 +899,6 @@ struct StateReaders
     GlobalStateReader<ModuleClass> global_reader;
     std::vector<ChannelStateReader<ModuleClass>> channel_readers;
 
-    void SetReadPos(OrderRowPosition pos)
-    {
-        global_reader.SetReadPos(pos);
-        for (auto& temp : channel_readers)
-            temp.SetReadPos(pos);
-    }
-
-    void SetReadPos(OrderIndex order, RowIndex row) { SetReadPos(GetOrderRowPosition(order, row)); }
-
     void Reset()
     {
         global_reader.Reset();
@@ -923,24 +912,6 @@ struct StateReaderWriters
 {
     GlobalStateReaderWriter<ModuleClass> global_reader_writer;
     std::vector<ChannelStateReaderWriter<ModuleClass>> channel_reader_writers;
-
-    void SetReadPos(OrderRowPosition pos)
-    {
-        global_reader_writer.SetReadPos(pos);
-        for (auto& temp : channel_reader_writers)
-            temp.SetReadPos(pos);
-    }
-
-    void SetReadPos(OrderIndex order, RowIndex row) { SetReadPos(GetOrderRowPosition(order, row)); }
-
-    void SetWritePos(OrderRowPosition pos)
-    {
-        global_reader_writer.SetWritePos(pos);
-        for (auto& temp : channel_reader_writers)
-            temp.SetWritePos(pos);
-    }
-
-    void SetWritePos(OrderIndex order, RowIndex row) { SetWritePos(GetOrderRowPosition(order, row)); }
 
     void Reset()
     {

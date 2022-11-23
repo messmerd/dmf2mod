@@ -2,7 +2,7 @@
     generated_data.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Defines ModuleGeneratedData
+    Defines GeneratedData and related class templates
 */
 
 #include "note.h"
@@ -17,10 +17,6 @@
 #include <cassert>
 
 namespace d2m {
-
-// Forward declare
-class ModuleBase;
-
 
 namespace detail {
 
@@ -56,12 +52,12 @@ template<class T> using StateGenData = ModuleState<T>;
 // COMMON GENERATED DATA DEFINITION
 ///////////////////////////////////////////////////////////
 
-template<class TModule>
+template<class T>
 struct GeneratedDataCommonDefinition : public detail::GenDataDefinitionTag
 {
     static constexpr int kCommonCount = 6; // # of variants in GenDataEnumCommon (remember to update this after changing the enum)
     static constexpr int kLowerBound = -kCommonCount;
-    using ModuleClass = TModule;
+    using ModuleClass = T;
 
     enum GenDataEnumCommon
     {
@@ -150,17 +146,33 @@ public:
     template<int gen_data_index>
     void Clear()
     {
-        std::get<gen_data_index + CommonDef::kCommonCount>(data_).reset();
+        auto& data = std::get<gen_data_index + CommonDef::kCommonCount>(data_);
+        if (data.has_value())
+        {
+            data.reset();
+            generated_.reset();
+            status_ = 0;
+        }
     }
 
     // Destroys all generated data
     void ClearAll()
     {
         detail::ClearAllGenData<-CommonDef::kCommonCount, kUpperBound>(this);
+        generated_.reset();
+        status_ = 0;
     }
+
+    bool IsValid() const { return generated_.has_value(); }
+    std::optional<size_t> GetGenerated() const { return generated_; }
+    void SetGenerated(std::optional<size_t> val) { generated_ = val; }
+    size_t GetStatus() const { return status_; }
+    void SetStatus(size_t val) { status_ = val; }
 
 protected:
     GenDataWrapped data_; // Stores all generated data
+    std::optional<size_t> generated_; // The value passed to GenerateDataImpl. Has a value if gen data is valid.
+    size_t status_; // The value returned by GenerateDataImpl. Only valid if IsValid() == true.
 };
 
 ///////////////////////////////////////////////////////////

@@ -34,8 +34,22 @@ public:
     inline const ModuleGlobalData<Derived>& GetGlobalData() const { return GetData().GlobalData(); }
     inline std::shared_ptr<const GeneratedData<Derived>> GetGeneratedData() const { return m_generated_data; }
 
-    const std::string& GetTitle() const override { return GetGlobalData().title; }
-    const std::string& GetAuthor() const override { return GetGlobalData().author; }
+    const std::string& GetTitle() const final override { return GetGlobalData().title; }
+    const std::string& GetAuthor() const final override { return GetGlobalData().author; }
+
+    size_t GenerateData(size_t data_flags = 0) const final override
+    {
+        // If generated data has already been created using the same data_flags, just return that
+        if (m_generated_data->IsValid() && m_generated_data->GetGenerated().value() == data_flags)
+            return m_generated_data->GetStatus();
+
+        // Else, need to generate data
+        m_generated_data->ClearAll();
+        const size_t status = GenerateDataImpl(data_flags);
+        m_generated_data->SetGenerated(data_flags);
+        m_generated_data->SetStatus(status);
+        return status;
+    }
 
 protected:
 
@@ -44,6 +58,9 @@ protected:
     inline ModuleData<Derived>& GetData() { return m_data; }
     inline ModuleGlobalData<Derived>& GetGlobalData() { return GetData().GlobalData(); }
     inline std::shared_ptr<GeneratedData<Derived>> GetGeneratedDataMut() const { return m_generated_data; }
+
+    // dataFlags specifies what data was requested to be generated
+    virtual size_t GenerateDataImpl(size_t data_flags) const = 0;
 
 private:
 

@@ -8,6 +8,8 @@
 #include "module.h"
 #include "utils/utils.h"
 
+#include <cassert>
+
 using namespace d2m;
 
 bool ModuleBase::Import(const std::string& filename)
@@ -62,6 +64,7 @@ ModulePtr ModuleBase::Convert(ModuleType type, const ConversionOptionsPtr& optio
     try
     {
         // Perform the conversion
+        assert(shared_from_this() != nullptr);
         output->ConvertImpl(shared_from_this());
     }
     catch (ModuleException& e)

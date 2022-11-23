@@ -863,7 +863,10 @@ double DMF::GetBPM() const
  * 1:  MOD-compatible portamentos (no port2note auto-off, ...)
  * 2:  MOD-compatible loops (notes, sound index, and channel volume carry over)
  *      Adds a Note OFF to loopback points if needed
- *      Returns 2 flag if an extra "loopback order" would be needed (?)
+ * Return flags:
+ * 0:  Success
+ * 1:  Error
+ * 2:  An extra "loopback order" is needed
  */
 size_t DMF::GenerateDataImpl(size_t data_flags) const
 {
@@ -873,9 +876,6 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
     // Currently can only generate data for the Game Boy system
     if (GetSystem().type != System::Type::GameBoy)
         return 1;
-
-    // Clear all generated data
-    gen_data.ClearAll();
 
     // Initialize state
     auto& state_data = gen_data.GetState().emplace();

@@ -85,12 +85,11 @@ Currently, dmf2mod converts notes, volume changes, initial tempo, and the follow
 - **3xx**  - Portamento to Note (`--port2note`)
 - **4xy**  - Vibrato (`--vib`)
 - **Bxx**  - Position Jump
-- **D00**  - Pattern Break (partial support)
-- **EC00** - Note Cut (partial support)
+- **Dxx**  - Pattern Break
 - **10xx** - Set WAVE
 - **12xx** - Set Duty Cycle
 
-Effects 10xx, 12xx, and EC00 are implemented by changing the sample in MOD rather than as a MOD effect. As such, they do not count towards the 1 effect per channel limit.
+Effects 10xx and 12xx are implemented by changing the sample in MOD rather than as a MOD effect. As such, they do not count towards the 1 effect per channel limit.
 
 SQ1, SQ2, and WAVE channels are supported.
 
@@ -98,7 +97,6 @@ In later updates, I may add:
 
 - Systems besides Game Boy
 - Support for patterns with over 64 rows
-- Full pattern break support (Dxx)
 - More effects
 - Tempo changes?
 - Channel master volume?

@@ -2,16 +2,18 @@
     module.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Defines an interface for modules.
+    Defines an interface for Modules.
     All module classes must inherit ModuleInterface.
 */
 
 #pragma once
 
+#include "module_base.h"
 #include "factory.h"
 #include "conversion_options.h"
 #include "status.h"
 #include "data.h"
+#include "generated_data.h"
 #include "note.h"
 #include "global_options.h"
 
@@ -20,138 +22,54 @@
 
 namespace d2m {
 
-// Forward declares
-class ModuleBase;
-class ConversionOptionsBase;
-
-// Type aliases to make usage easier
-using Module = ModuleBase;
-using ModulePtr = std::shared_ptr<Module>;
-using ConversionOptions = ConversionOptionsBase;
-using ConversionOptionsPtr = std::shared_ptr<ConversionOptions>;
-
-// Specialized Info class for Modules
-template<>
-struct Info<ModuleBase> : public InfoBase
-{
-    std::string friendlyName{};
-    std::string fileExtension{};
-};
-
-
-// Base class for all module types (DMF, MOD, XM, etc.)
-class ModuleBase : public EnableReflection<ModuleBase>, public std::enable_shared_from_this<ModuleBase>
-{
-protected:
-
-    ModuleBase() = default;
-
-    // TODO: Use this
-    enum class ExportState
-    {
-        Empty, Invalid, Ready
-    };
-
-public:
-
-    virtual ~ModuleBase() = default;
-
-    /*
-     * Create and import a new module given a filename. Module type is inferred from the file extension.
-     * Returns pointer to the module or nullptr if a module registration error occurred.
-     */
-    static ModulePtr CreateAndImport(const std::string& filename);
-
-    /*
-     * Import the specified module file
-     * Returns true upon failure
-     */
-    bool Import(const std::string& filename);
-
-    /*
-     * Export module to the specified file
-     * Returns true upon failure
-     */
-    bool Export(const std::string& filename);
-
-    /*
-     * Converts the module to the specified type using the provided conversion options
-     */
-    ModulePtr Convert(ModuleType type, const ConversionOptionsPtr& options);
-
-    /*
-     * Gets the Status object for the last import/export/convert
-     */
-    const Status& GetStatus() const { return m_Status; }
-
-    /*
-     * Convenience wrapper for GetStatus().HandleResults()
-     */
-    bool HandleResults() const { return m_Status.HandleResults(); }
-
-    /*
-     * Get the title of the module
-     */
-    virtual std::string GetTitle() const = 0;
-
-    /*
-     * Get the author of the module
-     */
-    virtual std::string GetAuthor() const = 0;
-
-    ////////////////////////////////////////////////////////
-    // Methods for getting static info about module type  //
-    ////////////////////////////////////////////////////////
-
-protected:
-    // Import() and Export() and Convert() are wrappers for these methods, which must be implemented by a module class:
-
-    virtual void ImportRaw(const std::string& filename) = 0;
-    virtual void ExportRaw(const std::string& filename) = 0;
-    virtual void ConvertRaw(const ModulePtr& input) = 0;
-
-    template<class T, std::enable_if_t<std::is_base_of_v<ModuleBase, T>, bool> = true>
-    std::shared_ptr<T> Cast() const
-    {
-        return std::static_pointer_cast<T>(shared_from_this());
-    }
-
-    ConversionOptionsPtr GetOptions() const { return m_Options; }
-
-    Status m_Status;
-
-private:
-
-    ConversionOptionsPtr m_Options;
-};
-
-
 // All module classes must derive from this using CRTP
-template <class Derived>
+template<class Derived>
 class ModuleInterface : public EnableFactory<Derived, ModuleBase>
 {
-protected:
-
-    ModuleInterface() = default;
-
 public:
 
     virtual ~ModuleInterface() = default;
 
-    inline const ModuleData<Derived>& GetData() const { return m_Data; }
+    inline const ModuleData<Derived>& GetData() const { return m_data; }
     inline const ModuleGlobalData<Derived>& GetGlobalData() const { return GetData().GlobalData(); }
+    inline std::shared_ptr<const GeneratedData<Derived>> GetGeneratedData() const { return m_generated_data; }
 
-    std::string GetTitle() const override { return GetGlobalData().title; }
-    std::string GetAuthor() const override { return GetGlobalData().author; }
+    const std::string& GetTitle() const final override { return GetGlobalData().title; }
+    const std::string& GetAuthor() const final override { return GetGlobalData().author; }
+
+    size_t GenerateData(size_t data_flags = 0) const final override
+    {
+        // If generated data has already been created using the same data_flags, just return that
+        if (m_generated_data->IsValid() && m_generated_data->GetGenerated().value() == data_flags)
+            return m_generated_data->GetStatus();
+
+        // Else, need to generate data
+        m_generated_data->ClearAll();
+        const size_t status = GenerateDataImpl(data_flags);
+        m_generated_data->SetGenerated(data_flags);
+        m_generated_data->SetStatus(status);
+        return status;
+    }
 
 protected:
 
-    inline ModuleData<Derived>& GetData() { return m_Data; }
+    ModuleInterface() : m_generated_data(std::make_shared<GeneratedData<Derived>>()) {}
+
+    inline ModuleData<Derived>& GetData() { return m_data; }
     inline ModuleGlobalData<Derived>& GetGlobalData() { return GetData().GlobalData(); }
+    inline std::shared_ptr<GeneratedData<Derived>> GetGeneratedDataMut() const { return m_generated_data; }
+
+    // dataFlags specifies what data was requested to be generated
+    virtual size_t GenerateDataImpl(size_t data_flags) const = 0;
 
 private:
 
-    ModuleData<Derived> m_Data; // Song information for a particular module file
+    // Song information for a particular module file
+    ModuleData<Derived> m_data;
+
+    // Information about a module file which must be calculated.
+    // Cannot be stored directly because other Modules need to modify its contents without modifying the Module
+    const std::shared_ptr<GeneratedData<Derived>> m_generated_data;
 };
 
 } // namespace d2m

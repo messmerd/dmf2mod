@@ -8,36 +8,16 @@
 #include "module.h"
 #include "utils/utils.h"
 
+#include <cassert>
+
 using namespace d2m;
-
-ModulePtr ModuleBase::CreateAndImport(const std::string& filename)
-{
-    const ModuleType type = Utils::GetTypeFromFilename(filename);
-    if (type == ModuleType::NONE)
-        return nullptr;
-
-    ModulePtr m = Factory<ModuleBase>::Create(type);
-    if (!m)
-        return nullptr;
-
-    try
-    {
-        m->Import(filename);
-    }
-    catch (ModuleException& e)
-    {
-        m->m_Status.AddError(std::move(e));
-    }
-
-    return m;
-}
 
 bool ModuleBase::Import(const std::string& filename)
 {
     m_Status.Reset(Status::Category::Import);
     try
     {
-        ImportRaw(filename);
+        ImportImpl(filename);
         return false;
     }
     catch (ModuleException& e)
@@ -53,7 +33,7 @@ bool ModuleBase::Export(const std::string& filename)
     m_Status.Reset(Status::Category::Export);
     try
     {
-        ExportRaw(filename);
+        ExportImpl(filename);
         return false;
     }
     catch (ModuleException& e)
@@ -84,7 +64,8 @@ ModulePtr ModuleBase::Convert(ModuleType type, const ConversionOptionsPtr& optio
     try
     {
         // Perform the conversion
-        output->ConvertRaw(shared_from_this());
+        assert(shared_from_this() != nullptr);
+        output->ConvertImpl(shared_from_this());
     }
     catch (ModuleException& e)
     {

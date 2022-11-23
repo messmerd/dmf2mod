@@ -18,9 +18,9 @@ void Status::PrintError(bool useStdErr) const
         return;
 
     if (useStdErr)
-        std::cerr << m_Error.second.what() << "\n";
+        std::cerr << m_Error->what() << "\n";
     else
-        std::cout << m_Error.second.what() << "\n";
+        std::cout << m_Error->what() << "\n";
 }
 
 void Status::PrintWarnings(bool useStdErr) const

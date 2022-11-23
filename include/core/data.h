@@ -2,7 +2,7 @@
     data.h
     Written by Dalton Messmer <messmer.dalton@gmail.com>.
 
-    Defines a class for storing and accessing module data (orders, patterns, rows, etc.)
+    Defines a class template for storing and accessing module data (orders, patterns, rows, etc.)
 */
 
 #pragma once
@@ -14,6 +14,11 @@
 #include <type_traits>
 
 namespace d2m {
+
+using OrderIndex = uint16_t;
+using PatternIndex = uint16_t;
+using ChannelIndex = uint8_t;
+using RowIndex = uint16_t;
 
 enum class DataStorageType
 {
@@ -27,16 +32,16 @@ enum class DataStorageType
     Can be customized if a module type has more global information to be stored.
 */
 
-template <DataStorageType DataStorage = DataStorageType::None>
-struct ModuleGlobalDataGeneric
+template<DataStorageType DataStorage = DataStorageType::None>
+struct ModuleGlobalDataDefault
 {
     static constexpr DataStorageType StorageType = DataStorage;
     std::string title;
     std::string author;
 };
 
-template <class ModuleClass>
-struct ModuleGlobalData : public ModuleGlobalDataGeneric<> {};
+template<class ModuleClass>
+struct ModuleGlobalData : public ModuleGlobalDataDefault<> {};
 
 /*
     Different modules have significantly different per-channel row contents, so
@@ -44,13 +49,13 @@ struct ModuleGlobalData : public ModuleGlobalDataGeneric<> {};
     make much sense. Each module should provide their own Row implementation.
 */
 
-struct RowGeneric
+struct RowDefault
 {
     NoteSlot note;
 };
 
-template <class ModuleClass>
-struct Row : public RowGeneric {};
+template<class ModuleClass>
+struct Row : public RowDefault {};
 
 /*
     Some module formats contain additional data for each channel or row.
@@ -58,21 +63,21 @@ struct Row : public RowGeneric {};
     for any module format which requires it.
 */
 
-struct ChannelMetadataGeneric
+struct ChannelMetadataDefault
+{
+    // No defaults at this time
+};
+
+template<class ModuleClass>
+struct ChannelMetadata : public ChannelMetadataDefault {};
+
+struct PatternMetadataDefault
 {
     // No defaults at this time
 };
 
 template <class ModuleClass>
-struct ChannelMetadata : public ChannelMetadataGeneric {};
-
-struct PatternMetadataGeneric
-{
-    // No defaults at this time
-};
-
-template <class ModuleClass>
-struct PatternMetadata : public PatternMetadataGeneric {};
+struct PatternMetadata : public PatternMetadataDefault {};
 
 
 namespace detail
@@ -94,20 +99,20 @@ namespace detail
     class ModuleDataStorageBase
     {
     public:
-        inline unsigned GetNumChannels() const { return m_NumChannels; }
-        inline unsigned GetNumOrders() const { return m_NumOrders; }
-        inline unsigned GetNumRows() const { return m_NumRows; }
+        inline ChannelIndex GetNumChannels() const { return m_NumChannels; }
+        inline OrderIndex GetNumOrders() const { return m_NumOrders; }
+        inline RowIndex GetNumRows() const { return m_NumRows; }
     protected:
         virtual void CleanUpData() = 0;
         virtual void SetPatternMatrix() = 0;
         virtual void SetNumPatterns() = 0;
         virtual void SetPatterns() = 0;
-        unsigned m_NumChannels;
-        unsigned m_NumOrders;    // Total orders (pattern matrix rows)
-        unsigned m_NumRows;      // Rows per pattern
+        ChannelIndex m_NumChannels;
+        OrderIndex m_NumOrders;    // Total orders (pattern matrix rows)
+        RowIndex m_NumRows;      // Rows per pattern
     };
 
-    template <DataStorageType StorageType, class ModuleClass>
+    template<DataStorageType StorageType, class ModuleClass>
     class ModuleDataStorage : public ModuleDataStorageBase
     {
     protected:
@@ -120,7 +125,7 @@ namespace detail
         void SetPatterns() override {}
     };
 
-    template <class ModuleClass>
+    template<class ModuleClass>
     class ModuleDataStorage<DataStorageType::COR, ModuleClass> : public ModuleDataStorageBase
     {
     protected:
@@ -130,10 +135,10 @@ namespace detail
         {
             if (!m_NumPatterns.empty())
             {
-                unsigned channel = 0;
+                ChannelIndex channel = 0;
                 for (const auto& numPatterns : m_NumPatterns)
                 {
-                    for (unsigned patternId = 0; patternId < numPatterns; ++patternId)
+                    for (PatternIndex patternId = 0; patternId < numPatterns; ++patternId)
                     {
                         delete[] m_Patterns[channel][patternId];
                         m_Patterns[channel][patternId] = nullptr;
@@ -153,7 +158,7 @@ namespace detail
         {
             m_PatternMatrix.resize(m_NumChannels);
 
-            for (unsigned channel = 0; channel < m_NumChannels; ++channel)
+            for (ChannelIndex channel = 0; channel < m_NumChannels; ++channel)
             {
                 m_PatternMatrix[channel].resize(m_NumOrders);
             }
@@ -162,7 +167,7 @@ namespace detail
         {
             m_NumPatterns.resize(m_NumChannels);
 
-            for (unsigned channel = 0; channel < m_NumChannels; ++channel)
+            for (ChannelIndex channel = 0; channel < m_NumChannels; ++channel)
             {
                 m_NumPatterns[channel] = *std::max_element(m_PatternMatrix[channel].begin(), m_PatternMatrix[channel].end()) + 1;
             }
@@ -176,12 +181,12 @@ namespace detail
                 m_PatternMetadata.resize(m_NumChannels);
             }
 
-            for (unsigned channel = 0; channel < m_NumChannels; ++channel)
+            for (ChannelIndex channel = 0; channel < m_NumChannels; ++channel)
             {
-                const uint8_t numPatterns = m_NumPatterns[channel];
+                const PatternIndex numPatterns = m_NumPatterns[channel];
                 m_Patterns[channel] = new PatternType[numPatterns];
 
-                for (unsigned patternId = 0; patternId < numPatterns; ++patternId)
+                for (PatternIndex patternId = 0; patternId < numPatterns; ++patternId)
                 {
                     m_Patterns[channel][patternId] = new RowType[m_NumRows]();
                     if constexpr (!std::is_empty_v<PatternMetadataType>)
@@ -197,35 +202,35 @@ namespace detail
         using RowType = Row<ModuleClass>;
         using PatternType = RowType*; // [row]
 
-        using PatternMatrixType = std::vector<std::vector<uint8_t>>; // [channel][order]
-        using NumPatternsType = std::vector<uint8_t>; // [channel]
+        using PatternMatrixType = std::vector<std::vector<PatternIndex>>; // [channel][order]
+        using NumPatternsType = std::vector<PatternIndex>; // [channel]
         using PatternStorageType = std::vector<PatternType*>; // [channel][pattern id]
         using PatternMetadataType = PatternMetadata<ModuleClass>;
         using PatternMetadataStorageType = std::vector<std::vector<PatternMetadataType>>; // [channel][pattern id]
 
-        inline uint8_t GetPatternId(unsigned channel, unsigned order) const { return m_PatternMatrix[channel][order]; }
-        inline void SetPatternId(unsigned channel, unsigned order, uint8_t patternId) { m_PatternMatrix[channel][order] = patternId; }
-        inline uint8_t GetNumPatterns(unsigned channel) const { return m_NumPatterns[channel]; }
-        inline void SetNumPatterns(unsigned channel, uint8_t numPatterns) { m_NumPatterns[channel] = numPatterns; }
-        inline PatternType GetPattern(unsigned channel, unsigned order) const { return m_Patterns[channel][GetPatternId(channel, order)]; }
-        inline void SetPattern(unsigned channel, unsigned order, PatternType&& pattern) { m_Patterns[channel][GetPatternId(channel, order)] = std::move(pattern); } // TODO: Deep copy?
-        inline PatternType GetPatternById(unsigned channel, unsigned patternId) const { return m_Patterns[channel][patternId]; }
-        inline void SetPatternById(unsigned channel, unsigned patternId, PatternType&& pattern) { m_Patterns[channel][patternId] = std::move(pattern); } // TODO: Deep copy?
-        inline const RowType& GetRow(unsigned channel, unsigned order, unsigned row) const { return GetPattern(channel, order)[row]; }
-        inline void SetRow(unsigned channel, unsigned order, unsigned row, const RowType& rowValue) { GetPattern(channel, order)[row] = rowValue; }
-        inline const RowType& GetRowById(unsigned channel, unsigned patternId, unsigned row) const { return GetPatternById(channel, patternId)[row]; }
-        inline void SetRowById(unsigned channel, unsigned patternId, unsigned row, const RowType& rowValue) { GetPatternById(channel, patternId)[row] = rowValue; }
-        inline const PatternMetadataType& GetPatternMetadata(unsigned channel, unsigned patternId) const { return m_PatternMetadata[channel][patternId]; }
-        inline void SetPatternMetadata(unsigned channel, unsigned patternId, const PatternMetadataType& patternMetadata) { m_PatternMetadata[channel][patternId] = patternMetadata; }
+        inline PatternIndex GetPatternId(ChannelIndex channel, OrderIndex order) const { return m_PatternMatrix[channel][order]; }
+        inline void SetPatternId(ChannelIndex channel, OrderIndex order, PatternIndex patternId) { m_PatternMatrix[channel][order] = patternId; }
+        inline PatternIndex GetNumPatterns(ChannelIndex channel) const { return m_NumPatterns[channel]; }
+        inline void SetNumPatterns(ChannelIndex channel, PatternIndex numPatterns) { m_NumPatterns[channel] = numPatterns; }
+        inline PatternType GetPattern(ChannelIndex channel, OrderIndex order) const { return m_Patterns[channel][GetPatternId(channel, order)]; }
+        inline void SetPattern(ChannelIndex channel, OrderIndex order, PatternType&& pattern) { m_Patterns[channel][GetPatternId(channel, order)] = std::move(pattern); } // TODO: Deep copy?
+        inline PatternType GetPatternById(ChannelIndex channel, PatternIndex patternId) const { return m_Patterns[channel][patternId]; }
+        inline void SetPatternById(ChannelIndex channel, PatternIndex patternId, PatternType&& pattern) { m_Patterns[channel][patternId] = std::move(pattern); } // TODO: Deep copy?
+        inline const RowType& GetRow(ChannelIndex channel, OrderIndex order, RowIndex row) const { return GetPattern(channel, order)[row]; }
+        inline void SetRow(ChannelIndex channel, OrderIndex order, RowIndex row, const RowType& rowValue) { GetPattern(channel, order)[row] = rowValue; }
+        inline const RowType& GetRowById(ChannelIndex channel, PatternIndex patternId, RowIndex row) const { return GetPatternById(channel, patternId)[row]; }
+        inline void SetRowById(ChannelIndex channel, PatternIndex patternId, RowIndex row, const RowType& rowValue) { GetPatternById(channel, patternId)[row] = rowValue; }
+        inline const PatternMetadataType& GetPatternMetadata(ChannelIndex channel, PatternIndex patternId) const { return m_PatternMetadata[channel][patternId]; }
+        inline void SetPatternMetadata(ChannelIndex channel, PatternIndex patternId, const PatternMetadataType& patternMetadata) { m_PatternMetadata[channel][patternId] = patternMetadata; }
 
     protected:
-        PatternMatrixType m_PatternMatrix{};  // Stores patterns IDs for each channel and order in the pattern matrix
+        PatternMatrixType m_PatternMatrix{}; // Stores patterns IDs for each channel and order in the pattern matrix
         NumPatternsType m_NumPatterns{}; // Patterns per channel
         PatternStorageType m_Patterns{}; // [channel][pattern id]
         PatternMetadataStorageType m_PatternMetadata{}; // [channel][pattern id]
     };
 
-    template <class ModuleClass>
+    template<class ModuleClass>
     class ModuleDataStorage<DataStorageType::ORC, ModuleClass> : public ModuleDataStorageBase
     {
     protected:
@@ -233,9 +238,9 @@ namespace detail
         ~ModuleDataStorage() { CleanUpData(); }
         void CleanUpData() override
         {
-            for (unsigned patternId = 0; patternId < m_NumPatterns; ++patternId)
+            for (PatternIndex patternId = 0; patternId < m_NumPatterns; ++patternId)
             {
-                for (unsigned row = 0; row < m_NumRows; ++row)
+                for (RowIndex row = 0; row < m_NumRows; ++row)
                 {
                     delete[] m_Patterns[patternId][row];
                     m_Patterns[patternId][row] = nullptr;
@@ -267,10 +272,10 @@ namespace detail
                 m_PatternMetadata.resize(m_NumPatterns);
             }
 
-            for (unsigned patternId = 0; patternId < m_NumPatterns; ++patternId)
+            for (PatternIndex patternId = 0; patternId < m_NumPatterns; ++patternId)
             {
                 m_Patterns[patternId] = new RowType*[m_NumRows];
-                for (unsigned row = 0; row < m_NumRows; ++row)
+                for (RowIndex row = 0; row < m_NumRows; ++row)
                 {
                     m_Patterns[patternId][row] = new RowType[m_NumChannels]();
                 }
@@ -281,29 +286,29 @@ namespace detail
         using RowType = Row<ModuleClass>;
         using PatternType = RowType**; // [row][channel]
 
-        using PatternMatrixType = std::vector<uint8_t>; // [order] (No per-channel patterns)
-        using NumPatternsType = uint8_t; // (No per-channel patterns)
+        using PatternMatrixType = std::vector<PatternIndex>; // [order] (No per-channel patterns)
+        using NumPatternsType = PatternIndex; // (No per-channel patterns)
         using PatternStorageType = std::vector<PatternType>; // [order]
         using PatternMetadataType = PatternMetadata<ModuleClass>;
         using PatternMetadataStorageType = std::vector<PatternMetadataType>; // [pattern id] (No per-channel patterns)
 
-        inline uint8_t GetPatternId(unsigned order) const { return m_PatternMatrix[order]; }
-        inline void SetPatternId(unsigned order, uint8_t patternId) { m_PatternMatrix[order] = patternId; }
-        inline uint8_t GetNumPatterns() const { return m_NumPatterns; }
-        inline void SetNumPatterns(uint8_t numPatterns) { m_NumPatterns = numPatterns; }
-        inline PatternType GetPattern(unsigned order) const { return m_Patterns[GetPatternId(order)]; }
-        inline void SetPattern(unsigned order, PatternType&& pattern) { m_Patterns[GetPatternId(order)] = std::move(pattern); } // TODO: Deep copy?
-        inline PatternType GetPatternById(unsigned patternId) const { return m_Patterns[patternId]; }
-        inline void SetPatternById(unsigned patternId, PatternType&& pattern) { m_Patterns[patternId] = std::move(pattern); } // TODO: Deep copy?
-        inline const RowType& GetRow(unsigned channel, unsigned order, unsigned row) const { return GetPattern(order)[row][channel]; }
-        inline void SetRow(unsigned channel, unsigned order, unsigned row, const RowType& rowValue) { GetPattern(order)[row][channel] = rowValue; }
-        inline const RowType& GetRowById(unsigned channel, unsigned patternId, unsigned row) const { return GetPatternById(patternId)[row][channel]; }
-        inline void SetRowById(unsigned channel, unsigned patternId, unsigned row, const RowType& rowValue) { GetPatternById(patternId)[row][channel] = rowValue; }
-        inline const PatternMetadataType& GetPatternMetadata(unsigned patternId) const { return m_PatternMetadata[patternId]; }
-        inline void SetPatternMetadata(unsigned patternId, const PatternMetadataType& patternMetadata) { m_PatternMetadata[patternId] = patternMetadata; }
+        inline PatternIndex GetPatternId(OrderIndex order) const { return m_PatternMatrix[order]; }
+        inline void SetPatternId(OrderIndex order, PatternIndex patternId) { m_PatternMatrix[order] = patternId; }
+        inline PatternIndex GetNumPatterns() const { return m_NumPatterns; }
+        inline void SetNumPatterns(PatternIndex numPatterns) { m_NumPatterns = numPatterns; }
+        inline PatternType GetPattern(OrderIndex order) const { return m_Patterns[GetPatternId(order)]; }
+        inline void SetPattern(OrderIndex order, PatternType&& pattern) { m_Patterns[GetPatternId(order)] = std::move(pattern); } // TODO: Deep copy?
+        inline PatternType GetPatternById(PatternIndex patternId) const { return m_Patterns[patternId]; }
+        inline void SetPatternById(PatternIndex patternId, PatternType&& pattern) { m_Patterns[patternId] = std::move(pattern); } // TODO: Deep copy?
+        inline const RowType& GetRow(ChannelIndex channel, OrderIndex order, RowIndex row) const { return GetPattern(order)[row][channel]; }
+        inline void SetRow(ChannelIndex channel, OrderIndex order, RowIndex row, const RowType& rowValue) { GetPattern(order)[row][channel] = rowValue; }
+        inline const RowType& GetRowById(ChannelIndex channel, PatternIndex patternId, RowIndex row) const { return GetPatternById(patternId)[row][channel]; }
+        inline void SetRowById(ChannelIndex channel, PatternIndex patternId, RowIndex row, const RowType& rowValue) { GetPatternById(patternId)[row][channel] = rowValue; }
+        inline const PatternMetadataType& GetPatternMetadata(PatternIndex patternId) const { return m_PatternMetadata[patternId]; }
+        inline void SetPatternMetadata(PatternIndex patternId, const PatternMetadataType& patternMetadata) { m_PatternMetadata[patternId] = patternMetadata; }
 
     protected:
-        PatternMatrixType m_PatternMatrix{};  // Stores patterns IDs for each order in the pattern matrix
+        PatternMatrixType m_PatternMatrix{}; // Stores patterns IDs for each order in the pattern matrix
         NumPatternsType m_NumPatterns{}; // Number of patterns
         PatternStorageType m_Patterns{}; // [pattern id]
         PatternMetadataStorageType m_PatternMetadata{}; // [pattern id]
@@ -319,7 +324,7 @@ namespace detail
     orders, patterns, rows, and other information.
 */
 
-template <class ModuleClass>
+template<class ModuleClass>
 class ModuleData : public detail::ModuleDataStorage<ModuleGlobalData<ModuleClass>::StorageType, ModuleClass>
 {
 public:
@@ -337,7 +342,7 @@ public:
     ~ModuleData() { CleanUp(); }
 
     // This is the 1st initialization method to call
-    void AllocatePatternMatrix(unsigned channels, unsigned orders, unsigned rows)
+    void AllocatePatternMatrix(ChannelIndex channels, OrderIndex orders, RowIndex rows)
     {
         Storage::CleanUpData();
 
@@ -389,8 +394,8 @@ public:
 
     /////// GETTERS / SETTERS ///////
 
-    inline const ChannelMetadataType& GetChannelMetadata(unsigned channel) const { return m_ChannelMetadata[channel]; }
-    inline void SetChannelMetadata(unsigned channel, const ChannelMetadataType& channelMetadata) { m_ChannelMetadata[channel] = channelMetadata; }
+    inline const ChannelMetadataType& GetChannelMetadata(ChannelIndex channel) const { return m_ChannelMetadata[channel]; }
+    inline void SetChannelMetadata(ChannelIndex channel, const ChannelMetadataType& channelMetadata) { m_ChannelMetadata[channel] = channelMetadata; }
 
     static inline constexpr DataStorageType GetStorageType() { return StorageType; }
 

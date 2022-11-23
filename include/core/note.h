@@ -31,8 +31,11 @@ enum class NotePitch : uint8_t
 
 namespace NoteTypes
 {
-    enum { EmptyType, NoteType, OffType }; // The order is important
+    enum { kEmpty, kNote, kOff }; // The order is important
+
     struct Empty {};
+    inline constexpr bool operator==(const Empty&, const Empty&) { return true; };
+
     struct alignas(1) Note
     {
         NotePitch pitch : 4;
@@ -71,15 +74,17 @@ namespace NoteTypes
             return this->octave != rhs.octave || this->pitch != rhs.pitch;
         }
     };
+
     struct Off {};
+    inline constexpr bool operator==(const Off&, const Off&) { return true; };
 };
 
 using NoteSlot = std::variant<NoteTypes::Empty, NoteTypes::Note, NoteTypes::Off>;
 using Note = NoteTypes::Note; // For convenience
 
-inline constexpr bool NoteIsEmpty(const NoteSlot& note) { return note.index() == NoteTypes::EmptyType; }
-inline constexpr bool NoteHasPitch(const NoteSlot& note) { return note.index() == NoteTypes::NoteType; }
-inline constexpr bool NoteIsOff(const NoteSlot& note) { return note.index() == NoteTypes::OffType; }
+inline constexpr bool NoteIsEmpty(const NoteSlot& note) { return note.index() == NoteTypes::kEmpty; }
+inline constexpr bool NoteHasPitch(const NoteSlot& note) { return note.index() == NoteTypes::kNote; }
+inline constexpr bool NoteIsOff(const NoteSlot& note) { return note.index() == NoteTypes::kOff; }
 inline constexpr const Note& GetNote(const NoteSlot& note)
 {
     assert(NoteHasPitch(note) && "NoteSlot variant must be using the Note alternative");

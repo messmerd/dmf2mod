@@ -23,22 +23,14 @@ namespace d2m {
 class DMF;
 
 template<>
-struct ModuleGlobalData<DMF> : public ModuleGlobalDataGeneric<DataStorageType::COR> {};
-
-namespace dmf {
-    struct Effect
-    {
-        int16_t code;
-        int16_t value;
-    };
-}
+struct ModuleGlobalData<DMF> : public ModuleGlobalDataDefault<DataStorageType::COR> {};
 
 template<>
 struct Row<DMF>
 {
     NoteSlot note;
     int16_t volume;
-    dmf::Effect effect[4]; // Deflemask allows four effects columns per channel regardless of the system
+    Effect effect[4]; // Deflemask allows four effects columns per channel regardless of the system
     int16_t instrument;
 };
 
@@ -54,44 +46,101 @@ struct PatternMetadata<DMF>
     std::string name;
 };
 
+template<>
+struct SoundIndex<DMF>
+{
+    enum Types { kNone, kSquare, kWave, kNoise /*Other options here*/ };
+
+    using None = std::monostate;
+    struct Square { uint8_t id; operator uint8_t() const { return id; } };
+    struct Wave { uint8_t id; operator uint8_t() const { return id; } };
+    struct Noise { uint8_t id; operator uint8_t() const { return id; } }; // Placeholder
+
+    using type = std::variant<None, Square, Wave, Noise>;
+};
+
+inline constexpr bool operator==(const SoundIndex<DMF>::Square& lhs, const SoundIndex<DMF>::Square& rhs) { return lhs.id == rhs.id; }
+inline constexpr bool operator==(const SoundIndex<DMF>::Wave& lhs, const SoundIndex<DMF>::Wave& rhs) { return lhs.id == rhs.id; }
+inline constexpr bool operator==(const SoundIndex<DMF>::Noise& lhs, const SoundIndex<DMF>::Noise& rhs) { return lhs.id == rhs.id; }
+
 ///////////////////////////////////////////////////////////
 // dmf namespace
 ///////////////////////////////////////////////////////////
 
 namespace dmf {
 
-static const int DMFNoInstrument = -1;
-static const int DMFNoVolume = -1;
-static const int DMFVolumeMax = 15; /* ??? */
+inline constexpr int kDMFNoInstrument = -1;
+inline constexpr int kDMFNoVolume = -1;
+inline constexpr int kDMFVolumeMax = 15; /* ??? */
+inline constexpr int kDMFGameBoyVolumeMax = 15;
+inline constexpr int kDMFNoEffectVal = -1;
 
-// Deflemask effects shared by all systems:
+// Effect codes used by the DMF format:
 namespace EffectCode
 {
     enum
     {
-        NoEffect=-1, NoEffectVal=-1,
-        Arp=0x0, PortUp=0x1, PortDown=0x2, Port2Note=0x3, Vibrato=0x4, Port2NoteVolSlide=0x5, VibratoVolSlide=0x6,
-        Tremolo=0x7, Panning=0x8, SetSpeedVal1=0x9, VolSlide=0xA, PosJump=0xB, Retrig=0xC, PatBreak=0xD,
-        ArpTickSpeed=0xE0, NoteSlideUp=0xE1, NoteSlideDown=0xE2, SetVibratoMode=0xE3, SetFineVibratoDepth=0xE4,
-        SetFinetune=0xE5, SetSamplesBank=0xEB, NoteCut=0xEC, NoteDelay=0xED, SyncSignal=0xEE, SetGlobalFinetune=0xEF,
-        SetSpeedVal2=0xF
+        kNoEffect=-1,
+        kArp                    =0x0,
+        kPortUp                 =0x1,
+        kPortDown               =0x2,
+        kPort2Note              =0x3,
+        kVibrato                =0x4,
+        kPort2NoteVolSlide      =0x5,
+        kVibratoVolSlide        =0x6,
+        kTremolo                =0x7,
+        kPanning                =0x8,
+        kSetSpeedVal1           =0x9,
+        kVolSlide               =0xA,
+        kPosJump                =0xB,
+        kRetrig                 =0xC,
+        kPatBreak               =0xD,
+        kArpTickSpeed           =0xE0,
+        kNoteSlideUp            =0xE1,
+        kNoteSlideDown          =0xE2,
+        kSetVibratoMode         =0xE3,
+        kSetFineVibratoDepth    =0xE4,
+        kSetFinetune            =0xE5,
+        kSetSamplesBank         =0xEB,
+        kNoteCut                =0xEC,
+        kNoteDelay              =0xED,
+        kSyncSignal             =0xEE,
+        kSetGlobalFinetune      =0xEF,
+        kSetSpeedVal2           =0xF,
+
+        // Game Boy exclusive
+        kGameBoySetWave                 =0x10,
+        kGameBoySetNoisePolyCounterMode =0x11,
+        kGameBoySetDutyCycle            =0x12,
+        kGameBoySetSweepTimeShift       =0x13,
+        kGameBoySetSweepDir             =0x14
+
+        // TODO: Add enums for effects exclusive to the rest of Deflemask's systems.
     };
 }
 
-// Deflemask effects exclusive to the Game Boy system:
-namespace GameBoyEffectCode
+// Custom dmf2mod internal effect codes (see effects.h)
+namespace Effects
 {
     enum
     {
-        SetWave=0x10,
-        SetNoisePolyCounterMode=0x11,
-        SetDutyCycle=0x12,
-        SetSweepTimeShift=0x13,
-        SetSweepDir=0x14
+        kArpTickSpeed=1,
+        kNoteSlideUp,
+        kNoteSlideDown,
+        kSetVibratoMode,
+        kSetFineVibratoDepth,
+        kSetFinetune,
+        kSetSamplesBank,
+        kSyncSignal,
+        kSetGlobalFinetune,
+        kGameBoySetWave,
+        kGameBoySetNoisePolyCounterMode,
+        kGameBoySetDutyCycle,
+        kGameBoySetSweepTimeShift,
+        kGameBoySetSweepDir
     };
 }
 
-// To do: Add enums for effects exclusive to the rest of Deflemask's systems.
 
 struct System
 {
@@ -109,8 +158,7 @@ struct System
 
     System() = default;
     System(Type type, uint8_t id, std::string name, uint8_t channels)
-        : type(type), id(id), name(name), channels(channels)
-    {}
+        : type(type), id(id), name(name), channels(channels) {}
 };
 
 struct VisualInfo
@@ -122,8 +170,8 @@ struct VisualInfo
 struct ModuleInfo
 {
     uint8_t timeBase, tickTime1, tickTime2, framesMode, usingCustomHZ, customHZValue1, customHZValue2, customHZValue3;
-    uint32_t totalRowsPerPattern;
-    uint8_t totalRowsInPatternMatrix;
+    uint32_t totalRowsPerPattern; // TODO: Should remove this eventually (duplicate w/ ModuleData)
+    uint8_t totalRowsInPatternMatrix; // (orders) TODO: Should remove this eventually (duplicate w/ ModuleData)
 };
 
 struct FMOps
@@ -284,38 +332,22 @@ public:
     // Factory requires destructor to be public
     ~DMF();
 
-    ////////////
-
     // Returns the initial BPM of the module
     void GetBPM(unsigned& numerator, unsigned& denominator) const;
     double GetBPM() const;
 
-    /*
-     * In spite of what the Deflemask manual says, portamento effects are automatically turned off if they
-     * stay on long enough without a new note being played. These methods help handle those edge cases.
-     */
-    int GetRowsUntilPortUpAutoOff(const NoteSlot& note, int portUpParam) const;
-    static int GetRowsUntilPortUpAutoOff(unsigned ticksPerRowPair, const NoteSlot& note, int portUpParam);
-    int GetRowsUntilPortDownAutoOff(const NoteSlot& note, int portDownParam) const;
-    static int GetRowsUntilPortDownAutoOff(unsigned ticksPerRowPair, const NoteSlot& note, int portDownParam);
-
-    inline unsigned GetTicksPerRowPair() const
-    {
-        return m_ModuleInfo.timeBase * (m_ModuleInfo.tickTime1 + m_ModuleInfo.tickTime2);
-    }
-
     const dmf::System& GetSystem() const { return m_System; }
-    const dmf::VisualInfo& GetVisualInfo() const { return m_VisualInfo; }
-    const dmf::ModuleInfo& GetModuleInfo() const { return m_ModuleInfo; }
 
     uint8_t GetTotalWavetables() const { return m_TotalWavetables; }
-
     uint32_t** GetWavetableValues() const { return m_WavetableValues; }
     uint32_t GetWavetableValue(unsigned wavetable, unsigned index) const { return m_WavetableValues[wavetable][index]; }
+
 private:
-    void ImportRaw(const std::string& filename) override;
-    void ExportRaw(const std::string& filename) override;
-    void ConvertRaw(const ModulePtr& input) override;
+
+    void ImportImpl(const std::string& filename) override;
+    void ExportImpl(const std::string& filename) override;
+    void ConvertImpl(const ModulePtr& input) override;
+    size_t GenerateDataImpl(size_t data_flags) const override;
 
     using Reader = StreamReader<zstr::ifstream, Endianness::Little>;
 

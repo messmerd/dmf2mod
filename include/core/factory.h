@@ -34,8 +34,7 @@ namespace detail {
     template<class T> constexpr bool reflection_enabled_v = std::is_base_of_v<EnableReflectionBase, T>;
 } // namespace detail
 
-
-template <class Base>
+template<class Base>
 class BuilderBase
 {
 public:
@@ -47,7 +46,7 @@ protected:
 };
 
 // Builds an instance of a factory-enabled class; Can specialize this, but it must inherit from BuilderBase and Factory<Base> must have access to its members.
-template <class Derived, class Base>
+template<class Derived, class Base>
 class Builder : public BuilderBase<Base>
 {
     // NOTE: Derived must have a default constructor accessible by this class and also must have a public destructor.
@@ -65,79 +64,90 @@ struct InfoBase
 };
 
 // Static data for a factory-enabled class; Can specialize this, but it must inherit from InfoBase.
-template <class T>
+template<class T>
 struct Info : public InfoBase {};
 
 
-template <class Base>
+template<class Base>
 class Factory
 {
 private:
 
     Factory() = delete;
-    virtual ~Factory() { Clear(); }
+    ~Factory() { Clear(); }
 
     Factory(const Factory&) = delete;
     Factory(Factory&&) = delete;
     Factory& operator=(const Factory&) = delete;
     Factory& operator=(Factory&&) = delete;
 
-    // Declaration. Factories will have to implement their own.
-    static void InitializeImpl();
+    struct InitializeImpl
+    {
+        // Note: Factories will have to implement this.
+        InitializeImpl();
+    };
+
+    /*
+     * Initialize must be called at the start of every public Factory method to
+     * ensure lazy initialization of the Factory whenever it is first used.
+     */
+    static bool Initialize()
+    {
+        if (!m_Initialized)
+        {
+            Clear();
+            // This gets around static initialization ordering issues:
+            [[maybe_unused]] auto init = std::make_unique<InitializeImpl>();
+            m_Initialized = true;
+        }
+        return true;
+    }
 
 public:
 
-    static void Initialize()
-    {
-        if (m_Initialized)
-            return;
-
-        InitializeImpl();
-        m_Initialized = true;
-    }
-
     static std::shared_ptr<Base> Create(TypeEnum classType)
     {
-        if (!m_Initialized)
-            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(Base).name()));
+        [[maybe_unused]] static bool init = Initialize();
         if (m_Builders.find(classType) != m_Builders.end())
             return m_Builders.at(classType)->Build();
-        throw std::runtime_error("Factory is not initialized for TypeEnum '" + std::to_string(static_cast<int>(classType)) + ".");
+        assert(false && "Factory is not initialized for Base.");
         return nullptr;
     }
 
     static Info<Base> const* GetInfo(TypeEnum classType)
     {
-        if (!m_Initialized)
-            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(Base).name()));
+        [[maybe_unused]] static bool init = Initialize();
         if (m_Info.find(classType) != m_Info.end())
             return m_Info.at(classType).get();
-        throw std::runtime_error("Factory is not initialized for TypeEnum '" + std::to_string(static_cast<int>(classType)) + ".");
+        assert(false && "Factory is not initialized for Base.");
         return nullptr;
     }
 
-    template <class Derived, class = std::enable_if_t<detail::factory_enabled_v<Derived>>>
+    template<class Derived, std::enable_if_t<detail::factory_enabled_v<Derived>, bool> = true>
     static std::shared_ptr<Derived> Create()
     {
-        if (!m_Initialized)
-            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(Base).name()));
+        // Initialize() not needed here because GetEnumFromType calls it
         static TypeEnum classType = GetEnumFromType<Derived>();
         return std::static_pointer_cast<Derived>(Create(classType));
     }
 
-    template <class Derived, class = std::enable_if_t<detail::factory_enabled_v<Derived>>>
+    template<class Derived, std::enable_if_t<detail::factory_enabled_v<Derived>, bool> = true>
     static Info<Base> const* GetInfo()
     {
-        if (!m_Initialized)
-            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(Base).name()));
+        // Initialize() not needed here because GetEnumFromType calls it
         static TypeEnum classType = GetEnumFromType<Derived>();
         return GetInfo(classType);
     }
 
-    static const std::map<TypeEnum, std::unique_ptr<const Info<Base>>>& TypeInfo() { return m_Info; }
+    static const std::map<TypeEnum, std::unique_ptr<const Info<Base>>>& TypeInfo()
+    {
+        [[maybe_unused]] static bool init = Initialize();
+        return m_Info;
+    }
 
     static std::vector<TypeEnum> GetInitializedTypes()
     {
+        [[maybe_unused]] static bool init = Initialize();
         std::vector<ModuleType> vec;
         for (const auto& mapPair : m_Builders)
         {
@@ -146,15 +156,15 @@ public:
         return vec;
     }
 
-    template<class Type, class = std::enable_if_t<detail::factory_enabled_v<Type>>>
+    template<class Type, std::enable_if_t<detail::factory_enabled_v<Type>, bool> = true>
     static TypeEnum GetEnumFromType()
     {
-        if (!m_Initialized)
-            throw std::runtime_error("Factory is not initialized for base class: " + std::string(typeid(Base).name()));
+        [[maybe_unused]] static bool init = Initialize();
         const auto& type = std::type_index(typeid(Type));
         if (m_TypeToEnum.find(type) != m_TypeToEnum.end())
             return m_TypeToEnum.at(type);
-        throw std::runtime_error("Factory is not initialized for Type '" + std::string(typeid(Type).name()) + ".");
+        assert(false && "Factory is not initialized for Type.");
+        return TypeInvalid;
     }
 
 private:
@@ -248,7 +258,7 @@ struct ReflectionImpl : public Base
 
 
 // Inherit this class using CRTP to enable factory for any class
-template <class Derived, class Base>
+template<class Derived, class Base>
 struct EnableFactory : public detail::EnableFactoryBase, public std::conditional_t<detail::reflection_enabled_v<Base>, ReflectionImpl<Derived, Base>, Base> // See note above
 {
     static_assert(std::is_base_of_v<InfoBase, Info<Derived>>, "Info<Derived> must inherit from InfoBase");

@@ -43,8 +43,6 @@ static void SetStatusType(bool isError);
 
 int main()
 {
-    Initialize();
-
     // Initialize global options (for web app, user won't provide them)
     GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Force).SetValue(true);
     GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Verbose).SetValue(false);

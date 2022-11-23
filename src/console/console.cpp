@@ -42,8 +42,6 @@ static void PrintHelp(const std::string& executable, ModuleType moduleType);
 
 int main(int argc, char *argv[])
 {
-    Initialize();
-
     auto args = Utils::GetArgsAsVector(argc, argv);
 
     InputOutput io;

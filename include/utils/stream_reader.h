@@ -50,7 +50,7 @@ enum class Endianness { Unspecified, Little, Big };
     Wrapper for std::istream and derived classes which provides
     convenient methods for reading strings and integers
 */
-template <class IStream, Endianness GlobalEndian = Endianness::Unspecified, class = std::enable_if_t<std::is_base_of_v<std::basic_istream<char>, IStream>>>
+template <class IStream, Endianness GlobalEndian = Endianness::Unspecified, std::enable_if_t<std::is_base_of_v<std::basic_istream<char>, IStream>, bool> = true>
 class StreamReader
 {
 private:

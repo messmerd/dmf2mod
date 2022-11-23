@@ -83,7 +83,7 @@ public: // Should this be protected once DMF gets its own DMFException class?
     ModuleException& operator=(ModuleException& other) = default;
 
     // Construct using an enum for an error code
-    template <class T, class = std::enable_if_t<std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>>>
+    template <class T, std::enable_if_t<std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>, bool> = true>
     ModuleException(Category category, T errorCode, const std::string& errorMessage = "")
         : ModuleException(category, static_cast<int>(errorCode), errorMessage) {}
 

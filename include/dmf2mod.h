@@ -11,10 +11,3 @@
 
 #include "dmf.h"
 #include "mod.h"
-
-namespace d2m {
-
-// Call this before using the dmf2mod library
-void Initialize();
-
-} // namespace d2m

@@ -345,22 +345,22 @@ struct ChannelState :
 namespace detail {
 
 // Compile-time for loop helper
-template<int start, class TReader, class TTuple, typename TFunction, int... Is>
-void CopyStateHelper(TReader const* reader, TTuple& t, TFunction f, std::integer_sequence<int, Is...>)
+template<int start, class Reader, class Tuple, typename Function, int... Is>
+void CopyStateHelper(Reader const* reader, Tuple& t, const Function& f, std::integer_sequence<int, Is...>&&)
 {
     (f(std::get<Is>(t), reader->template Get<start + Is>()), ...);
 }
 
 // Function F arguments are: (inner data tuple element reference, inner data)
-template<int start, int end, class TReader, class TTuple, typename TFunction>
-void CopyState(TReader const* reader, TTuple& t, TFunction f)
+template<int start, int end, class Reader, class Tuple, typename Function>
+void CopyState(Reader const* reader, Tuple& t, const Function& f)
 {
     CopyStateHelper<start>(reader, t, f, std::make_integer_sequence<int, gcem::abs(start) + end>{});
 }
 
 // Compile-time for loop helper
 template<int start, bool oneshots, class Reader, typename Function, int... Is>
-void NextStateHelper(Reader const* reader, Function f, std::integer_sequence<int, Is...>)
+void NextStateHelper(Reader const* reader, const Function& f, std::integer_sequence<int, Is...>&&)
 {
     if constexpr (oneshots)
         (f(reader->template GetOneShotVec<start + Is>(), start + Is), ...);
@@ -370,7 +370,7 @@ void NextStateHelper(Reader const* reader, Function f, std::integer_sequence<int
 
 // Function F arguments are: (wrapped state/one-shot data vector, index)
 template<int start, int end, bool oneshots, class Reader, typename Function>
-void NextState(Reader const* reader, Function f)
+void NextState(Reader const* reader, const Function& f)
 {
     NextStateHelper<start, oneshots>(reader, f, std::make_integer_sequence<int, gcem::abs(start) + end>{});
 }
@@ -471,8 +471,7 @@ public:
     inline constexpr auto GetImpulse() const -> std::optional<get_data_t<state_data_index>>
     {
         const auto& vec = GetVec<state_data_index>();
-        if (vec.empty())
-            return std::nullopt;
+        assert(!vec.empty() && "The initial state must be set before reading");
 
         const int vec_index = cur_indexes_[GetIndex(state_data_index)];
         const auto& elem = vec.at(vec_index);
@@ -513,7 +512,7 @@ public:
 
         detail::NextState<State::kLowerBound, State::kUpperBound, false>(this, [&, this](const auto& vec, int state_data_index) constexpr
         {
-            const int vec_size = vec.size();
+            const int vec_size = static_cast<int>(vec.size());
             if (vec_size == 0)
                 return; // No state data for data type state_data_index
 
@@ -535,7 +534,7 @@ public:
 
         detail::NextState<State::kOneShotLowerBound, State::kOneShotUpperBound, true>(this, [&, this](const auto& vec, int oneshot_data_index) constexpr
         {
-            const int vec_size = vec.size();
+            const int vec_size = static_cast<int>(vec.size());
             if (vec_size == 0)
                 return; // No one-shot data for data type oneshot_data_index
 
@@ -676,15 +675,15 @@ template<class T> using ChannelStateReader = StateReader<ChannelState<T>>;
 namespace detail {
 
 // Compile-time for loop helper
-template<int start, class TWriter, class TTuple, int... Is>
-void ResumeStateHelper(TWriter* writer, const TTuple& t, std::integer_sequence<int, Is...>)
+template<int start, class Writer, class Tuple, int... Is>
+void ResumeStateHelper(Writer* writer, const Tuple& t, std::integer_sequence<int, Is...>&&)
 {
     (writer->template Set<start + Is>(std::get<Is>(t)), ...);
 }
 
 // Calls writer->Set() for each element in the tuple t
-template<int start, int end, class TWriter, class TTuple>
-void ResumeState(TWriter* writer, const TTuple& t)
+template<int start, int end, class Writer, class Tuple>
+void ResumeState(Writer* writer, const Tuple& t)
 {
     ResumeStateHelper<start>(writer, t, std::make_integer_sequence<int, gcem::abs(start) + end>{});
 }

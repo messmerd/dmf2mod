@@ -27,6 +27,7 @@
 #include <cmath>
 #include <array>
 #include <unordered_set>
+#include <optional>
 
 using namespace d2m;
 using namespace d2m::dmf;
@@ -941,7 +942,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                 if (target_period < period)
                 {
                     // Target is a higher pitch
-                    const int amount = port.value * ticks[even_odd_row] * 4 / 3.0;
+                    const double amount = port.value * ticks[even_odd_row] * 4 / 3.0;
                     if (std::abs(target_period - period) < amount) // Close enough to target - snap to it
                         return target_period;
                     return period - amount;
@@ -949,7 +950,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                 else
                 {
                     // Target is a lower pitch
-                    const int amount = port.value * ticks[even_odd_row];
+                    const double amount = port.value * ticks[even_odd_row];
                     if (std::abs(target_period - period) < amount) // Close enough to target - snap to it
                         return target_period;
                     return period + amount;
@@ -1078,9 +1079,9 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                 // TODO: Could this be done during the import step for greater efficiency?
                 bool port2note_used = false;
                 {
-                    // -1 means the port effect wasn't used in this row, else it is the active (left-most) port's effect value.
+                    // If these don't have a value, the port effect wasn't used in this row, else it is the active (left-most) port's effect value.
                     // If the left-most port effect was valueless, it is set to 0 since valueless/0 seem to have the same behavior in Deflemask.
-                    int16_t port_up = -1, port_down = -1, port2note = -1;
+                    std::optional<EffectValueXX> port_up, port_down, port2note;
 
                     // Any port effect regardless of value/valueless/priority cancels any active port effect from a previous row.
                     bool prev_port_cancelled = false;
@@ -1094,7 +1095,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                     bool temp_note_cancelled = note_cancelled[channel];
 
                     // Other effects:
-                    int16_t arp = -1, vibrato = -1, port2note_volslide = -1, vibrato_volslide = -1, tremolo = -1, panning = -1, volslide = -1, retrigger = -1, note_cut = -1, note_delay = -1;
+                    std::optional<EffectValueXX> arp, vibrato, port2note_volslide, vibrato_volslide, tremolo, panning, volslide, retrigger, note_cut, note_delay;
                     SoundIndexType<DMF> sound_index{SoundIndex<DMF>::None{}};
 
                     // Loop right to left because left-most effects in effects column have priority
@@ -1205,21 +1206,21 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                         PortamentoStateData temp_port;
 
                         // Set port effects in order of priority (highest to lowest):
-                        if (port2note != -1)
+                        if (port2note)
                         {
                             need_to_set_port = true;
-                            temp_port = { PortamentoStateData::kToNote, static_cast<uint8_t>(port2note) };
+                            temp_port = { PortamentoStateData::kToNote, static_cast<uint8_t>(port2note.value()) };
                             port2note_used = true;
                         }
-                        else if (port_down != -1)
+                        else if (port_down)
                         {
                             need_to_set_port = true;
-                            temp_port = { PortamentoStateData::kDown, static_cast<uint8_t>(port_down) };
+                            temp_port = { PortamentoStateData::kDown, static_cast<uint8_t>(port_down.value()) };
                         }
-                        else if (port_up != -1)
+                        else if (port_up)
                         {
                             need_to_set_port = true;
-                            temp_port = { PortamentoStateData::kUp, static_cast<uint8_t>(port_up) };
+                            temp_port = { PortamentoStateData::kUp, static_cast<uint8_t>(port_up.value()) };
                         }
                         else if (prev_port_cancelled)
                         {
@@ -1244,26 +1245,26 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                     }
 
                     // Set other effects' states (WIP)
-                    if (arp != -1)
-                        channel_state.Set<ChannelCommon::kArp>(arp);
-                    if (vibrato != -1)
-                        channel_state.Set<ChannelCommon::kVibrato>(vibrato);
-                    if (port2note_volslide != -1)
-                        channel_state.Set<ChannelCommon::kPort2NoteVolSlide>(port2note_volslide);
-                    if (vibrato_volslide != -1)
-                        channel_state.Set<ChannelCommon::kVibratoVolSlide>(vibrato_volslide);
-                    if (tremolo != -1)
-                        channel_state.Set<ChannelCommon::kTremolo>(tremolo);
-                    if (panning != -1)
-                        channel_state.Set<ChannelCommon::kPanning>(panning);
-                    if (volslide != -1)
-                        channel_state.Set<ChannelCommon::kVolSlide>(volslide);
-                    if (retrigger != -1)
-                        channel_state.SetOneShot<ChannelOneShotCommon::kRetrigger>(retrigger);
-                    if (note_cut != -1)
-                        channel_state.SetOneShot<ChannelOneShotCommon::kNoteCut>(note_cut);
-                    if (note_delay != -1)
-                        channel_state.SetOneShot<ChannelOneShotCommon::kNoteDelay>(note_delay);
+                    if (arp)
+                        channel_state.Set<ChannelCommon::kArp>(arp.value());
+                    if (vibrato)
+                        channel_state.Set<ChannelCommon::kVibrato>(vibrato.value());
+                    if (port2note_volslide)
+                        channel_state.Set<ChannelCommon::kPort2NoteVolSlide>(port2note_volslide.value());
+                    if (vibrato_volslide)
+                        channel_state.Set<ChannelCommon::kVibratoVolSlide>(vibrato_volslide.value());
+                    if (tremolo)
+                        channel_state.Set<ChannelCommon::kTremolo>(tremolo.value());
+                    if (panning)
+                        channel_state.Set<ChannelCommon::kPanning>(panning.value());
+                    if (volslide)
+                        channel_state.Set<ChannelCommon::kVolSlide>(volslide.value());
+                    if (retrigger)
+                        channel_state.SetOneShot<ChannelOneShotCommon::kRetrigger>(retrigger.value());
+                    if (note_cut)
+                        channel_state.SetOneShot<ChannelOneShotCommon::kNoteCut>(note_cut.value());
+                    if (note_delay)
+                        channel_state.SetOneShot<ChannelOneShotCommon::kNoteDelay>(note_delay.value());
 
                     if (sound_index.index() != SoundIndex<DMF>::kNone)
                     {
@@ -1354,7 +1355,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                     }
                     else if (NoteHasPitch(row_data.note))
                     {
-                        channel_state.Set<ChannelCommon::kVolume>(row_data.volume);
+                        channel_state.Set<ChannelCommon::kVolume>(static_cast<EffectValueXX>(row_data.volume));
                     }
                 }
 
@@ -1368,7 +1369,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                     // If the left-most PosJump or PatBreak is invalid (no value or invalid value),
                     //  every other effect of that type in the row is ignored.
                     // PosJump effects are ignored if a valid and non-ignored PatBreak is present in the row.
-                    int16_t pos_jump = -1, pat_break = -1, speed_a = -1, speed_b = -1, tempo = -1;
+                    std::optional<EffectValueXX> pos_jump, pat_break, speed_a, speed_b, tempo;
                     bool ignore_pos_jump = false, ignore_pat_break = false;
 
                     // Want to check all channels to update the global state for this row
@@ -1377,17 +1378,18 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                         const auto& row_data2 = data.GetRow(channel2, order, row);
                         for (const auto& effect : row_data2.effect)
                         {
+                            //const uint8_t effect_value_normal = effect.value != kEffectValueless ? effect.value : 0; // ???
                             switch (effect.code)
                             {
                                 case Effects::kPosJump:
                                     if (ignore_pos_jump)
                                         break;
-                                    if (pos_jump < 0 && (effect.value < 0 || effect.value >= data.GetNumOrders()))
+                                    if (!pos_jump.has_value() && (effect.value == kEffectValueless || effect.value >= data.GetNumOrders()))
                                     {
                                         ignore_pos_jump = true;
                                         break;
                                     }
-                                    pos_jump = effect.value;
+                                    pos_jump = static_cast<EffectValueXX>(effect.value);
                                     ignore_pos_jump = true;
                                     break;
                                 case Effects::kPatBreak:
@@ -1395,12 +1397,12 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                                         break;
                                     if (order + 1 == data.GetNumOrders())
                                         break; // PatBreak on last order has no effect
-                                    if (pat_break < 0 && (effect.value < 0 || effect.value >= data.GetNumRows()))
+                                    if (!pat_break.has_value() && (effect.value == kEffectValueless || effect.value >= data.GetNumRows()))
                                     {
                                         ignore_pat_break = true;
                                         break;
                                     }
-                                    pat_break = effect.value;
+                                    pat_break = static_cast<EffectValueXX>(effect.value);
                                     ignore_pat_break = true;
                                     break;
                                 case Effects::kSpeedA:
@@ -1424,7 +1426,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                     // If we're on an order that starts on a row > 0 (due to a PatBreak),
                     // and we're at the end the order, and PatBreak/PosJump isn't already used,
                     // then we need to add a PatBreak/PosJump to ensure row_offset extra rows aren't played.
-                    if (row_offset > 0 && pat_break < 0 && pos_jump < 0 && row == data.GetNumRows() - row_offset)
+                    if (row_offset > 0 && !pat_break.has_value() && !pos_jump.has_value() && row == data.GetNumRows() - row_offset)
                     {
                         // If we're on the last order, a PosJump should be used instead
                         if (order + 1 != data.GetNumOrders())
@@ -1435,33 +1437,33 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
 
                     // Set the global state if needed
 
-                    if (speed_a >= 0)
-                        global_state.Set<GlobalCommon::kSpeedA>(speed_a);
-                    if (speed_b >= 0)
-                        global_state.Set<GlobalCommon::kSpeedB>(speed_b);
-                    if (tempo >= 0)
-                        global_state.Set<GlobalCommon::kTempo>(tempo);
+                    if (speed_a)
+                        global_state.Set<GlobalCommon::kSpeedA>(speed_a.value());
+                    if (speed_b)
+                        global_state.Set<GlobalCommon::kSpeedB>(speed_b.value());
+                    if (tempo)
+                        global_state.Set<GlobalCommon::kTempo>(tempo.value());
 
-                    if (pat_break >= 0)
+                    if (pat_break)
                     {
                         // Always 0 b/c we're using row offsets
                         global_state.SetOneShot<GlobalOneShotCommon::kPatBreak>(0);
 
                         // If PatBreak value > 0, rows in gen data will shifted by an offset so that they start on row 0.
                         assert(order < data.GetNumOrders());
-                        starting_row[order + 1] = pat_break;
+                        starting_row[order + 1] = pat_break.value();
 
                         // Any further rows in this order/pattern are skipped because they unreachable.
                         last_row[order] = row + 1;
                         break;
                     }
-                    else if (pos_jump >= 0) // PosJump only takes effect if PatBreak isn't used
+                    else if (pos_jump) // PosJump only takes effect if PatBreak isn't used
                     {
-                        if (pos_jump > order) // If not a loop
+                        if (pos_jump.value() > order) // If not a loop
                         {
                             // In Deflemask, orders skipped by a forward PosJump are unplayable.
                             // For generated data, those orders will be omitted, so no PosJump is needed.
-                            unsigned orders_to_skip = pos_jump - order - 1;
+                            unsigned orders_to_skip = pos_jump.value() - order - 1;
                             num_orders_skipped += orders_to_skip;
                             while (orders_to_skip != 0)
                             {
@@ -1483,15 +1485,15 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                         {
                             // If we attempt to jump back to an order that was skipped,
                             // the next non-skipped order after that is used instead.
-                            while (skipped_orders[pos_jump])
+                            while (skipped_orders[pos_jump.value()])
                             {
-                                ++pos_jump;
-                                assert(pos_jump < data.GetNumOrders());
+                                ++pos_jump.value();
+                                assert(pos_jump.value() < data.GetNumOrders());
                             }
 
                             // TODO: Could two PosJumps go to the same destination, creating situation with two loopback oneshots with the same order/row pos? Currently only allowing one loopback.
-                            loopbacks_temp.push_back({ GetOrderRowPosition(gen_data_order, gen_data_row), GetOrderRowPosition(order_map.at(pos_jump), 0) }); // From/To
-                            global_state.SetOneShot<GlobalOneShotCommon::kPosJump>(order_map.at(pos_jump));
+                            loopbacks_temp.push_back({ GetOrderRowPosition(gen_data_order, gen_data_row), GetOrderRowPosition(order_map.at(pos_jump.value()), 0) }); // From/To
+                            global_state.SetOneShot<GlobalOneShotCommon::kPosJump>(order_map.at(pos_jump.value()));
 
                             // Any further orders or rows in this song are ignored because they unreachable.
                             // Break out of entire nested loop.

@@ -429,7 +429,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
             // Global effects, highest priority first:
 
             if (global_reader.GetOneShotDelta(GlobalState<DMF>::kPatBreak))
-                global_effects.push_back({ EffectPriorityStructureRelated, { Effects::kPatBreak, global_reader.GetOneShot<GlobalState<DMF>::kPatBreak>() } });
+                global_effects.push_back({ EffectPriorityStructureRelated, { Effects::kPatBreak, static_cast<EffectValue>(global_reader.GetOneShot<GlobalState<DMF>::kPatBreak>()) } });
             else if (dmf_num_rows < 64 && dmf_row + 1 == dmf_num_rows)
                 global_effects.push_back({ EffectPriorityStructureRelated, { Effects::kPatBreak, 0 } });  // Use PatBreak to allow patterns under 64 rows
 

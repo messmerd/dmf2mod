@@ -8,6 +8,7 @@
 #pragma once
 
 #include "config_types.h"
+#include "data.h"
 #include "note.h"
 #include "effects.h"
 
@@ -83,8 +84,8 @@ using LoopbackStateData = OrderRowPosition; // Order/Row where the PosJump occur
 using TempoStateData = EffectValueXX;
 using SpeedAStateData = EffectValueXX;
 using SpeedBStateData = EffectValueXX;
-using PatBreakStateData = EffectValueXX;
-using PosJumpStateData = EffectValueXX;
+using PatBreakStateData = RowIndex;
+using PosJumpStateData = OrderIndex;
 
 // Per-channel state data types
 

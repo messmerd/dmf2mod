@@ -5,7 +5,11 @@
     dmf2mod version info
 */
 
-#define DMF2MOD_VERSION_MAJOR 0
-#define DMF2MOD_VERSION_MINOR 1
-#define DMF2MOD_VERSION_PATCH 1
-#define DMF2MOD_VERSION "0.1.1"
+namespace d2m {
+
+inline constexpr int kVersionMajor = 0;
+inline constexpr int kVersionMinor = 1;
+inline constexpr int kVersionPatch = 1;
+inline constexpr char kVersion[] = "0.1.1";
+
+} // namespace d2m

@@ -20,18 +20,18 @@ using namespace d2m;
 
 std::string OptionDefinition::GetDisplayName() const
 {
-    if (!m_Name.empty())
-        return "--" + m_Name;
-    return "-" + std::string(1, m_ShortName);
+    if (!name_.empty())
+        return "--" + name_;
+    return "-" + std::string(1, short_name_);
 }
 
-bool OptionDefinition::IsValid(const value_t& value) const
+bool OptionDefinition::IsValid(const ValueType& value) const
 {
     if (value.index() != GetValueType())
         return false;
     if (!UsesAcceptedValues())
         return true;
-    return m_AcceptedValues.count(value) > 0;
+    return accepted_values_.count(value) > 0;
 }
 
 void OptionDefinition::PrintHelp() const
@@ -50,29 +50,29 @@ void OptionDefinition::PrintHelp() const
         str1 += "--" + GetName();
     }
 
-    const bool useDoubleQuotes = m_AcceptedValuesContainSpaces;
-    const std::string preferredSeparator = GetOptionType() == COMMAND ? " " : "=";
+    const bool use_double_quotes = accepted_values_contain_spaces_;
+    const std::string preferred_separator = GetOptionType() == kCommand ? " " : "=";
 
-    const OptionDefinition::Type optionType = GetValueType();
-    if (UsesAcceptedValues() && optionType != OptionDefinition::BOOL)
+    const OptionDefinition::Type option_type = GetValueType();
+    if (UsesAcceptedValues() && option_type != OptionDefinition::kBool)
     {
-        str1 += preferredSeparator + "[";
+        str1 += preferred_separator + "[";
 
         unsigned i = 0;
         const size_t total = GetAcceptedValuesOrdered().size();
         for (const auto& val : GetAcceptedValuesOrdered())
         {
-            switch (optionType)
+            switch (option_type)
             {
-                case OptionDefinition::INT:
-                    str1 += std::to_string(std::get<OptionDefinition::INT>(val)); break;
-                case OptionDefinition::DOUBLE:
-                    str1 += std::to_string(std::get<OptionDefinition::DOUBLE>(val)); break;
-                case OptionDefinition::STRING:
-                    if (useDoubleQuotes)
-                        str1 += "\"" + std::get<OptionDefinition::STRING>(val) + "\"";
+                case OptionDefinition::kInt:
+                    str1 += std::to_string(std::get<OptionDefinition::kInt>(val)); break;
+                case OptionDefinition::kDouble:
+                    str1 += std::to_string(std::get<OptionDefinition::kDouble>(val)); break;
+                case OptionDefinition::kString:
+                    if (use_double_quotes)
+                        str1 += "\"" + std::get<OptionDefinition::kString>(val) + "\"";
                     else
-                        str1 += std::get<OptionDefinition::STRING>(val);
+                        str1 += std::get<OptionDefinition::kString>(val);
                     break;
                 default:
                     break;
@@ -86,21 +86,21 @@ void OptionDefinition::PrintHelp() const
 
         str1 += "]";
     }
-    else if (!m_CustomAcceptedValuesText.empty()) // If it uses custom accepted values text
+    else if (!custom_accepted_values_text_.empty()) // If it uses custom accepted values text
     {
-        str1 += preferredSeparator;
-        str1 += m_CustomAcceptedValuesText;
+        str1 += preferred_separator;
+        str1 += custom_accepted_values_text_;
     }
     else
     {
-        switch (optionType)
+        switch (option_type)
         {
-            case OptionDefinition::INT:
-            case OptionDefinition::DOUBLE:
-                str1 += preferredSeparator;
+            case OptionDefinition::kInt:
+            case OptionDefinition::kDouble:
+                str1 += preferred_separator;
                 str1 += "<value>"; break;
-            case OptionDefinition::STRING:
-                str1 += preferredSeparator;
+            case OptionDefinition::kString:
+                str1 += preferred_separator;
                 str1 += "\"<value>\""; break;
             default:
                 break;
@@ -108,42 +108,42 @@ void OptionDefinition::PrintHelp() const
     }
 
     std::string str2 = GetDescription() + " ";
-    switch (optionType)
+    switch (option_type)
     {
-        case OptionDefinition::BOOL:
+        case OptionDefinition::kBool:
         {
-            const bool defaultValue = std::get<OptionDefinition::BOOL>(GetDefaultValue());
-            if (defaultValue)
+            const bool default_value = std::get<OptionDefinition::kBool>(GetDefaultValue());
+            if (default_value)
             {
                 //  Only print the default value if it is true
                 str2 += "(Default: true)";
             }
             break;
         }
-        case OptionDefinition::INT:
+        case OptionDefinition::kInt:
         {
             str2 += "(Default: ";
-            str2 += std::to_string(std::get<OptionDefinition::INT>(GetDefaultValue()));
+            str2 += std::to_string(std::get<OptionDefinition::kInt>(GetDefaultValue()));
             str2 += ")";
             break;
         }
-        case OptionDefinition::DOUBLE:
+        case OptionDefinition::kDouble:
         {
             str2 += "(Default: ";
-            str2 += std::to_string(std::get<OptionDefinition::DOUBLE>(GetDefaultValue()));
+            str2 += std::to_string(std::get<OptionDefinition::kDouble>(GetDefaultValue()));
             str2 += ")";
             break;
         }
-        case OptionDefinition::STRING:
+        case OptionDefinition::kString:
         {
-            const std::string defaultValue = std::get<OptionDefinition::STRING>(GetDefaultValue());
-            if (!defaultValue.empty())
+            const std::string default_value = std::get<OptionDefinition::kString>(GetDefaultValue());
+            if (!default_value.empty())
             {
                 str2 += "(Default: ";
-                if (useDoubleQuotes)
-                    str2 += "\"" + defaultValue + "\"";
+                if (use_double_quotes)
+                    str2 += "\"" + default_value + "\"";
                 else
-                    str2 += defaultValue;
+                    str2 += default_value;
                 str2 += ")";
             }
             break;
@@ -159,97 +159,97 @@ void OptionDefinition::PrintHelp() const
 
 OptionDefinitionCollection::OptionDefinitionCollection(const OptionDefinitionCollection& other)
 {
-    m_IdOptionsMap = other.m_IdOptionsMap;
-    for (auto& mapPair : m_IdOptionsMap)
+    id_options_map_ = other.id_options_map_;
+    for (auto& map_pair : id_options_map_)
     {
-        OptionDefinition* moduleOption = &mapPair.second;
+        OptionDefinition* module_option = &map_pair.second;
 
-        const std::string name = moduleOption->GetName();
-        m_NameOptionsMap[name] = moduleOption;
+        const std::string name = module_option->GetName();
+        name_options_map_[name] = module_option;
 
-        const char shortName = moduleOption->GetShortName();
-        m_ShortNameOptionsMap[shortName] = moduleOption;
+        const char short_name = module_option->GetShortName();
+        short_name_options_map_[short_name] = module_option;
     }
 }
 
 OptionDefinitionCollection::OptionDefinitionCollection(const std::initializer_list<OptionDefinition>& options)
 {
     // Initialize collection + mappings
-    m_IdOptionsMap.clear();
-    m_NameOptionsMap.clear();
-    m_ShortNameOptionsMap.clear();
+    id_options_map_.clear();
+    name_options_map_.clear();
+    short_name_options_map_.clear();
     for (auto& option : options)
     {
         // Id mapping
         const int id = option.GetId();
-        assert(m_IdOptionsMap.count(id) == 0 && "OptionDefinitionCollection(...): Duplicate option id found.");
-        m_IdOptionsMap[id] = option; // Uses copy constructor
+        assert(id_options_map_.count(id) == 0 && "OptionDefinitionCollection(...): Duplicate option id found.");
+        id_options_map_[id] = option; // Uses copy constructor
 
         // Name mapping
         if (option.HasName())
         {
             const std::string name = option.GetName();
-            assert(m_NameOptionsMap.count(name) == 0 && "OptionDefinitionCollection(...): Duplicate option name found.");
-            m_NameOptionsMap[name] = &m_IdOptionsMap[id];
+            assert(name_options_map_.count(name) == 0 && "OptionDefinitionCollection(...): Duplicate option name found.");
+            name_options_map_[name] = &id_options_map_[id];
         }
 
         // Short name mapping
         if (option.HasShortName())
         {
-            const char shortName = option.GetShortName();
-            assert(m_ShortNameOptionsMap.count(shortName) == 0 && "OptionDefinitionCollection(...): Duplicate option short name found.");
-            m_ShortNameOptionsMap[shortName] = &m_IdOptionsMap[id];
+            const char short_name = option.GetShortName();
+            assert(short_name_options_map_.count(short_name) == 0 && "OptionDefinitionCollection(...): Duplicate option short name found.");
+            short_name_options_map_[short_name] = &id_options_map_[id];
         }
     }
 }
 
 size_t OptionDefinitionCollection::Count() const
 {
-    return m_IdOptionsMap.size();
+    return id_options_map_.size();
 }
 
 const OptionDefinition* OptionDefinitionCollection::FindById(int id) const
 {
-    if (m_IdOptionsMap.count(id) == 0)
+    if (id_options_map_.count(id) == 0)
         return nullptr;
-    return &m_IdOptionsMap.at(id);
+    return &id_options_map_.at(id);
 }
 
 const OptionDefinition* OptionDefinitionCollection::FindByName(const std::string& name) const
 {
-    if (m_NameOptionsMap.count(name) == 0)
+    if (name_options_map_.count(name) == 0)
         return nullptr;
-    return m_NameOptionsMap.at(name);
+    return name_options_map_.at(name);
 }
 
-const OptionDefinition* OptionDefinitionCollection::FindByShortName(char shortName) const
+const OptionDefinition* OptionDefinitionCollection::FindByShortName(char short_name) const
 {
-    if (m_ShortNameOptionsMap.count(shortName) == 0)
+    if (short_name_options_map_.count(short_name) == 0)
         return nullptr;
-    return m_ShortNameOptionsMap.at(shortName);
+    return short_name_options_map_.at(short_name);
 }
 
 int OptionDefinitionCollection::FindIdByName(const std::string& name) const
 {
     const OptionDefinition* ptr = FindByName(name);
     if (!ptr)
-        return npos;
+        return kNotFound;
     return ptr->GetId();
 }
 
-int OptionDefinitionCollection::FindIdByShortName(char shortName) const
+int OptionDefinitionCollection::FindIdByShortName(char short_name) const
 {
-    const OptionDefinition* ptr = FindByShortName(shortName);
+    const OptionDefinition* ptr = FindByShortName(short_name);
     if (!ptr)
-        return npos;
+        return kNotFound;
     return ptr->GetId();
 }
 
 void OptionDefinitionCollection::PrintHelp() const
 {
-    for (const auto& mapPair : m_IdOptionsMap)
+    for (const auto& map_pair : id_options_map_)
     {
-        const OptionDefinition& definition = mapPair.second;
+        const OptionDefinition& definition = map_pair.second;
         definition.PrintHelp();
     }
 }
@@ -259,68 +259,68 @@ void OptionDefinitionCollection::PrintHelp() const
 Option::Option(OptionDefinitionCollection const* definitions, int id)
 {
     assert(definitions && "Option definition cannot be null.");
-    m_Definitions = definitions;
-    m_Id = id;
-    m_ExplicitlyProvided = false;
+    definitions_ = definitions;
+    id_ = id;
+    explicitly_provided_ = false;
     SetValueToDefault();
 }
 
-Option::Option(OptionDefinitionCollection const* definitions, int id, value_t value)
+Option::Option(OptionDefinitionCollection const* definitions, int id, ValueType value)
 {
     assert(definitions && "Option definition cannot be null.");
-    m_Definitions = definitions;
-    m_Id = id;
-    m_ExplicitlyProvided = false;
+    definitions_ = definitions;
+    id_ = id;
+    explicitly_provided_ = false;
     SetValue(value);
 }
 
-void Option::SetValue(value_t& value)
+void Option::SetValue(ValueType& value)
 {
     assert(GetDefinition()->IsValid(value) && "The value is not a valid type.");
-    m_Value = value;
+    value_ = value;
     if (GetDefinition()->UsesAcceptedValues())
     {
-        const auto& acceptedValues = GetDefinition()->GetAcceptedValues();
-        const int index = acceptedValues.at(m_Value);
-        m_ValueIndex = index;
+        const auto& accepted_values = GetDefinition()->GetAcceptedValues();
+        const int index = accepted_values.at(value_);
+        value_index_ = index;
     }
 }
 
-void Option::SetValue(value_t&& value)
+void Option::SetValue(ValueType&& value)
 {
     assert(GetDefinition()->IsValid(value) && "The value is not a valid type.");
-    m_Value = std::move(value);
+    value_ = std::move(value);
     if (GetDefinition()->UsesAcceptedValues())
     {
-        const auto& acceptedValues = GetDefinition()->GetAcceptedValues();
-        const int index = acceptedValues.at(m_Value);
-        m_ValueIndex = index;
+        const auto& accepted_values = GetDefinition()->GetAcceptedValues();
+        const int index = accepted_values.at(value_);
+        value_index_ = index;
     }
 }
 
 void Option::SetValueToDefault()
 {
     OptionDefinition const* definition = GetDefinition();
-    m_Value = definition->GetDefaultValue();
+    value_ = definition->GetDefaultValue();
     if (GetDefinition()->UsesAcceptedValues())
     {
-        const auto& acceptedValues = GetDefinition()->GetAcceptedValues();
-        const int index = acceptedValues.at(m_Value);
-        m_ValueIndex = index;
+        const auto& accepted_values = GetDefinition()->GetAcceptedValues();
+        const int index = accepted_values.at(value_);
+        value_index_ = index;
     }
 }
 
 OptionDefinition const* Option::GetDefinition() const
 {
-    assert(m_Definitions && "Option definitions were null.");
-    const OptionDefinition* definition = m_Definitions->FindById(m_Id);
+    assert(definitions_ && "Option definitions were null.");
+    const OptionDefinition* definition = definitions_->FindById(id_);
     assert(definition && "Option definition was not found.");
     return definition;
 }
 
 // OptionCollection
 
-OptionCollection::OptionCollection() : m_Definitions(nullptr), m_OptionsMap({}) {}
+OptionCollection::OptionCollection() : definitions_(nullptr), options_map_({}) {}
 
 OptionCollection::OptionCollection(OptionDefinitionCollection const* definitions)
 {
@@ -329,63 +329,63 @@ OptionCollection::OptionCollection(OptionDefinitionCollection const* definitions
 
 void OptionCollection::SetDefinitions(OptionDefinitionCollection const* definitions)
 {
-    m_Definitions = definitions;
+    definitions_ = definitions;
 
     // Create options and set them to their default value
-    m_OptionsMap.clear();
+    options_map_.clear();
     if (definitions) // If no option definitions were given, this will be null
     {
-        for (const auto& mapPair : definitions->GetIdMap())
+        for (const auto& map_pair : definitions->GetIdMap())
         {
-            const int id = mapPair.first;
-            m_OptionsMap.try_emplace(id, definitions, id);
+            const int id = map_pair.first;
+            options_map_.try_emplace(id, definitions, id);
         }
     }
     else
     {
-        // m_Definitions must always point to an OptionDefinitionCollection, even if it is empty. TODO: Not always?
-        m_Definitions = nullptr;
+        // definitions_ must always point to an OptionDefinitionCollection, even if it is empty. TODO: Not always?
+        definitions_ = nullptr;
     }
 }
 
 const Option& OptionCollection::GetOption(std::string name) const
 {
-    const int id = m_Definitions->FindIdByName(name);
-    assert(id != OptionDefinitionCollection::npos && "Option with the given name wasn't found in the collection.");
+    const int id = definitions_->FindIdByName(name);
+    assert(id != OptionDefinitionCollection::kNotFound && "Option with the given name wasn't found in the collection.");
     return GetOption(id);
 }
 
 Option& OptionCollection::GetOption(std::string name)
 {
-    const int id = m_Definitions->FindIdByName(name);
-    assert(id != OptionDefinitionCollection::npos && "Option with the given name wasn't found in the collection.");
+    const int id = definitions_->FindIdByName(name);
+    assert(id != OptionDefinitionCollection::kNotFound && "Option with the given name wasn't found in the collection.");
     return GetOption(id);
 }
 
-const Option& OptionCollection::GetOption(char shortName) const
+const Option& OptionCollection::GetOption(char short_name) const
 {
-    const int id = m_Definitions->FindIdByShortName(shortName);
-    assert(id != OptionDefinitionCollection::npos && "Option with the given short name wasn't found in the collection.");
+    const int id = definitions_->FindIdByShortName(short_name);
+    assert(id != OptionDefinitionCollection::kNotFound && "Option with the given short name wasn't found in the collection.");
     return GetOption(id);
 }
 
-Option& OptionCollection::GetOption(char shortName)
+Option& OptionCollection::GetOption(char short_name)
 {
-    const int id = m_Definitions->FindIdByShortName(shortName);
-    assert(id != OptionDefinitionCollection::npos && "Option with the given short name wasn't found in the collection.");
+    const int id = definitions_->FindIdByShortName(short_name);
+    assert(id != OptionDefinitionCollection::kNotFound && "Option with the given short name wasn't found in the collection.");
     return GetOption(id);
 }
 
 void OptionCollection::SetValuesToDefault()
 {
-    for (auto& mapPair : m_OptionsMap)
+    for (auto& map_pair : options_map_)
     {
-        auto& option = mapPair.second;
+        auto& option = map_pair.second;
         option.SetValueToDefault();
     }
 }
 
-bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnknownArgs)
+bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unknown_args)
 {
     /* 
      * Examples of command-line arguments that can be parsed:
@@ -407,40 +407,40 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
      * are "consumed" and removed from it.
      */
 
-    std::unordered_set<int> optionsParsed;
+    std::unordered_set<int> options_parsed;
 
     // Sets the value of an option given a value string
-    auto SetValue = [this, &optionsParsed](const char* valueStr, const OptionDefinition* optionDef) -> bool
+    auto SetValue = [this, &options_parsed](const char* value_str, const OptionDefinition* option_def) -> bool
     {
-        auto& option = m_OptionsMap[optionDef->GetId()];
+        auto& option = options_map_[option_def->GetId()];
 
-        OptionDefinition::value_t valueTemp;
-        if (ModuleOptionUtils::ConvertToValue(valueStr, optionDef->GetValueType(), valueTemp))
+        OptionDefinition::ValueType value_temp;
+        if (ModuleOptionUtils::ConvertToValue(value_str, option_def->GetValueType(), value_temp))
         {
             return true; // Error occurred
         }
 
-        if (!optionDef->IsValid(valueTemp))
+        if (!option_def->IsValid(value_temp))
         {
-            const std::string optionTypeStr = optionDef->GetOptionType() == OPTION ? "option" : "command";
-            std::cerr << "ERROR: The value \"" << valueStr << "\" is not valid for the " << optionTypeStr << " \"" << optionDef->GetDisplayName() << "\".\n";
+            const std::string option_type_str = option_def->GetOptionType() == kOption ? "option" : "command";
+            std::cerr << "ERROR: The value \"" << value_str << "\" is not valid for the " << option_type_str << " \"" << option_def->GetDisplayName() << "\".\n";
             return true; // The value is not valid for this option definition
         }
 
-        option.SetValue(std::move(valueTemp));
-        option.m_ExplicitlyProvided = true;
-        optionsParsed.insert(optionDef->GetId());
+        option.SetValue(std::move(value_temp));
+        option.explicitly_provided_ = true;
+        options_parsed.insert(option_def->GetId());
         return false;
     };
 
-    const OptionDefinition* handlingOption = nullptr;
+    const OptionDefinition* handling_option = nullptr;
 
     /*
      * If the previous argument is syntactically correct yet unrecognized (maybe it's a module option and
      *  we are reading global options now), the current argument in the following loop may be its value if
      *  the arguments were passed like: "--unrecognized value". Or it may be another option - recognized or not.
     */
-    bool argMightBeValue = false;
+    bool arg_might_be_value = false;
 
     // Main loop
     for (int i = 0; i < static_cast<int>(args.size()); i++)
@@ -454,13 +454,13 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
             continue;
         }
 
-        const OptionDefinition* def = handlingOption;
-        size_t equalsPos = std::string::npos;
+        const OptionDefinition* def = handling_option;
+        size_t equals_pos = std::string::npos;
 
-        const bool thisArgIsValue = handlingOption != nullptr;
-        if (thisArgIsValue)
+        const bool this_arg_is_value = handling_option != nullptr;
+        if (this_arg_is_value)
         {
-            handlingOption = nullptr;
+            handling_option = nullptr;
 
             // Set the value
             if (SetValue(arg.c_str(), def))
@@ -474,10 +474,10 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
 
         if (arg.size() <= 1 || arg[0] != '-')
         {
-            if (argMightBeValue)
+            if (arg_might_be_value)
             {
                 // Hopefully this is just a value from the preceding unrecognized argument
-                argMightBeValue = false;
+                arg_might_be_value = false;
                 continue;
             }
 
@@ -486,15 +486,15 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
             return true;
         }
 
-        const bool usingShortName = arg[1] != '-';
-        if (usingShortName) // -f format argument (short name)
+        const bool using_short_name = arg[1] != '-';
+        if (using_short_name) // -f format argument (short name)
         {
             if (!isalpha(arg[1]))
             {
-                if (argMightBeValue)
+                if (arg_might_be_value)
                 {
                     // Hopefully this is just a value from the preceding unrecognized argument
-                    argMightBeValue = false;
+                    arg_might_be_value = false;
                     continue;
                 }
 
@@ -503,16 +503,16 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
                 return true;
             }
 
-            equalsPos = arg.find_first_of('=');
-            const bool usingEquals = equalsPos != std::string::npos;
-            if (usingEquals) // Using the form: "-f=<value>"
+            equals_pos = arg.find_first_of('=');
+            const bool using_equals = equals_pos != std::string::npos;
+            if (using_equals) // Using the form: "-f=<value>"
             {
-                if (equalsPos != 2)
+                if (equals_pos != 2)
                 {
-                    if (argMightBeValue)
+                    if (arg_might_be_value)
                     {
                         // Hopefully this is just a value from the preceding unrecognized argument
-                        argMightBeValue = false;
+                        arg_might_be_value = false;
                         continue;
                     }
 
@@ -522,19 +522,19 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
                 }
 
                 // At this point, argument is deemed syntactically valid
-                def = m_Definitions->FindByShortName(arg[1]);
+                def = definitions_->FindByShortName(arg[1]);
             }
             else // Using the form: "-f", "-f <value>", or "-abcdef"
             {
-                const bool usingSeveralShortArgs = arg.size() > 2;
-                if (!usingSeveralShortArgs) // Using the form: "-f" or "-f <value>"
+                const bool using_several_short_args = arg.size() > 2;
+                if (!using_several_short_args) // Using the form: "-f" or "-f <value>"
                 {
                     if (!isalpha(arg[1]))
                     {
-                        if (argMightBeValue)
+                        if (arg_might_be_value)
                         {
                             // Hopefully this is just a value from the preceding unrecognized argument
-                            argMightBeValue = false;
+                            arg_might_be_value = false;
                             continue;
                         }
 
@@ -544,7 +544,7 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
                     }
 
                     // At this point, argument is deemed syntactically valid
-                    def = m_Definitions->FindByShortName(arg[1]);
+                    def = definitions_->FindByShortName(arg[1]);
                 }
                 else // Using the form: "-abcdef" - this form cannot have a value after it
                 {
@@ -553,10 +553,10 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
                         const char c = arg[j];
                         if (!isalpha(c))
                         {
-                            if (argMightBeValue)
+                            if (arg_might_be_value)
                             {
                                 // Hopefully this is just a value from the preceding unrecognized argument
-                                argMightBeValue = false;
+                                arg_might_be_value = false;
                                 break; // Break out of inner loop, then hit the continue
                             }
 
@@ -565,25 +565,25 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
                             return true;
                         }
 
-                        const OptionDefinition* tempDef = m_Definitions->FindByShortName(c);
+                        const OptionDefinition* temp_def = definitions_->FindByShortName(c);
                         
                         // Skip unrecognized options
-                        if (!tempDef)
+                        if (!temp_def)
                             continue;
 
-                        if (tempDef->GetValueType() != OptionDefinition::BOOL)
+                        if (temp_def->GetValueType() != OptionDefinition::kBool)
                         {
                             // Error: When multiple short flags are strung together, all of them must be boolean-typed options
                             return true;
                         }
 
                         // Set the value
-                        SetValue("1", tempDef);
+                        SetValue("1", temp_def);
 
                         arg.erase(j--, 1); // Remove this flag from argument, since it has been consumed
                     }
 
-                    argMightBeValue = false; // Impossible for next arg to be a value
+                    arg_might_be_value = false; // Impossible for next arg to be a value
 
                     if (arg == "-")
                     {
@@ -600,15 +600,15 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
         }
         else // --foo format argument
         {
-            equalsPos = arg.find_first_of('=');
-            std::string name = arg.substr(2, equalsPos - 2); // From start to '=' or end of string - whichever comes first
-            def = m_Definitions->FindByName(name);
+            equals_pos = arg.find_first_of('=');
+            std::string name = arg.substr(2, equals_pos - 2); // From start to '=' or end of string - whichever comes first
+            def = definitions_->FindByName(name);
         }
 
         if (!def)
         {
             // Syntactically valid argument, yet unknown
-            argMightBeValue = true; // Next arg may be this unrecognized option's value
+            arg_might_be_value = true; // Next arg may be this unrecognized option's value
             continue; // Skip
         }
 
@@ -618,31 +618,31 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
          * This is a recognized option, not the preceding unrecognised option's value.
          * Therefore, the next argument cannot be an unrecognized argument's value:
          */
-        argMightBeValue = false;
+        arg_might_be_value = false;
 
-        if (optionsParsed.count(def->GetId()) > 0)
+        if (options_parsed.count(def->GetId()) > 0)
         {
             // ERROR: Setting the same option twice
-            const std::string optionTypeStr = def->GetOptionType() == OPTION ? "option" : "command";
-            if (usingShortName)
+            const std::string option_type_str = def->GetOptionType() == kOption ? "option" : "command";
+            if (using_short_name)
             {
-                std::cerr << "ERROR: The " << optionTypeStr << " \"-" << def->GetShortName() << "\" is used more than once.\n";
+                std::cerr << "ERROR: The " << option_type_str << " \"-" << def->GetShortName() << "\" is used more than once.\n";
             }
             else
             {
-                std::cerr << "ERROR: The " << optionTypeStr << " \"--" << def->GetName() << "\" is used more than once.\n";
+                std::cerr << "ERROR: The " << option_type_str << " \"--" << def->GetName() << "\" is used more than once.\n";
             }
             
             return true;
         }
 
-        std::string valueStr;
-        if (equalsPos != std::string::npos) // Value is after the '='
+        std::string value_str;
+        if (equals_pos != std::string::npos) // Value is after the '='
         {
-            valueStr = arg.substr(equalsPos + 1);
+            value_str = arg.substr(equals_pos + 1);
 
             // Set the value
-            if (SetValue(valueStr.c_str(), def))
+            if (SetValue(value_str.c_str(), def))
                 return true; // Error occurred
 
             // Erase argument since it has been consumed
@@ -651,10 +651,10 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
         }
         else // No '=' present
         {
-            if (def->GetValueType() != OptionDefinition::BOOL)
+            if (def->GetValueType() != OptionDefinition::kBool)
             {
                 // The next argument will be the value
-                handlingOption = def;
+                handling_option = def;
             }
             else
             {
@@ -671,23 +671,23 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
         }
     }
 
-    if (handlingOption)
+    if (handling_option)
     {
-        const std::string optionTypeStr = handlingOption->GetOptionType() == OPTION ? "option" : "command";
-        std::cerr << "ERROR: The " << optionTypeStr << " \"" << handlingOption->GetDisplayName() << "\" did not provide a value.\n";
+        const std::string option_type_str = handling_option->GetOptionType() == kOption ? "option" : "command";
+        std::cerr << "ERROR: The " << option_type_str << " \"" << handling_option->GetDisplayName() << "\" did not provide a value.\n";
         return true;
     }
 
-    if (!ignoreUnknownArgs && !args.empty())
+    if (!ignore_unknown_args && !args.empty())
     {
-        std::string errorStr = "ERROR: Unknown option(s): ";
+        std::string error_str = "ERROR: Unknown option(s): ";
         for (unsigned i = 0; i < args.size(); i++)
         {
-            errorStr += args[i];
+            error_str += args[i];
             if (i != args.size() - 1)
-                errorStr += ", ";
+                error_str += ", ";
         }
-        std::cerr << errorStr << "\n";
+        std::cerr << error_str << "\n";
         return true;
     }
 
@@ -696,72 +696,72 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignoreUnkn
 
 // ModuleOptionUtils
 
-std::string ModuleOptionUtils::ConvertToString(const value_t& value)
+std::string ModuleOptionUtils::ConvertToString(const ValueType& value)
 {
     const OptionDefinition::Type type = static_cast<OptionDefinition::Type>(value.index());
     switch (type)
     {
-        case OptionDefinition::BOOL:
+        case OptionDefinition::kBool:
             return std::get<bool>(value) ? "true" : "false";
-        case OptionDefinition::INT:
+        case OptionDefinition::kInt:
             return std::to_string(std::get<int>(value));
-        case OptionDefinition::DOUBLE:
+        case OptionDefinition::kDouble:
             return std::to_string(std::get<double>(value));
-        case OptionDefinition::STRING:
+        case OptionDefinition::kString:
             return std::get<std::string>(value);
         default:
             return "ERROR";
     }
 }
 
-bool ModuleOptionUtils::ConvertToValue(const std::string& valueStr, OptionDefinition::Type type, value_t& returnVal)
+bool ModuleOptionUtils::ConvertToValue(const std::string& value_str, OptionDefinition::Type type, ValueType& return_val)
 {
     switch (type)
     {
-        case OptionDefinition::BOOL:
+        case OptionDefinition::kBool:
         {
-            std::string valueStrLower = valueStr;
+            std::string value_str_lower = value_str;
             unsigned i = 0;
-            while (i < valueStrLower.size())
+            while (i < value_str_lower.size())
             {
-                valueStrLower[i] = tolower(valueStrLower[i]);
+                value_str_lower[i] = tolower(value_str_lower[i]);
                 ++i;
             }
 
-            if (valueStrLower == "0")
-                returnVal = false;
-            else if (valueStrLower == "false")
-                returnVal = false;
-            else if (valueStrLower == "1")
-                returnVal = true;
-            else if (valueStrLower == "true")
-                returnVal = true;
+            if (value_str_lower == "0")
+                return_val = false;
+            else if (value_str_lower == "false")
+                return_val = false;
+            else if (value_str_lower == "1")
+                return_val = true;
+            else if (value_str_lower == "true")
+                return_val = true;
             else
             {
                 // Error: Invalid value for boolean-typed option
-                std::cerr << "ERROR: Invalid value \"" << valueStr << "\" for boolean-typed option.\n";
+                std::cerr << "ERROR: Invalid value \"" << value_str << "\" for boolean-typed option.\n";
                 return true;
             }
         } break;
-        case OptionDefinition::INT:
+        case OptionDefinition::kInt:
         {
-            returnVal = atoi(valueStr.c_str());
+            return_val = atoi(value_str.c_str());
         } break;
-        case OptionDefinition::DOUBLE:
+        case OptionDefinition::kDouble:
         {
-            returnVal = atof(valueStr.c_str());
+            return_val = atof(value_str.c_str());
         } break;
-        case OptionDefinition::STRING:
+        case OptionDefinition::kString:
         {
-            returnVal = valueStr;
+            return_val = value_str;
         } break;
     }
 
     return false;
 }
 
-bool ModuleOptionUtils::ConvertToValue(const char* valueStr, OptionDefinition::Type type, value_t& returnVal)
+bool ModuleOptionUtils::ConvertToValue(const char* value_str, OptionDefinition::Type type, ValueType& return_val)
 {
-    std::string valueStrConst(valueStr);
-    return ConvertToValue(valueStrConst, type, returnVal);
+    std::string value_str_const(value_str);
+    return ConvertToValue(value_str_const, type, return_val);
 }

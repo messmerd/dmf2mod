@@ -60,7 +60,7 @@ class Builder : public BuilderBase<Base>
 
 struct InfoBase
 {
-    TypeEnum type = TypeInvalid;
+    ModuleType type = ModuleType::kNone;
 };
 
 // Static data for a factory-enabled class; Can specialize this, but it must inherit from InfoBase.
@@ -93,32 +93,32 @@ private:
      */
     static bool Initialize()
     {
-        if (!m_Initialized)
+        if (!initialized_)
         {
             Clear();
             // This gets around static initialization ordering issues:
             [[maybe_unused]] auto init = std::make_unique<InitializeImpl>();
-            m_Initialized = true;
+            initialized_ = true;
         }
         return true;
     }
 
 public:
 
-    static std::shared_ptr<Base> Create(TypeEnum classType)
+    static std::shared_ptr<Base> Create(ModuleType module_type)
     {
         [[maybe_unused]] static bool init = Initialize();
-        if (m_Builders.find(classType) != m_Builders.end())
-            return m_Builders.at(classType)->Build();
+        if (builders_.find(module_type) != builders_.end())
+            return builders_.at(module_type)->Build();
         assert(false && "Factory is not initialized for Base.");
         return nullptr;
     }
 
-    static Info<Base> const* GetInfo(TypeEnum classType)
+    static Info<Base> const* GetInfo(ModuleType module_type)
     {
         [[maybe_unused]] static bool init = Initialize();
-        if (m_Info.find(classType) != m_Info.end())
-            return m_Info.at(classType).get();
+        if (info_.find(module_type) != info_.end())
+            return info_.at(module_type).get();
         assert(false && "Factory is not initialized for Base.");
         return nullptr;
     }
@@ -127,110 +127,110 @@ public:
     static std::shared_ptr<Derived> Create()
     {
         // Initialize() not needed here because GetEnumFromType calls it
-        static TypeEnum classType = GetEnumFromType<Derived>();
-        return std::static_pointer_cast<Derived>(Create(classType));
+        static ModuleType module_type = GetEnumFromType<Derived>();
+        return std::static_pointer_cast<Derived>(Create(module_type));
     }
 
     template<class Derived, std::enable_if_t<detail::factory_enabled_v<Derived>, bool> = true>
     static Info<Base> const* GetInfo()
     {
         // Initialize() not needed here because GetEnumFromType calls it
-        static TypeEnum classType = GetEnumFromType<Derived>();
-        return GetInfo(classType);
+        static ModuleType module_type = GetEnumFromType<Derived>();
+        return GetInfo(module_type);
     }
 
-    static const std::map<TypeEnum, std::unique_ptr<const Info<Base>>>& TypeInfo()
+    static const std::map<ModuleType, std::unique_ptr<const Info<Base>>>& TypeInfo()
     {
         [[maybe_unused]] static bool init = Initialize();
-        return m_Info;
+        return info_;
     }
 
-    static std::vector<TypeEnum> GetInitializedTypes()
+    static std::vector<ModuleType> GetInitializedTypes()
     {
         [[maybe_unused]] static bool init = Initialize();
         std::vector<ModuleType> vec;
-        for (const auto& mapPair : m_Builders)
+        for (const auto& map_pair : builders_)
         {
-            vec.push_back(mapPair.first);
+            vec.push_back(map_pair.first);
         }
         return vec;
     }
 
     template<class Type, std::enable_if_t<detail::factory_enabled_v<Type>, bool> = true>
-    static TypeEnum GetEnumFromType()
+    static ModuleType GetEnumFromType()
     {
         [[maybe_unused]] static bool init = Initialize();
         const auto& type = std::type_index(typeid(Type));
-        if (m_TypeToEnum.find(type) != m_TypeToEnum.end())
-            return m_TypeToEnum.at(type);
+        if (type_to_enum_.find(type) != type_to_enum_.end())
+            return type_to_enum_.at(type);
         assert(false && "Factory is not initialized for Type.");
-        return TypeInvalid;
+        return ModuleType::kNone;
     }
 
 private:
 
-    template<TypeEnum eT, class T>
+    template<ModuleType module_type, class Type>
     static void Register()
     {
-        static_assert(detail::factory_enabled_v<T>, "Cannot register a class which does not inherit from EnableFactory");
+        static_assert(detail::factory_enabled_v<Type>, "Cannot register a class which does not inherit from EnableFactory");
         static_assert(std::is_base_of_v<InfoBase, Info<Base>>, "Info<Base> must derive from InfoBase");
-        static_assert(std::is_base_of_v<BuilderBase<Base>, Builder<T, Base>>, "Builder<Derived, Base> must derive from BuilderBase<Base>");
+        static_assert(std::is_base_of_v<BuilderBase<Base>, Builder<Type, Base>>, "Builder<Derived, Base> must derive from BuilderBase<Base>");
 
-        m_Builders[eT] = std::make_unique<const Builder<T, Base>>();
+        builders_[module_type] = std::make_unique<const Builder<Type, Base>>();
         auto temp = std::make_unique<Info<Base>>();
-        temp->type = eT;
-        m_Info[eT] = std::move(temp);
-        m_TypeToEnum[std::type_index(typeid(T))] = eT;
+        temp->type = module_type;
+        info_[module_type] = std::move(temp);
+        type_to_enum_[std::type_index(typeid(Type))] = module_type;
     }
 
-    template<class T>
+    template<class Type>
     static void Register(Info<Base>&& info)
     {
-        static_assert(detail::factory_enabled_v<T>, "Cannot register a class which does not inherit from EnableFactory");
+        static_assert(detail::factory_enabled_v<Type>, "Cannot register a class which does not inherit from EnableFactory");
         static_assert(std::is_base_of_v<InfoBase, Info<Base>>, "Info<Base> must derive from InfoBase");
-        static_assert(std::is_base_of_v<BuilderBase<Base>, Builder<T, Base>>, "Builder<Derived, Base> must derive from BuilderBase<Base>");
+        static_assert(std::is_base_of_v<BuilderBase<Base>, Builder<Type, Base>>, "Builder<Derived, Base> must derive from BuilderBase<Base>");
 
-        const TypeEnum eT = info.type;
+        const ModuleType module_type = info.type;
 
-        m_Builders[eT] = std::make_unique<const Builder<T, Base>>();
-        m_Info[eT] = std::make_unique<const Info<Base>>(std::move(info));
-        m_TypeToEnum[std::type_index(typeid(T))] = eT;
+        builders_[module_type] = std::make_unique<const Builder<Type, Base>>();
+        info_[module_type] = std::make_unique<const Info<Base>>(std::move(info));
+        type_to_enum_[std::type_index(typeid(Type))] = module_type;
     }
 
-    template<TypeEnum eT, class T, typename... Args>
-    static inline void Register(Args&&... infoArgs)
+    template<ModuleType module_type, class Type, typename... Args>
+    static inline void Register(Args&&... info_args)
     {
-        Register<T>(Info<Base>{ InfoBase{ eT }, std::forward<Args>(infoArgs)... });
+        Register<Type>(Info<Base>{ InfoBase{ module_type }, std::forward<Args>(info_args)... });
     }
 
     static void Clear()
     {
-        m_Builders.clear();
-        m_Info.clear();
-        m_Initialized = false;
+        builders_.clear();
+        info_.clear();
+        initialized_ = false;
     }
 
 private:
 
-    static std::map<TypeEnum, std::unique_ptr<const BuilderBase<Base>>> m_Builders;
-    static std::map<TypeEnum, std::unique_ptr<const Info<Base>>> m_Info;
-    static std::map<std::type_index, TypeEnum> m_TypeToEnum;
-    static bool m_Initialized;
+    static std::map<ModuleType, std::unique_ptr<const BuilderBase<Base>>> builders_;
+    static std::map<ModuleType, std::unique_ptr<const Info<Base>>> info_;
+    static std::map<std::type_index, ModuleType> type_to_enum_;
+    static bool initialized_;
 };
 
 
 // Initialize static members
-template<class Base> std::map<ModuleType, std::unique_ptr<const BuilderBase<Base>>> Factory<Base>::m_Builders{};
-template<class Base> std::map<ModuleType, std::unique_ptr<const Info<Base>>> Factory<Base>::m_Info{};
-template<class Base> std::map<std::type_index, ModuleType> Factory<Base>::m_TypeToEnum{};
-template<class Base> bool Factory<Base>::m_Initialized = false;
+template<class Base> std::map<ModuleType, std::unique_ptr<const BuilderBase<Base>>> Factory<Base>::builders_{};
+template<class Base> std::map<ModuleType, std::unique_ptr<const Info<Base>>> Factory<Base>::info_{};
+template<class Base> std::map<std::type_index, ModuleType> Factory<Base>::type_to_enum_{};
+template<class Base> bool Factory<Base>::initialized_ = false;
 
 
 // If a base inherits this using CRTP, derived classes will have knowledge about themselves after Factory initialization
 template<class Base>
 struct EnableReflection : public detail::EnableReflectionBase
 {
-    virtual TypeEnum GetType() const = 0;
+    virtual ModuleType GetType() const = 0;
     virtual Info<Base> const* GetInfo() const = 0;
 };
 
@@ -245,10 +245,10 @@ struct EnableReflection : public detail::EnableReflectionBase
 template<class Derived, class Base>
 struct ReflectionImpl : public Base
 {
-    TypeEnum GetType() const final override
+    ModuleType GetType() const final override
     {
-        static const TypeEnum classType = Factory<Base>::template GetEnumFromType<Derived>();
-        return classType;
+        static const ModuleType module_type = Factory<Base>::template GetEnumFromType<Derived>();
+        return module_type;
     }
     Info<Base> const* GetInfo() const final override
     {

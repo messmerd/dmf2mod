@@ -12,11 +12,11 @@
 
 using namespace d2m;
 
-void ConversionOptionsBase::PrintHelp(ModuleType moduleType)
+void ConversionOptionsBase::PrintHelp(ModuleType module_type)
 {
-    const auto& definitions = Factory<ConversionOptionsBase>::GetInfo(moduleType)->optionDefinitions;
+    const auto& definitions = Factory<ConversionOptionsBase>::GetInfo(module_type)->option_definitions;
 
-    std::string name = Factory<Module>::GetInfo(moduleType)->fileExtension;
+    std::string name = Factory<Module>::GetInfo(module_type)->file_extension;
     if (name.empty())
         return;
 

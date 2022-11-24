@@ -17,46 +17,45 @@
 #include <iomanip>
 
 #include "utils.h"
-#include "version.h"
 
 using namespace d2m;
 
 // Used for returning input/output info when parsing command-line arguments
 struct InputOutput
 {
-    std::string InputFile;
-    ModuleType InputType;
-    std::string OutputFile;
-    ModuleType OutputType;
+    std::string input_file;
+    ModuleType input_type;
+    std::string output_file;
+    ModuleType output_type;
 };
 
 enum class OperationType
 {
-    Error,
-    Info,
-    Conversion
+    kError,
+    kInfo,
+    kConversion
 };
 
-static OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutputInfo);
-static void PrintHelp(const std::string& executable, ModuleType moduleType);
+static OperationType ParseArgs(std::vector<std::string>& args, InputOutput& io);
+static void PrintHelp(const std::string& executable, ModuleType module_type);
 
 int main(int argc, char *argv[])
 {
     auto args = Utils::GetArgsAsVector(argc, argv);
 
     InputOutput io;
-    OperationType operationType = ParseArgs(args, io);
-    if (operationType == OperationType::Error)
+    OperationType operation_type = ParseArgs(args, io);
+    if (operation_type == OperationType::kError)
         return 1;
 
     // A help message was printed or some other action that doesn't require conversion
-    if (operationType == OperationType::Info)
+    if (operation_type == OperationType::kInfo)
         return 0;
 
-    ConversionOptionsPtr options = Factory<ConversionOptions>::Create(io.OutputType);
+    ConversionOptionsPtr options = Factory<ConversionOptions>::Create(io.output_type);
     if (!options)
     {
-        std::cerr << "ERROR: Failed to create ConversionOptionsBase-derived object for the module type '" << Utils::GetFileExtension(io.OutputFile) 
+        std::cerr << "ERROR: Failed to create ConversionOptionsBase-derived object for the module type '" << Utils::GetFileExtension(io.output_file) 
             << "'. The module may not be properly registered with dmf2mod.\n";
         return 1;
     }
@@ -81,7 +80,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    ModulePtr input = Factory<ModuleBase>::Create(io.InputType);
+    ModulePtr input = Factory<ModuleBase>::Create(io.input_type);
     if (!input)
     {
         std::cerr << "ERROR: Not enough memory.\n";
@@ -91,14 +90,14 @@ int main(int argc, char *argv[])
     ////////// IMPORT //////////
 
     // Import the input file by inferring module type:
-    input->Import(io.InputFile);
+    input->Import(io.input_file);
     if (input->HandleResults())
         return 1;
 
     ////////// CONVERT //////////
 
     // Convert the input module to the output module type:
-    ModulePtr output = input->Convert(io.OutputType, options);
+    ModulePtr output = input->Convert(io.output_type, options);
     if (!output)
     {
         std::cerr << "ERROR: Not enough memory or input and output types are the same.\n";
@@ -111,138 +110,138 @@ int main(int argc, char *argv[])
     ////////// EXPORT //////////
 
     // Export the converted module to disk:
-    output->Export(io.OutputFile);
+    output->Export(io.output_file);
     if (output->HandleResults())
         return 1;
 
     return 0;
 }
 
-OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutputInfo)
+OperationType ParseArgs(std::vector<std::string>& args, InputOutput& io)
 {
-    inputOutputInfo.InputFile = "";
-    inputOutputInfo.InputType = ModuleType::NONE;
-    inputOutputInfo.OutputFile = "";
-    inputOutputInfo.OutputType = ModuleType::NONE;
+    io.input_file = "";
+    io.input_type = ModuleType::kNone;
+    io.output_file = "";
+    io.output_type = ModuleType::kNone;
 
-    const size_t argCount = args.size();
+    const size_t arg_count = args.size();
 
-    if (argCount == 1)
+    if (arg_count == 1)
     {
-        PrintHelp(args[0], ModuleType::NONE);
-        return OperationType::Info;
+        PrintHelp(args[0], ModuleType::kNone);
+        return OperationType::kInfo;
     }
-    else if (argCount == 2)
+    else if (arg_count == 2)
     {
         if (args[1] == "--help")
         {
-            PrintHelp(args[0], ModuleType::NONE);
-            return OperationType::Info;
+            PrintHelp(args[0], ModuleType::kNone);
+            return OperationType::kInfo;
         }
         else if (args[1] == "-v" || args[1] == "--version")
         {
-            std::cout << DMF2MOD_VERSION << "\n";
-            return OperationType::Info;
+            std::cout << kVersion << "\n";
+            return OperationType::kInfo;
         }
         else
         {
             std::cerr << "ERROR: Could not parse command-line arguments.\n";
-            return OperationType::Error;
+            return OperationType::kError;
         }
     }
-    else if (argCount >= 3) // 3 is the minimum needed to perform a conversion
+    else if (arg_count >= 3) // 3 is the minimum needed to perform a conversion
     {
         if (args[1] == "--help")
         {
             PrintHelp(args[0], Utils::GetTypeFromFileExtension(args[2]));
-            return OperationType::Info;
+            return OperationType::kInfo;
         }
 
-        std::vector<std::string> argsOnlyFlags(args.begin() + 3, args.end());
+        std::vector<std::string> args_only_flags(args.begin() + 3, args.end());
 
-        if (GlobalOptions::Get().ParseArgs(argsOnlyFlags, true))
-            return OperationType::Error;
+        if (GlobalOptions::Get().ParseArgs(args_only_flags, true))
+            return OperationType::kError;
 
-        if (GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Verbose).GetValue<bool>()) // If --verbose=true
+        if (GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::kVerbose).GetValue<bool>()) // If --verbose=true
         {
-            const bool helpProvided = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Help).GetExplicitlyProvided();
-            if (helpProvided)
+            const bool help_provided = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::kHelp).GetExplicitlyProvided();
+            if (help_provided)
                 std::cout << "Ignoring the \"--help\" command.\n";
 
-            const bool versionProvided = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Version).GetExplicitlyProvided();
-            if (versionProvided)
+            const bool version_provided = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::kVersion).GetExplicitlyProvided();
+            if (version_provided)
                 std::cout << "Ignoring the \"--version\" command.\n";
         }
 
-        const bool force = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Force).GetValue<bool>();
+        const bool force = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::kForce).GetValue<bool>();
 
-        std::string outputFile, inputFile;
+        std::string output_file, input_file;
 
         // Get input file
         if (Utils::FileExists(args[2]))
         {
-            if (Utils::GetTypeFromFilename(args[2]) != ModuleType::NONE)
+            if (Utils::GetTypeFromFilename(args[2]) != ModuleType::kNone)
             {
-                inputFile = args[2];
+                input_file = args[2];
             }
             else
             {
                 std::cerr << "ERROR: Input file type '" << Utils::GetFileExtension(args[2]) << "' is unsupported.\n";
-                return OperationType::Error;
+                return OperationType::kError;
             }
         }
         else
         {
             std::cerr << "ERROR: The input file '" << args[2] << "' could not be found.\n";
-            return OperationType::Error;
+            return OperationType::kError;
         }
 
         // Get output file
         if (Utils::GetFileExtension(args[1]).empty())
         {
-            if (Utils::GetTypeFromFileExtension(args[1]) != ModuleType::NONE)
+            if (Utils::GetTypeFromFileExtension(args[1]) != ModuleType::kNone)
             {
-                const size_t dotPos = inputFile.rfind('.');
-                if (dotPos == 0 || dotPos + 1 >= inputFile.size())
+                const size_t dot_pos = input_file.rfind('.');
+                if (dot_pos == 0 || dot_pos + 1 >= input_file.size())
                 {
                     std::cerr << "ERROR: The input file is invalid.\n";
-                    return OperationType::Error;
+                    return OperationType::kError;
                 }
 
                 // Construct output filename from the input filename
-                outputFile = inputFile.substr(0, dotPos + 1) + args[1];
+                output_file = input_file.substr(0, dot_pos + 1) + args[1];
             }
             else
             {
                 std::cerr << "ERROR: Output file type '" << args[1] << "' is unsupported.\n";
-                return OperationType::Error;
+                return OperationType::kError;
             }
         }
         else
         {
-            outputFile = args[1];
-            if (Utils::GetTypeFromFilename(args[1]) == ModuleType::NONE)
+            output_file = args[1];
+            if (Utils::GetTypeFromFilename(args[1]) == ModuleType::kNone)
             {
                 std::cerr << "ERROR: '" << Utils::GetFileExtension(args[1]) << "' is not a valid module type.\n";
-                return OperationType::Error;
+                return OperationType::kError;
             }
         }
 
-        if (Utils::FileExists(outputFile) && !force)
+        if (Utils::FileExists(output_file) && !force)
         {
-            std::cerr << "ERROR: The output file '" << outputFile << "' already exists. Run with the '-f' flag to allow the file to be overwritten.\n";
-            return OperationType::Error;
+            std::cerr << "ERROR: The output file '" << output_file << "' already exists. Run with the '-f' flag to allow the file to be overwritten.\n";
+            return OperationType::kError;
         }
 
-        inputOutputInfo.InputFile = inputFile;
-        inputOutputInfo.InputType = Utils::GetTypeFromFilename(inputFile);
-        inputOutputInfo.OutputFile = outputFile;
-        inputOutputInfo.OutputType = Utils::GetTypeFromFilename(outputFile);
+        io.input_file = input_file;
+        io.input_type = Utils::GetTypeFromFilename(input_file);
+        io.output_file = output_file;
+        io.output_type = Utils::GetTypeFromFilename(output_file);
 
-        if (inputOutputInfo.InputType == inputOutputInfo.OutputType)
+        if (io.input_type == io.output_type)
         {
             std::cout << "The output file is the same type as the input file. No conversion necessary.\n";
-            return OperationType::Error;
+            return OperationType::kError;
         }
 
         // TODO: Check if a conversion between the two types is possible
@@ -251,20 +250,20 @@ OperationType ParseArgs(std::vector<std::string>& args, InputOutput& inputOutput
 
         // Remove executable, output file, and input file from the args list, since they've already been processed
         // What is left are module-specific command-line arguments
-        args = argsOnlyFlags;
+        args = args_only_flags;
 
-        return OperationType::Conversion;
+        return OperationType::kConversion;
     }
 
-    return OperationType::Error;
+    return OperationType::kError;
 }
 
-void PrintHelp(const std::string& executable, ModuleType moduleType)
+void PrintHelp(const std::string& executable, ModuleType module_type)
 {
     // If module-specific help was requested
-    if (moduleType != ModuleType::NONE)
+    if (module_type != ModuleType::kNone)
     {
-        ConversionOptions::PrintHelp(moduleType);
+        ConversionOptions::PrintHelp(module_type);
         return;
     }
 

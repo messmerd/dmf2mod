@@ -12,24 +12,24 @@
 
 using namespace d2m;
 
-void Status::PrintError(bool useStdErr) const
+void Status::PrintError(bool use_std_err) const
 {
     if (!ErrorOccurred())
         return;
 
-    if (useStdErr)
-        std::cerr << m_Error->what() << "\n";
+    if (use_std_err)
+        std::cerr << error_->what() << "\n";
     else
-        std::cout << m_Error->what() << "\n";
+        std::cout << error_->what() << "\n";
 }
 
-void Status::PrintWarnings(bool useStdErr) const
+void Status::PrintWarnings(bool use_std_err) const
 {
-    if (!m_WarningMessages.empty())
+    if (!warning_messages_.empty())
     {
-        for (const auto& message : m_WarningMessages)
+        for (const auto& message : warning_messages_)
         {
-            if (useStdErr)
+            if (use_std_err)
                 std::cerr << message << "\n";
             else
                 std::cout << message << "\n";
@@ -42,17 +42,17 @@ bool Status::HandleResults() const
     PrintError();
 
     /*
-    std::string actionStr;
-    switch (m_Category)
+    std::string action_str;
+    switch (category_)
     {
-        case Category::None:
-            actionStr = "init"; break;
-        case Category::Import:
-            actionStr = "import"; break;
-        case Category::Export:
-            actionStr = "export"; break;
-        case Category::Convert:
-            actionStr = "conversion"; break;
+        case Category::kNone:
+            action_str = "init"; break;
+        case Category::kImport:
+            action_str = "import"; break;
+        case Category::kExport:
+            action_str = "export"; break;
+        case Category::kConvert:
+            action_str = "conversion"; break;
     }
     */
 
@@ -61,50 +61,50 @@ bool Status::HandleResults() const
         if (ErrorOccurred())
             std::cerr << "\n";
 
-        //const std::string plural = m_WarningMessages.size() > 1 ? "s" : "";
-        //std::cout << "Warning" << plural << " issued during " << actionStr << ":\n";
+        //const std::string plural = warning_messages_.size() > 1 ? "s" : "";
+        //std::cout << "Warning" << plural << " issued during " << action_str << ":\n";
         
         PrintWarnings();
     }
     return ErrorOccurred();
 }
 
-std::string ModuleException::CreateCommonErrorMessage(Category category, int errorCode, const std::string& arg)
+std::string ModuleException::CreateCommonErrorMessage(Category category, int error_code, const std::string& arg)
 {
     switch (category)
     {
-        case Category::None:
+        case Category::kNone:
             return "";
-        case Category::Import:
-            switch (errorCode)
+        case Category::kImport:
+            switch (error_code)
             {
-                case (int)ImportError::Success:
+                case (int)ImportError::kSuccess:
                     return "No error.";
                 default:
                     return "";
             }
             break;
-        case Category::Export:
-            switch (errorCode)
+        case Category::kExport:
+            switch (error_code)
             {
-                case (int)ExportError::Success:
+                case (int)ExportError::kSuccess:
                     return "No error.";
-                case (int)ExportError::FileOpen:
+                case (int)ExportError::kFileOpen:
                     return "Failed to open file for writing.";
                 default:
                     return "";
             }
             break;
-        case Category::Convert:
-            switch (errorCode)
+        case Category::kConvert:
+            switch (error_code)
             {
-                case (int)ConvertError::Success:
+                case (int)ConvertError::kSuccess:
                     return "No error.";
-                case (int)ConvertError::Unsuccessful: // This is the only convert error applied to the input module.
+                case (int)ConvertError::kUnsuccessful: // This is the only convert error applied to the input module.
                     return "Module conversion was unsuccessful. See the output module's status for more information.";
-                case (int)ConvertError::InvalidArgument:
+                case (int)ConvertError::kInvalidArgument:
                     return "Invalid argument.";
-                case (int)ConvertError::UnsupportedInputType:
+                case (int)ConvertError::kUnsupportedInputType:
                     return "Input type '" + arg + "' is unsupported for this module.";
                 default:
                     return "";

@@ -23,14 +23,14 @@ namespace d2m {
 
 // Forward declares
 class ConversionOptionsBase;
-template <typename T> class ConversionOptionsInterface;
+template<typename T> class ConversionOptionsInterface;
 
 
 // Specialized Info class for ConversionOptionsBase-derived classes
 template<>
 struct Info<ConversionOptionsBase> : public InfoBase
 {
-    OptionDefinitionCollection optionDefinitions;
+    OptionDefinitionCollection option_definitions;
 };
 
 
@@ -57,7 +57,7 @@ public:
     /*
      * Get the filename of the output file. Returns empty string if error occurred.
      */
-    std::string GetOutputFilename() const { return m_OutputFile; }
+    std::string GetOutputFilename() const { return m_output_file; }
 
     /*
      * Prints help message for this module's options
@@ -67,23 +67,23 @@ public:
     /*
      * Prints help message for the options of the given module type
      */
-    static void PrintHelp(ModuleType moduleType);
+    static void PrintHelp(ModuleType module_type);
 
 protected:
 
-    std::string m_OutputFile;
+    std::string m_output_file;
 };
 
 
 // All conversion options classes must inherit this using CRTP
-template <class Derived>
+template<class Derived>
 class ConversionOptionsInterface : public EnableFactory<Derived, ConversionOptionsBase>
 {
 protected:
 
     ConversionOptionsInterface()
     {
-        OptionCollection::SetDefinitions(&(this->GetInfo()->optionDefinitions));
+        OptionCollection::SetDefinitions(&(this->GetInfo()->option_definitions));
     }
 
     ConversionOptionsInterface(const ConversionOptionsInterface&) = delete;

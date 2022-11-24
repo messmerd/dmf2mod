@@ -20,17 +20,17 @@ class GlobalOptions
 public:
     enum class OptionEnum
     {
-        Force,
-        Help,
-        Verbose,
-        Version
+        kForce,
+        kHelp,
+        kVerbose,
+        kVersion
     };
 
-    static void Set(const OptionCollection& globalOptions) { m_GlobalOptions = globalOptions; }
-    static OptionCollection& Get() { return m_GlobalOptions; }
+    static void Set(const OptionCollection& global_options) { global_options_ = global_options; }
+    static OptionCollection& Get() { return global_options_; }
 
 private:
-    static OptionCollection m_GlobalOptions;
+    static OptionCollection global_options_;
 };
 
 } // namespace d2m

@@ -14,7 +14,7 @@ using namespace d2m;
 
 bool ModuleBase::Import(const std::string& filename)
 {
-    m_Status.Reset(Status::Category::Import);
+    status_.Reset(Status::Category::kImport);
     try
     {
         ImportImpl(filename);
@@ -22,7 +22,7 @@ bool ModuleBase::Import(const std::string& filename)
     }
     catch (ModuleException& e)
     {
-        m_Status.AddError(std::move(e));
+        status_.AddError(std::move(e));
     }
 
     return true;
@@ -30,7 +30,7 @@ bool ModuleBase::Import(const std::string& filename)
 
 bool ModuleBase::Export(const std::string& filename)
 {
-    m_Status.Reset(Status::Category::Export);
+    status_.Reset(Status::Category::kExport);
     try
     {
         ExportImpl(filename);
@@ -38,7 +38,7 @@ bool ModuleBase::Export(const std::string& filename)
     }
     catch (ModuleException& e)
     {
-        m_Status.AddError(std::move(e));
+        status_.AddError(std::move(e));
     }
 
     return true;
@@ -47,7 +47,7 @@ bool ModuleBase::Export(const std::string& filename)
 ModulePtr ModuleBase::Convert(ModuleType type, const ConversionOptionsPtr& options)
 {
     ModuleBase* input = this; // For clarity
-    input->m_Status.Reset(Status::Category::Convert);
+    input->status_.Reset(Status::Category::kConvert);
 
     // Don't convert if the types are the same
     if (type == input->GetType())
@@ -58,8 +58,8 @@ ModulePtr ModuleBase::Convert(ModuleType type, const ConversionOptionsPtr& optio
     if (!output)
         return nullptr;
 
-    output->m_Status.Reset(Status::Category::Convert);
-    output->m_Options = options;
+    output->status_.Reset(Status::Category::kConvert);
+    output->options_ = options;
 
     try
     {
@@ -69,8 +69,8 @@ ModulePtr ModuleBase::Convert(ModuleType type, const ConversionOptionsPtr& optio
     }
     catch (ModuleException& e)
     {
-        output->m_Status.AddError(std::move(e));
-        input->m_Status.AddError(ModuleException(ModuleException::Category::Convert, ModuleException::ConvertError::Unsuccessful));
+        output->status_.AddError(std::move(e));
+        input->status_.AddError(ModuleException(ModuleException::Category::kConvert, ModuleException::ConvertError::kUnsuccessful));
     }
 
     return output;

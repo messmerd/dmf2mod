@@ -15,18 +15,18 @@ namespace d2m {
 
 enum class NotePitch : uint8_t
 {
-    C=0,
-    CS,
-    D,
-    DS,
-    E,
-    F,
-    FS,
-    G,
-    GS,
-    A,
-    AS,
-    B
+    kC=0,
+    kCS,
+    kD,
+    kDS,
+    kE,
+    kF,
+    kFS,
+    kG,
+    kGS,
+    kA,
+    kAS,
+    kB
 };
 
 namespace NoteTypes
@@ -41,7 +41,7 @@ namespace NoteTypes
         NotePitch pitch : 4;
         uint8_t octave : 4;
 
-        constexpr Note() : pitch(NotePitch::C), octave(0) {}
+        constexpr Note() : pitch(NotePitch::kC), octave(0) {}
         constexpr Note(NotePitch pitch, uint8_t octave) : pitch(pitch), octave(octave) {}
 
         bool operator>(Note rhs) const

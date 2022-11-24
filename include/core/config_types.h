@@ -12,13 +12,9 @@ namespace d2m {
 // Add all supported modules to this enum
 enum class ModuleType
 {
-    NONE=0,
-    DMF,
-    MOD
+    kNone=0,
+    kDMF,
+    kMOD
 };
-
-// Factory implementation expects a "TypeEnum"
-using TypeEnum = ModuleType;
-inline constexpr TypeEnum TypeInvalid = ModuleType::NONE;
 
 } // namespace d2m

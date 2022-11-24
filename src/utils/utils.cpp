@@ -21,10 +21,10 @@ std::string Utils::GetBaseNameFromFilename(const std::string& filename)
     return std::filesystem::path{filename}.stem().string();
 }
 
-std::string Utils::ReplaceFileExtension(const std::string& filename, const std::string& newFileExtension)
+std::string Utils::ReplaceFileExtension(const std::string& filename, const std::string& new_file_extension)
 {
-    // newFileExtension may or may not contain a dot
-    return std::filesystem::path{filename}.replace_extension(newFileExtension).string();
+    // new_file_extension may or may not contain a dot
+    return std::filesystem::path{filename}.replace_extension(new_file_extension).string();
 }
 
 std::string Utils::GetFileExtension(const std::string& filename)
@@ -51,20 +51,20 @@ ModuleType Utils::GetTypeFromFilename(const std::string& filename)
 ModuleType Utils::GetTypeFromFileExtension(const std::string& extension)
 {
     if (extension.empty())
-        return ModuleType::NONE;
+        return ModuleType::kNone;
 
     for (const auto& [type, info] : Factory<Module>::TypeInfo())
     {
-        if (static_cast<Info<Module> const*>(info.get())->fileExtension == extension)
+        if (static_cast<Info<Module> const*>(info.get())->file_extension == extension)
             return type;
     }
 
-    return ModuleType::NONE;
+    return ModuleType::kNone;
 }
 
 std::string Utils::GetExtensionFromType(ModuleType moduleType)
 {
-    return static_cast<Info<Module> const*>(Factory<Module>::GetInfo(moduleType))->fileExtension;
+    return static_cast<Info<Module> const*>(Factory<Module>::GetInfo(moduleType))->file_extension;
 }
 
 // Command-line arguments and options utils

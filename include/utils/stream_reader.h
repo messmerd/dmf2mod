@@ -33,41 +33,41 @@ namespace detail
     };
 
     // Adapted from: https://peter.bloomfield.online/using-cpp-templates-for-size-based-type-selection/
-    template <uint8_t NumBytes>
+    template<uint8_t num_bytes>
     using UIntSelector =
-        typename std::conditional<NumBytes == 1, uint_fast8_t,
-            typename std::conditional<NumBytes == 2, uint_fast16_t,
-                typename std::conditional<NumBytes == 3 || NumBytes == 4, uint_fast32_t,
+        typename std::conditional<num_bytes == 1, uint_fast8_t,
+            typename std::conditional<num_bytes == 2, uint_fast16_t,
+                typename std::conditional<num_bytes == 3 || num_bytes == 4, uint_fast32_t,
                     uint_fast64_t
                 >::type
             >::type
         >::type;
 }
 
-enum class Endianness { Unspecified, Little, Big };
+enum class Endianness { kUnspecified, kLittle, kBig };
 
 /*
     Wrapper for std::istream and derived classes which provides
     convenient methods for reading strings and integers
 */
-template <class IStream, Endianness GlobalEndian = Endianness::Unspecified, std::enable_if_t<std::is_base_of_v<std::basic_istream<char>, IStream>, bool> = true>
+template<class IStream, Endianness global_endian = Endianness::kUnspecified, std::enable_if_t<std::is_base_of_v<std::basic_istream<char>, IStream>, bool> = true>
 class StreamReader
 {
 private:
-    IStream m_Stream;
+    IStream stream_;
 
-    template<typename T, uint8_t NumBytes>
+    template<typename T, uint8_t num_bytes>
     struct LittleEndianReadOperator
     {
-        static constexpr uint_fast8_t ShiftAmount = (NumBytes - 1) * 8;
-        static_assert(NumBytes > 0);
+        static constexpr uint_fast8_t ShiftAmount = (num_bytes - 1) * 8;
+        static_assert(num_bytes > 0);
 
         inline void operator()()
         {
             value >>= 8;
-            value |= static_cast<T>(m_Stream.get()) << ShiftAmount;
+            value |= static_cast<T>(stream_.get()) << ShiftAmount;
         }
-        IStream& m_Stream;
+        IStream& stream_;
         T value{};
     };
 
@@ -77,21 +77,21 @@ private:
         inline void operator()()
         {
             value <<= 8;
-            value |= static_cast<T>(m_Stream.get());
+            value |= static_cast<T>(stream_.get());
         }
-        IStream& m_Stream;
+        IStream& stream_;
         T value{};
     };
 
-    template<typename T, bool Signed, uint8_t NumBytes>
+    template<typename T, bool is_signed, uint8_t num_bytes>
     inline T ReadIntLittleEndian()
     {
-        LittleEndianReadOperator<T, NumBytes> oper{stream()};
-        detail::LoopUnroller<NumBytes>{}(oper);
+        LittleEndianReadOperator<T, num_bytes> oper{stream()};
+        detail::LoopUnroller<num_bytes>{}(oper);
 
-        if constexpr (Signed && NumBytes < sizeof(T))
+        if constexpr (is_signed && num_bytes < sizeof(T))
         {
-            struct SignExtender { T value : NumBytes * 8; };
+            struct SignExtender { T value : num_bytes * 8; };
             return SignExtender{oper.value}.value;
         }
         else
@@ -100,15 +100,15 @@ private:
         }
     }
 
-    template<typename T, bool Signed, uint8_t NumBytes>
+    template<typename T, bool is_signed, uint8_t num_bytes>
     inline T ReadIntBigEndian()
     {
         BigEndianReadOperator<T> oper{stream()};
-        detail::LoopUnroller<NumBytes>{}(oper);
+        detail::LoopUnroller<num_bytes>{}(oper);
 
-        if constexpr (Signed && NumBytes < sizeof(T))
+        if constexpr (is_signed && num_bytes < sizeof(T))
         {
-            struct SignExtender { T value : NumBytes * 8; };
+            struct SignExtender { T value : num_bytes * 8; };
             return SignExtender{oper.value}.value;
         }
         else
@@ -119,63 +119,63 @@ private:
 
 public:
 
-    StreamReader() : m_Stream{} {}
+    StreamReader() : stream_{} {}
 
     // StreamReader constructs and owns the istream object
-    template <typename... Args>
-    StreamReader(Args&&... args) : m_Stream{std::forward<Args>(args)...} {}
+    template<typename... Args>
+    StreamReader(Args&&... args) : stream_{std::forward<Args>(args)...} {}
 
     StreamReader(const StreamReader&) = delete;
     StreamReader(StreamReader&&) = delete;
     StreamReader& operator=(const StreamReader&) = delete;
     StreamReader& operator=(StreamReader&&) = delete;
 
-    const IStream& stream() const { return m_Stream; }
-    IStream& stream() { return m_Stream; }
+    const IStream& stream() const { return stream_; }
+    IStream& stream() { return stream_; }
 
     std::string ReadStr(unsigned length)
     {
-        std::string tempStr;
-        tempStr.assign(length, '\0');
-        m_Stream.read(&tempStr[0], length);
-        return tempStr;
+        std::string temp_str;
+        temp_str.assign(length, '\0');
+        stream_.read(&temp_str[0], length);
+        return temp_str;
     }
 
     std::string ReadPStr()
     {
         // P-Strings (Pascal strings) are prefixed with a 1 byte length
-        uint8_t stringLength = m_Stream.get();
-        return ReadStr(stringLength);
+        uint8_t string_length = stream_.get();
+        return ReadStr(string_length);
     }
 
     std::vector<char> ReadBytes(unsigned length)
     {
-        std::vector<char> tempBytes;
-        tempBytes.assign(length, '\0');
-        m_Stream.read(&tempBytes[0], length);
-        return tempBytes;
+        std::vector<char> temp_bytes;
+        temp_bytes.assign(length, '\0');
+        stream_.read(&temp_bytes[0], length);
+        return temp_bytes;
     }
 
-    template<bool Signed = false, uint8_t NumBytes = 1, Endianness Endian = GlobalEndian>
+    template<bool is_signed = false, uint8_t num_bytes = 1, Endianness endian = global_endian>
     auto ReadInt()
     {
-        using UIntType = std::conditional_t<(NumBytes > 1), detail::UIntSelector<NumBytes>, uint8_t>;
-        using ReturnType = std::conditional_t<Signed, std::make_signed_t<UIntType>, UIntType>;
+        using UIntType = std::conditional_t<(num_bytes > 1), detail::UIntSelector<num_bytes>, uint8_t>;
+        using ReturnType = std::conditional_t<is_signed, std::make_signed_t<UIntType>, UIntType>;
 
-        static_assert(NumBytes <= 8 && NumBytes >= 1, "Accepted range for NumBytes: 1 <= NumBytes <= 8");
-        if constexpr (NumBytes > 1)
+        static_assert(num_bytes <= 8 && num_bytes >= 1, "Accepted range for num_bytes: 1 <= num_bytes <= 8");
+        if constexpr (num_bytes > 1)
         {
-            static_assert(Endian != Endianness::Unspecified, "Set the endianness when creating StreamReader or set it in this method's template parameters");
-            if constexpr (Endian == Endianness::Little)
-                return static_cast<ReturnType>(ReadIntLittleEndian<UIntType, Signed, NumBytes>());
+            static_assert(endian != Endianness::kUnspecified, "Set the endianness when creating StreamReader or set it in this method's template parameters");
+            if constexpr (endian == Endianness::kLittle)
+                return static_cast<ReturnType>(ReadIntLittleEndian<UIntType, is_signed, num_bytes>());
             else
-                return static_cast<ReturnType>(ReadIntBigEndian<UIntType, Signed, NumBytes>());
+                return static_cast<ReturnType>(ReadIntBigEndian<UIntType, is_signed, num_bytes>());
         }
         else
         {
             // For single-byte reads, the size of the return value is guaranteed
-            // to be 1 byte and setting the Signed parameter is unnecessary
-            return static_cast<ReturnType>(m_Stream.get());
+            // to be 1 byte and setting the signed parameter is unnecessary
+            return static_cast<ReturnType>(stream_.get());
         }
     }
 };

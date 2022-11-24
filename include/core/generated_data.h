@@ -88,10 +88,10 @@ struct GeneratedDataCommonDefinition : public detail::GenDataDefinitionTag
 namespace detail {
 
 // Compile-time for loop helper
-template<int start, class Storage, int... Is>
-void ClearAllGenDataHelper(Storage* storage, std::integer_sequence<int, Is...>)
+template<int start, class Storage, int... integers>
+void ClearAllGenDataHelper(Storage* storage, std::integer_sequence<int, integers...>)
 {
-    (storage->template Clear<start + Is>(), ...);
+    (storage->template Clear<start + integers>(), ...);
 }
 
 // Calls GeneratedDataStorage::Clear() for every type of generated data

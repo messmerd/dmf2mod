@@ -30,9 +30,9 @@ public:
 
     virtual ~ModuleInterface() = default;
 
-    inline const ModuleData<Derived>& GetData() const { return m_data; }
+    inline const ModuleData<Derived>& GetData() const { return data_; }
     inline const ModuleGlobalData<Derived>& GetGlobalData() const { return GetData().GlobalData(); }
-    inline std::shared_ptr<const GeneratedData<Derived>> GetGeneratedData() const { return m_generated_data; }
+    inline std::shared_ptr<const GeneratedData<Derived>> GetGeneratedData() const { return generated_data_; }
 
     const std::string& GetTitle() const final override { return GetGlobalData().title; }
     const std::string& GetAuthor() const final override { return GetGlobalData().author; }
@@ -40,24 +40,24 @@ public:
     size_t GenerateData(size_t data_flags = 0) const final override
     {
         // If generated data has already been created using the same data_flags, just return that
-        if (m_generated_data->IsValid() && m_generated_data->GetGenerated().value() == data_flags)
-            return m_generated_data->GetStatus();
+        if (generated_data_->IsValid() && generated_data_->GetGenerated().value() == data_flags)
+            return generated_data_->GetStatus();
 
         // Else, need to generate data
-        m_generated_data->ClearAll();
+        generated_data_->ClearAll();
         const size_t status = GenerateDataImpl(data_flags);
-        m_generated_data->SetGenerated(data_flags);
-        m_generated_data->SetStatus(status);
+        generated_data_->SetGenerated(data_flags);
+        generated_data_->SetStatus(status);
         return status;
     }
 
 protected:
 
-    ModuleInterface() : m_generated_data(std::make_shared<GeneratedData<Derived>>()) {}
+    ModuleInterface() : generated_data_(std::make_shared<GeneratedData<Derived>>()) {}
 
-    inline ModuleData<Derived>& GetData() { return m_data; }
+    inline ModuleData<Derived>& GetData() { return data_; }
     inline ModuleGlobalData<Derived>& GetGlobalData() { return GetData().GlobalData(); }
-    inline std::shared_ptr<GeneratedData<Derived>> GetGeneratedDataMut() const { return m_generated_data; }
+    inline std::shared_ptr<GeneratedData<Derived>> GetGeneratedDataMut() const { return generated_data_; }
 
     // dataFlags specifies what data was requested to be generated
     virtual size_t GenerateDataImpl(size_t data_flags) const = 0;
@@ -65,11 +65,11 @@ protected:
 private:
 
     // Song information for a particular module file
-    ModuleData<Derived> m_data;
+    ModuleData<Derived> data_;
 
     // Information about a module file which must be calculated.
     // Cannot be stored directly because other Modules need to modify its contents without modifying the Module
-    const std::shared_ptr<GeneratedData<Derived>> m_generated_data;
+    const std::shared_ptr<GeneratedData<Derived>> generated_data_;
 };
 
 } // namespace d2m

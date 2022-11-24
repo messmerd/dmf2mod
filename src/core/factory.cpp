@@ -11,27 +11,28 @@
 using namespace d2m;
 
 using MODOptionEnum = MODConversionOptions::OptionEnum;
-static auto MODOptions = OptionDefinitionCollection
-{
-    /* Type  / Option id                    / Full name    / Short / Default   / Possib. vals          / Description */
-    {OPTION, MODOptionEnum::AmigaFilter,    "amiga",       '\0',   false,                              "Enables the Amiga filter"},
-    {OPTION, MODOptionEnum::Arpeggio,       "arp",         '\0',   false,                              "Allow arpeggio effects"},
-    {OPTION, MODOptionEnum::Portamento,     "port",        '\0',   false,                              "Allow portamento up/down effects"},
-    {OPTION, MODOptionEnum::Port2Note,      "port2note",   '\0',   false,                              "Allow portamento to note effects"},
-    {OPTION, MODOptionEnum::Vibrato,        "vib",         '\0',   false,                              "Allow vibrato effects"},
-    {OPTION, MODOptionEnum::TempoType,      "tempo",       '\0',   "accuracy", {"accuracy", "compat"}, "Prioritize tempo accuracy or compatibility with effects"},
-};
 
 template<>
 Factory<ConversionOptions>::InitializeImpl::InitializeImpl()
 {
-    Register<ModuleType::DMF, DMFConversionOptions>();
-    Register<ModuleType::MOD, MODConversionOptions>(std::move(MODOptions));
+    auto mod_options = OptionDefinitionCollection
+    {
+        /* Type  / Option id                    / Full name    / Short / Default   / Possib. vals          / Description */
+        {kOption, MODOptionEnum::kAmigaFilter,    "amiga",       '\0',   false,                              "Enables the Amiga filter"},
+        {kOption, MODOptionEnum::kArpeggio,       "arp",         '\0',   false,                              "Allow arpeggio effects"},
+        {kOption, MODOptionEnum::kPortamento,     "port",        '\0',   false,                              "Allow portamento up/down effects"},
+        {kOption, MODOptionEnum::kPort2Note,      "port2note",   '\0',   false,                              "Allow portamento to note effects"},
+        {kOption, MODOptionEnum::kVibrato,        "vib",         '\0',   false,                              "Allow vibrato effects"},
+        {kOption, MODOptionEnum::kTempoType,      "tempo",       '\0',   "accuracy", {"accuracy", "compat"}, "Prioritize tempo accuracy or compatibility with effects"},
+    };
+
+    Register<ModuleType::kDMF, DMFConversionOptions>();
+    Register<ModuleType::kMOD, MODConversionOptions>(std::move(mod_options));
 };
 
 template<>
 Factory<Module>::InitializeImpl::InitializeImpl()
 {
-    Register<ModuleType::DMF, DMF>("Deflemask", "dmf");
-    Register<ModuleType::MOD, MOD>("ProTracker", "mod");
+    Register<ModuleType::kDMF, DMF>("Deflemask", "dmf");
+    Register<ModuleType::kMOD, MOD>("ProTracker", "mod");
 };

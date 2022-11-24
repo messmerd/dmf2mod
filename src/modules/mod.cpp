@@ -28,8 +28,8 @@ using namespace d2m::mod;
 
 using MODOptionEnum = MODConversionOptions::OptionEnum;
 
-static std::vector<int8_t> GenerateSquareWaveSample(unsigned dutyCycle, unsigned length);
-static std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned length);
+static std::vector<int8_t> GenerateSquareWaveSample(unsigned duty_cycle, unsigned length);
+static std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetable_data, unsigned length);
 static inline uint8_t GetEffectCode(int effect_code);
 
 static std::string GetWarningMessage(MOD::ConvertWarning warning, const std::string& info = "");
@@ -60,18 +60,18 @@ void MOD::ConvertImpl(const ModulePtr& input)
 {
     if (!input)
     {
-        throw MODException(ModuleException::Category::Convert, ModuleException::ConvertError::InvalidArgument);
+        throw MODException(ModuleException::Category::kConvert, ModuleException::ConvertError::kInvalidArgument);
     }
 
     switch (input->GetType())
     {
-        case ModuleType::DMF:
+        case ModuleType::kDMF:
             ConvertFromDMF(*input->Cast<const DMF>());
             break;
         // Add other input types here if support is added
         default:
             // Unsupported input type for conversion to MOD
-            throw MODException(ModuleException::Category::Convert, ModuleException::ConvertError::UnsupportedInputType, input->GetInfo()->fileExtension);
+            throw MODException(ModuleException::Category::kConvert, ModuleException::ConvertError::kUnsupportedInputType, input->GetInfo()->file_extension);
     }
 }
 
@@ -79,14 +79,14 @@ void MOD::ConvertImpl(const ModulePtr& input)
 
 void MOD::ConvertFromDMF(const DMF& dmf)
 {
-    const bool verbose = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Verbose).GetValue<bool>();
+    const bool verbose = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::kVerbose).GetValue<bool>();
 
     if (verbose)
         std::cout << "Starting to convert to MOD...\n";
 
-    if (dmf.GetSystem().type != DMF::SystemType::GameBoy) // If it's not a Game Boy
+    if (dmf.GetSystem().type != DMF::SystemType::kGameBoy) // If it's not a Game Boy
     {
-        throw MODException(ModuleException::Category::Convert, MOD::ConvertError::NotGameBoy);
+        throw MODException(ModuleException::Category::kConvert, MOD::ConvertError::kNotGameBoy);
     }
 
     const auto& dmf_data = dmf.GetData();
@@ -94,27 +94,27 @@ void MOD::ConvertFromDMF(const DMF& dmf)
 
     if (dmf_data.GetNumRows() > 64)
     {
-        throw MODException(ModuleException::Category::Convert, MOD::ConvertError::Over64RowPattern);
+        throw MODException(ModuleException::Category::kConvert, MOD::ConvertError::kOver64RowPattern);
     }
 
     ChannelIndex num_channels = dmf_data.GetNumChannels();
     if (num_channels != 4)
     {
-        throw ModuleException(ModuleException::Category::Convert, MOD::ConvertError::WrongChannelCount, "Wrong number of channels. There should be exactly 4.");
+        throw ModuleException(ModuleException::Category::kConvert, MOD::ConvertError::kWrongChannelCount, "Wrong number of channels. There should be exactly 4.");
     }
 
     ///////////////// GET DMF GENERATED DATA
 
     const size_t error_code = dmf.GenerateData(1 | 2); // MOD-compatibility flags
     if (error_code & 2)
-        m_Status.AddWarning(GetWarningMessage(ConvertWarning::LoopbackInaccuracy));
+        status_.AddWarning(GetWarningMessage(ConvertWarning::kLoopbackInaccuracy));
 
     auto dmf_gen_data = dmf.GetGeneratedData();
 
-    const OrderIndex num_orders = dmf_gen_data->GetNumOrders().value() + (OrderIndex)m_UsingSetupPattern;
+    const OrderIndex num_orders = dmf_gen_data->GetNumOrders().value() + (OrderIndex)using_setup_pattern_;
     if (num_orders > 64) // num_orders is 1 more than it actually is
     {
-        throw MODException(ModuleException::Category::Convert, MOD::ConvertError::TooManyPatternMatrixRows);
+        throw MODException(ModuleException::Category::kConvert, MOD::ConvertError::kTooManyPatternMatrixRows);
     }
 
     ///////////////// SET UP DATA
@@ -186,11 +186,11 @@ void MOD::DMFConvertSamples(const DMF& dmf, SampleMap& sample_map)
 
         if (sample_mapper.IsDownsamplingNeeded())
         {
-            m_Status.AddWarning(GetWarningMessage(MOD::ConvertWarning::WaveDownsample, std::to_string(std::get<SoundIndex<DMF>::Wave>(dmf_sound_index).id)));
+            status_.AddWarning(GetWarningMessage(MOD::ConvertWarning::kWaveDownsample, std::to_string(std::get<SoundIndex<DMF>::Wave>(dmf_sound_index).id)));
         }
     }
 
-    m_TotalMODSamples = mod_current_sound_index - 1; // Set the number of MOD samples that will be needed. (minus sample #0 which is special)
+    total_mod_samples_ = mod_current_sound_index - 1; // Set the number of MOD samples that will be needed. (minus sample #0 which is special)
 
     // TODO: Check if there are too many samples needed here, and throw exception if so
 
@@ -200,7 +200,7 @@ void MOD::DMFConvertSamples(const DMF& dmf, SampleMap& sample_map)
 void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sample_map)
 {
     // Fill out information needed to define a MOD sample
-    m_Samples.clear();
+    samples_.clear();
 
     for (const auto& [dmf_sound_index, sample_mapper] : sample_map)
     {
@@ -212,8 +212,8 @@ void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sample_map)
 
             si.id = sample_mapper.GetMODSampleId(note_range);
             si.length = sample_mapper.GetMODSampleLength(note_range);
-            si.repeatLength = si.length;
-            si.repeatOffset = 0;
+            si.repeat_length = si.length;
+            si.repeat_offset = 0;
             si.finetune = 0;
 
             si.name = "";
@@ -253,8 +253,8 @@ void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sample_map)
                 
                     si.volume = kVolumeMax; // TODO: Optimize this?
 
-                    uint32_t* wavetableData = dmf.GetWavetableValues()[wavetable_index];
-                    si.data = GenerateWavetableSample(wavetableData, si.length);
+                    uint32_t* wavetable_data = dmf.GetWavetableValues()[wavetable_index];
+                    si.data = GenerateWavetableSample(wavetable_data, si.length);
                     break;
                 }
             }
@@ -286,12 +286,12 @@ void MOD::DMFConvertSampleData(const DMF& dmf, const SampleMap& sample_map)
             while (si.name.size() < 22)
                 si.name += " ";
 
-            m_Samples[si.id] = si;
+            samples_[si.id] = si;
         }
     }
 }
 
-std::vector<int8_t> GenerateSquareWaveSample(unsigned dutyCycle, unsigned length)
+std::vector<int8_t> GenerateSquareWaveSample(unsigned duty_cycle, unsigned length)
 {
     std::vector<int8_t> sample;
     sample.assign(length, 0);
@@ -301,7 +301,7 @@ std::vector<int8_t> GenerateSquareWaveSample(unsigned dutyCycle, unsigned length
     // This loop creates a square wave with the correct length and duty cycle:
     for (unsigned i = 1; i <= length; i++)
     {
-        if ((i * 8.f) / length <= (float)duty[dutyCycle])
+        if ((i * 8.f) / length <= (float)duty[duty_cycle])
         {
             sample[i - 1] = 127; // high
         }
@@ -314,12 +314,12 @@ std::vector<int8_t> GenerateSquareWaveSample(unsigned dutyCycle, unsigned length
     return sample;
 }
 
-std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned length)
+std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetable_data, unsigned length)
 {
     std::vector<int8_t> sample;
     sample.assign(length, 0);
 
-    const float maxVolCap = 12.f / 15.f; // Set WAVE max volume to 12/15 of potential max volume to emulate DMF wave channel
+    constexpr float max_vol_cap = 12.f / 15.f; // Set WAVE max volume to 12/15 of potential max volume to emulate DMF wave channel
 
     for (unsigned i = 0; i < length; i++)
     {
@@ -328,27 +328,27 @@ std::vector<int8_t> GenerateWavetableSample(uint32_t* wavetableData, unsigned le
         switch (length)
         {
             case 512: // x16
-                sample[i] = (int8_t)(((wavetableData[i / 16] / 15.f * 255.f) - 128.f) * maxVolCap); break;
+                sample[i] = (int8_t)(((wavetable_data[i / 16] / 15.f * 255.f) - 128.f) * max_vol_cap); break;
             case 256: // x8
-                sample[i] = (int8_t)(((wavetableData[i / 8] / 15.f * 255.f) - 128.f) * maxVolCap); break;
+                sample[i] = (int8_t)(((wavetable_data[i / 8] / 15.f * 255.f) - 128.f) * max_vol_cap); break;
             case 128: // x4
-                sample[i] = (int8_t)(((wavetableData[i / 4] / 15.f * 255.f) - 128.f) * maxVolCap); break;
+                sample[i] = (int8_t)(((wavetable_data[i / 4] / 15.f * 255.f) - 128.f) * max_vol_cap); break;
             case 64:  // x2
-                sample[i] = (int8_t)(((wavetableData[i / 2] / 15.f * 255.f) - 128.f) * maxVolCap); break;
+                sample[i] = (int8_t)(((wavetable_data[i / 2] / 15.f * 255.f) - 128.f) * max_vol_cap); break;
             case 32:  // Original length
-                sample[i] = (int8_t)(((wavetableData[i] / 15.f * 255.f) - 128.f) * maxVolCap); break;
+                sample[i] = (int8_t)(((wavetable_data[i] / 15.f * 255.f) - 128.f) * max_vol_cap); break;
             case 16:  // Half length (loss of information from downsampling)
             {
                 // Take average of every two sample values to make new sample value
-                const unsigned sum = wavetableData[i * 2] + wavetableData[(i * 2) + 1];
-                sample[i] = (int8_t)(((sum / (15.f * 2) * 255.f) - 128.f) * maxVolCap);
+                const unsigned sum = wavetable_data[i * 2] + wavetable_data[(i * 2) + 1];
+                sample[i] = (int8_t)(((sum / (15.f * 2) * 255.f) - 128.f) * max_vol_cap);
                 break;
             }
             case 8:   // Quarter length (loss of information from downsampling)
             {
                 // Take average of every four sample values to make new sample value
-                const unsigned sum = wavetableData[i * 4] + wavetableData[(i * 4) + 1] + wavetableData[(i * 4) + 2] + wavetableData[(i * 4) + 3];
-                sample[i] = (int8_t)(((sum / (15.f * 4) * 255.f) - 128.f) * maxVolCap);
+                const unsigned sum = wavetable_data[i * 4] + wavetable_data[(i * 4) + 1] + wavetable_data[(i * 4) + 2] + wavetable_data[(i * 4) + 3];
+                sample[i] = (int8_t)(((sum / (15.f * 4) * 255.f) - 128.f) * max_vol_cap);
                 break;
             }
             default:
@@ -368,7 +368,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
     unsigned initial_tempo, initial_speed; // Together these will set the initial BPM
     DMFConvertInitialBPM(dmf, initial_tempo, initial_speed);
 
-    if (m_UsingSetupPattern)
+    if (using_setup_pattern_)
     {
         // Set initial tempo
         Row<MOD> tempo_row;
@@ -378,7 +378,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
         mod_data.SetRow(0, 0, 0, tempo_row);
 
         // Set initial speed
-        if (options->GetTempoType() != MODConversionOptions::TempoType::EffectCompatibility)
+        if (options->GetTempoType() != MODConversionOptions::TempoType::kEffectCompatibility)
         {
             Row<MOD> speed_row;
             speed_row.sample = 0;
@@ -398,7 +398,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
         Row<MOD> amiga_filter_row;
         amiga_filter_row.sample = 0;
         amiga_filter_row.note = NoteTypes::Empty{};
-        amiga_filter_row.effect = { mod::Effects::kSetFilter, !options->GetOption(MODOptionEnum::AmigaFilter).GetValue<bool>() };
+        amiga_filter_row.effect = { mod::Effects::kSetFilter, !options->GetOption(MODOptionEnum::kAmigaFilter).GetValue<bool>() };
         mod_data.SetRow(3, 0, 0, amiga_filter_row);
 
         // All other channel rows in the pattern are already zeroed out so nothing needs to be done for them
@@ -429,12 +429,12 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
             // Global effects, highest priority first:
 
             if (global_reader.GetOneShotDelta(GlobalState<DMF>::kPatBreak))
-                global_effects.push_back({ EffectPriorityStructureRelated, { Effects::kPatBreak, static_cast<EffectValue>(global_reader.GetOneShot<GlobalState<DMF>::kPatBreak>()) } });
+                global_effects.push_back({ kEffectPriorityStructureRelated, { Effects::kPatBreak, static_cast<EffectValue>(global_reader.GetOneShot<GlobalState<DMF>::kPatBreak>()) } });
             else if (dmf_num_rows < 64 && dmf_row + 1 == dmf_num_rows)
-                global_effects.push_back({ EffectPriorityStructureRelated, { Effects::kPatBreak, 0 } });  // Use PatBreak to allow patterns under 64 rows
+                global_effects.push_back({ kEffectPriorityStructureRelated, { Effects::kPatBreak, 0 } });  // Use PatBreak to allow patterns under 64 rows
 
             if (global_reader.GetOneShotDelta(GlobalState<DMF>::kPosJump))
-                global_effects.push_back({ EffectPriorityStructureRelated, { Effects::kPosJump, static_cast<EffectValue>(global_reader.GetOneShot<GlobalState<DMF>::kPosJump>() + m_UsingSetupPattern) } });
+                global_effects.push_back({ kEffectPriorityStructureRelated, { Effects::kPosJump, static_cast<EffectValue>(global_reader.GetOneShot<GlobalState<DMF>::kPosJump>() + using_setup_pattern_) } });
 
             std::array<Row<MOD>, 4> mod_row_data{};
             std::array<PriorityEffect, 4> mod_effects{};
@@ -445,7 +445,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
                 auto& channel_reader = channel_readers[channel];
                 channel_reader.SetReadPos(dmf_order, dmf_row);
 
-                if (channel != dmf::GameBoyChannel::NOISE)
+                if (channel != dmf::GameBoyChannel::kNoise)
                 {
                     if (global_reader.GetOneShotDelta(GlobalState<DMF>::kLoopback))
                     {
@@ -502,7 +502,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
             // Set the channel rows for the current pattern row all at once
             for (ChannelIndex channel = 0; channel < mod_data.GetNumChannels(); ++channel)
             {
-                mod_data.SetRow(channel, dmf_order + m_UsingSetupPattern, dmf_row, mod_row_data[channel]);
+                mod_data.SetRow(channel, dmf_order + using_setup_pattern_, dmf_row, mod_row_data[channel]);
             }
         }
 
@@ -512,7 +512,7 @@ void MOD::DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map)
             for (ChannelIndex channel = 0; channel < mod_data.GetNumChannels(); ++channel)
             {
                 Row<MOD> temp_row_data{ 0, NoteTypes::Empty{}, { Effects::kNoEffect, 0 } };
-                mod_data.SetRow(channel, dmf_order + (int)m_UsingSetupPattern, dmf_row, temp_row_data);
+                mod_data.SetRow(channel, dmf_order + (int)using_setup_pattern_, dmf_row, temp_row_data);
             }
         }
     }
@@ -532,15 +532,15 @@ mod::PriorityEffect MOD::DMFConvertEffects(ChannelStateReader<DMF>& state)
         {
             case PortamentoStateData::kUp:
                 if (options.AllowPortamento())
-                    return { EffectPriorityPortUp, { Effects::kPortUp, effect_value } };
+                    return { kEffectPriorityPortUp, { Effects::kPortUp, effect_value } };
                 break;
             case PortamentoStateData::kDown:
                 if (options.AllowPortamento())
-                    return { EffectPriorityPortDown, { Effects::kPortDown, effect_value } };
+                    return { kEffectPriorityPortDown, { Effects::kPortDown, effect_value } };
                 break;
             case PortamentoStateData::kToNote:
                 if (options.AllowPort2Note())
-                    return { EffectPriorityPort2Note, { Effects::kPort2Note, effect_value } };
+                    return { kEffectPriorityPort2Note, { Effects::kPort2Note, effect_value } };
                 break;
             default:
                 assert(0);
@@ -554,18 +554,18 @@ mod::PriorityEffect MOD::DMFConvertEffects(ChannelStateReader<DMF>& state)
         VolumeStateData dmf_volume = state.Get<ChannelState<DMF>::kVolume>();
         uint8_t mod_volume = (uint8_t)std::round(dmf_volume / (double)dmf::kDMFGameBoyVolumeMax * (double)kVolumeMax); // Convert DMF volume to MOD volume
 
-        return { EffectPriorityVolumeChange, { mod::Effects::kSetVolume, mod_volume } };
+        return { kEffectPriorityVolumeChange, { mod::Effects::kSetVolume, mod_volume } };
     }
 
     // Arpeggios
     if (EffectValue val = state.Get<ChannelState<DMF>::kArp>(); val > 0 && options.AllowArpeggio())
-        return { EffectPriorityArp, { Effects::kArp, val } };
+        return { kEffectPriorityArp, { Effects::kArp, val } };
 
     // Vibrato
     if (EffectValue val = state.Get<ChannelState<DMF>::kVibrato>(); val > 0 && options.AllowVibrato())
-        return { EffectPriorityVibrato, { Effects::kVibrato, val } };
+        return { kEffectPriorityVibrato, { Effects::kVibrato, val } };
 
-    return { EffectPriorityUnsupportedEffect, { Effects::kNoEffect, 0 } };
+    return { kEffectPriorityUnsupportedEffect, { Effects::kNoEffect, 0 } };
 }
 
 Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMapper::NoteRange& note_range, bool& set_sample, int& set_vol_if_not, const MOD::SampleMap& sample_map, mod::PriorityEffect& mod_effect)
@@ -635,8 +635,8 @@ Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMappe
                     const uint8_t mod_volume = (uint8_t)std::round(dmf_volume / (double)dmf::kDMFGameBoyVolumeMax * (double)kVolumeMax); // Convert DMF volume to MOD volume
 
                     // If this volume change effect has a higher priority, use it
-                    if (mod_effect.first <= EffectPriorityVolumeChange)
-                        mod_effect = { EffectPriorityVolumeChange, { mod::Effects::kSetVolume, mod_volume } };
+                    if (mod_effect.first <= kEffectPriorityVolumeChange)
+                        mod_effect = { kEffectPriorityVolumeChange, { mod::Effects::kSetVolume, mod_volume } };
 
                     // TODO: If the default volume of the sample is selected in a smart way, we could potentially skip having to use a volume effect sometimes
                 }
@@ -649,9 +649,9 @@ Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMappe
                 const uint8_t mod_volume = (uint8_t)std::round(dmf_volume / (double)dmf::kDMFGameBoyVolumeMax * (double)kVolumeMax); // Convert DMF volume to MOD volume
 
                 // If this volume change effect has a higher priority, use it
-                if (mod_effect.first <= EffectPriorityVolumeChange)
+                if (mod_effect.first <= kEffectPriorityVolumeChange)
                 {
-                    mod_effect = { EffectPriorityVolumeChange, { mod::Effects::kSetVolume, mod_volume } };
+                    mod_effect = { kEffectPriorityVolumeChange, { mod::Effects::kSetVolume, mod_volume } };
                     set_vol_if_not = -1; // Volume was just set; can reset this
                 }
 
@@ -668,7 +668,7 @@ Row<MOD> MOD::DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMappe
         }
 
         default:
-            assert(0);
+            assert(false);
             return {};
     }
 }
@@ -737,44 +737,44 @@ void MOD::DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed)
     static constexpr double kHighestBPM = 3.0 * 255.0 / 1.0; // 3 * tempo * speed
     static constexpr double kLowestBPM = 3.0 * 32.0 / 31.0;  // 3 * tempo * speed
 
-    const double desired_BPM = dmf.GetBPM();
+    const double desired_bpm = dmf.GetBPM();
 
     const auto options = std::static_pointer_cast<MODConversionOptions>(GetOptions());
-    if (options->GetTempoType() == MODConversionOptions::TempoType::EffectCompatibility)
+    if (options->GetTempoType() == MODConversionOptions::TempoType::kEffectCompatibility)
     {
-        tempo = static_cast<unsigned>(desired_BPM * 2);
+        tempo = static_cast<unsigned>(desired_bpm * 2);
         speed = 6;
 
         if (tempo > 255)
         {
             tempo = 255;
-            m_Status.AddWarning(GetWarningMessage(ConvertWarning::TempoHighCompat));
+            status_.AddWarning(GetWarningMessage(ConvertWarning::kTempoHighCompat));
         }
         else if (tempo < 32)
         {
             tempo = 32;
-            m_Status.AddWarning(GetWarningMessage(ConvertWarning::TempoLowCompat));
+            status_.AddWarning(GetWarningMessage(ConvertWarning::kTempoLowCompat));
         }
-        else if ((desired_BPM * 2.0) - static_cast<double>(tempo) > 1e-3)
+        else if ((desired_bpm * 2.0) - static_cast<double>(tempo) > 1e-3)
         {
-            m_Status.AddWarning(GetWarningMessage(ConvertWarning::TempoAccuracy));
+            status_.AddWarning(GetWarningMessage(ConvertWarning::kTempoAccuracy));
         }
         return;
     }
 
-    if (desired_BPM > kHighestBPM)
+    if (desired_bpm > kHighestBPM)
     {
         tempo = 255;
         speed = 1;
-        m_Status.AddWarning(GetWarningMessage(ConvertWarning::TempoHigh));
+        status_.AddWarning(GetWarningMessage(ConvertWarning::kTempoHigh));
         return;
     }
 
-    if (desired_BPM < kLowestBPM)
+    if (desired_bpm < kLowestBPM)
     {
         tempo = 32;
         speed = 31;
-        m_Status.AddWarning(GetWarningMessage(ConvertWarning::TempoLow));
+        status_.AddWarning(GetWarningMessage(ConvertWarning::kTempoLow));
         return;
     }
 
@@ -784,25 +784,25 @@ void MOD::DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed)
 
     for (unsigned d = 1; d <= 31; d++)
     {
-        if (3 * 32.0 / d > desired_BPM || desired_BPM > 3 * 255.0 / d)
+        if (3 * 32.0 / d > desired_bpm || desired_bpm > 3 * 255.0 / d)
             continue; // Not even possible with this speed value
 
         for (unsigned n = 32; n <= 255; n++)
         {
             const double bpm = 3.0 * (double)n / d;
-            const double this_BPM_diff = std::abs(desired_BPM - bpm);
-            if (this_BPM_diff < best_BPM_diff
-                || (this_BPM_diff == best_BPM_diff && d <= 6)) // Choose speed values more compatible with effects w/o sacrificing accuracy
+            const double this_bpm_diff = std::abs(desired_bpm - bpm);
+            if (this_bpm_diff < best_BPM_diff
+                || (this_bpm_diff == best_BPM_diff && d <= 6)) // Choose speed values more compatible with effects w/o sacrificing accuracy
             {
                 tempo = n;
                 speed = d;
-                best_BPM_diff = this_BPM_diff;
+                best_BPM_diff = this_bpm_diff;
             }
         }
     }
 
     if (best_BPM_diff > 1e-3)
-        m_Status.AddWarning(GetWarningMessage(ConvertWarning::TempoAccuracy));
+        status_.AddWarning(GetWarningMessage(ConvertWarning::kTempoAccuracy));
 }
 
 static inline uint8_t GetEffectCode(int effect_code)
@@ -848,7 +848,7 @@ static inline uint8_t GetEffectCode(int effect_code)
         case d2m::Effects::kTempo:
             return mod::EffectCode::kSetSpeed; // Same as kSpeedA, but different effect values are used
         case d2m::Effects::kSpeedB:
-            assert(0 && "Unsupported effect");
+            assert(false && "Unsupported effect");
             return mod::EffectCode::kNoEffect;
 
         // ProTracker-specific effects:
@@ -882,7 +882,7 @@ static inline uint8_t GetEffectCode(int effect_code)
             return mod::EffectCode::kInvertLoop;
 
         default:
-            assert(0 && "Unknown effect");
+            assert(false && "Unknown effect");
             return mod::EffectCode::kNoEffect;
     }
 }
@@ -925,7 +925,7 @@ SoundIndexType<MOD> DMFSampleMapper::Init(SoundIndexType<DMF> dmf_sound_index, S
     const Note& highest_note = dmf_note_range.second;
 
     // Note ranges always start on a C, so get nearest C note (in downwards direction):
-    const Note lowest_note_nearest_c = Note{NotePitch::C, lowest_note.octave}; // DMF note
+    const Note lowest_note_nearest_c = Note{NotePitch::kC, lowest_note.octave}; // DMF note
 
     // Get the number of MOD samples needed
     const int range = GetNoteRange(lowest_note_nearest_c, highest_note);
@@ -941,9 +941,9 @@ SoundIndexType<MOD> DMFSampleMapper::Init(SoundIndexType<DMF> dmf_sound_index, S
     // Initializing for 3 MOD samples is always the same:
     if (num_mod_samples_ == 3)
     {
-        range_start_.push_back(Note{NotePitch::C, 0});
-        range_start_.push_back(Note{NotePitch::C, 2});
-        range_start_.push_back(Note{NotePitch::C, 5});
+        range_start_.push_back(Note{NotePitch::kC, 0});
+        range_start_.push_back(Note{NotePitch::kC, 2});
+        range_start_.push_back(Note{NotePitch::kC, 5});
         mod_sample_lengths_[0] = 256;
         mod_sample_lengths_[1] = 64;
         mod_sample_lengths_[2] = 8;
@@ -1029,7 +1029,7 @@ SoundIndexType<MOD> DMFSampleMapper::Init(SoundIndexType<DMF> dmf_sound_index, S
     // Set Range Start and Sample Length for 2nd MOD sample (if it exists):
     if (num_mod_samples_ == 2)
     {
-        range_start_.push_back({NotePitch::C, uint8_t(lowest_possible_range_start.octave + 3)});
+        range_start_.push_back({NotePitch::kC, uint8_t(lowest_possible_range_start.octave + 3)});
         mod_sample_lengths_[1] = octave_to_sample_length_map[range_start_[1].octave];
 
         // For whatever reason, wave samples need to be transposed down one octave to match their sound in Deflemask
@@ -1066,7 +1066,7 @@ Note DMFSampleMapper::GetMODNote(const Note& dmf_note, NoteRange& mod_note_range
     //      MOD sample the MOD note needs to use. The MOD note's octave
     //      and pitch should always be exactly what gets displayed in ProTracker.
 
-    Note mod_note{NotePitch::C, (uint16_t)1};
+    Note mod_note{NotePitch::kC, (uint16_t)1};
     mod_note_range = NoteRange::kFirst;
 
     if (sample_type_ == SampleType::kSilence)
@@ -1185,7 +1185,7 @@ void MOD::ExportImpl(const std::string& filename)
     std::ofstream out_file(filename, std::ios::binary);
     if (!out_file.is_open())
     {
-        throw MODException(ModuleException::Category::Export, ModuleException::ExportError::FileOpen);
+        throw MODException(ModuleException::Category::kExport, ModuleException::ExportError::kFileOpen);
     }
 
     ExportModuleName(out_file);
@@ -1196,8 +1196,7 @@ void MOD::ExportImpl(const std::string& filename)
 
     out_file.close();
 
-    const bool verbose = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::Verbose).GetValue<bool>();
-
+    const bool verbose = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::kVerbose).GetValue<bool>();
     if (verbose)
         std::cout << "Saved MOD file to disk.\n\n";
 }
@@ -1221,7 +1220,7 @@ void MOD::ExportModuleName(std::ofstream& fout) const
 
 void MOD::ExportSampleInfo(std::ofstream& fout) const
 {
-    for (const auto& [_, sample] : m_Samples)
+    for (const auto& [discard, sample] : samples_)
     {
         if (sample.name.size() > 22)
             throw std::length_error("Sample name must be 22 characters or less");
@@ -1237,14 +1236,14 @@ void MOD::ExportSampleInfo(std::ofstream& fout) const
         fout.put(sample.length >> 1);       // Length byte 1
         fout.put(sample.finetune);          // Finetune value !!!
         fout.put(sample.volume);            // Sample volume // TODO: Optimize this?
-        fout.put(sample.repeatOffset >> 9); // Repeat offset byte 0
-        fout.put(sample.repeatOffset >> 1); // Repeat offset byte 1
-        fout.put(sample.repeatLength >> 9); // Sample repeat length byte 0
-        fout.put(sample.repeatLength >> 1); // Sample repeat length byte 1
+        fout.put(sample.repeat_offset >> 9); // Repeat offset byte 0
+        fout.put(sample.repeat_offset >> 1); // Repeat offset byte 1
+        fout.put(sample.repeat_length >> 9); // Sample repeat length byte 0
+        fout.put(sample.repeat_length >> 1); // Sample repeat length byte 1
     }
 
     // The remaining samples are blank:
-    for (int i = m_TotalMODSamples; i < 31; i++)
+    for (int i = total_mod_samples_; i < 31; i++)
     {
         if (i != 30)
         {
@@ -1337,7 +1336,7 @@ void MOD::ExportPatterns(std::ofstream& fout) const
 
 void MOD::ExportSampleData(std::ofstream& fout) const
 {
-    for (const auto& sample_info : m_Samples)
+    for (const auto& sample_info : samples_)
     {
         const auto& sample_data = sample_info.second.data;
         for (int8_t value : sample_data)
@@ -1353,29 +1352,29 @@ static std::string GetWarningMessage(MOD::ConvertWarning warning, const std::str
 {
     switch (warning)
     {
-        case MOD::ConvertWarning::PitchHigh:
+        case MOD::ConvertWarning::kPitchHigh:
             return "Cannot use the highest Deflemask note (C-8) on some MOD players including ProTracker.";
-        case MOD::ConvertWarning::TempoLow:
+        case MOD::ConvertWarning::kTempoLow:
             return std::string("Tempo is too low. Using ~3.1 BPM instead.\n")
                     + std::string("         ProTracker only supports tempos between ~3.1 and 765 BPM.");
-        case MOD::ConvertWarning::TempoHigh:
+        case MOD::ConvertWarning::kTempoHigh:
             return std::string("Tempo is too high for ProTracker. Using 127.5 BPM instead.\n")
                     + std::string("         ProTracker only supports tempos between ~3.1 and 765 BPM.");
-        case MOD::ConvertWarning::TempoLowCompat:
+        case MOD::ConvertWarning::kTempoLowCompat:
             return std::string("Tempo is too low. Using 16 BPM to retain effect compatibility.\n")
                     + std::string("         Use --tempo=accuracy for the full tempo range.");
-        case MOD::ConvertWarning::TempoHighCompat:
+        case MOD::ConvertWarning::kTempoHighCompat:
             return std::string("Tempo is too high. Using 127.5 BPM to retain effect compatibility.\n")
                     + std::string("         Use --tempo=accuracy for the full tempo range.");
-        case MOD::ConvertWarning::TempoAccuracy:
+        case MOD::ConvertWarning::kTempoAccuracy:
             return "Tempo does not exactly match, but a value close to it is being used.";
-        case MOD::ConvertWarning::EffectIgnored:
+        case MOD::ConvertWarning::kEffectIgnored:
             return "A Deflemask effect was ignored due to limitations of the MOD format.";
-        case MOD::ConvertWarning::WaveDownsample:
+        case MOD::ConvertWarning::kWaveDownsample:
             return "Wavetable instrument #" + info + " was downsampled in MOD to allow higher notes to be played.";
-        case MOD::ConvertWarning::MultipleEffects:
+        case MOD::ConvertWarning::kMultipleEffects:
             return "No more than one volume change or effect can appear in the same row of the same channel. Important effects will be prioritized.";
-        case MOD::ConvertWarning::LoopbackInaccuracy:
+        case MOD::ConvertWarning::kLoopbackInaccuracy:
             return "Notes from one or more channels may erroneously carry over when looping back.";
         default:
             return "";
@@ -1386,22 +1385,22 @@ std::string MODException::CreateErrorMessage(Category category, int error_code, 
 {
     switch (category)
     {
-        case Category::None:
+        case Category::kNone:
             return "No error.";
-        case Category::Import:
+        case Category::kImport:
             return "No error.";
-        case Category::Export:
+        case Category::kExport:
             return "No error.";
-        case Category::Convert:
+        case Category::kConvert:
             switch (error_code)
             {
-                case (int)MOD::ConvertError::Success:
+                case (int)MOD::ConvertError::kSuccess:
                     return "No error.";
-                case (int)MOD::ConvertError::NotGameBoy:
+                case (int)MOD::ConvertError::kNotGameBoy:
                     return "Only the Game Boy system is currently supported.";
-                case (int)MOD::ConvertError::TooManyPatternMatrixRows:
+                case (int)MOD::ConvertError::kTooManyPatternMatrixRows:
                     return "Too many rows of patterns in the pattern matrix. 64 is the maximum. (63 if using Setup Pattern.)";
-                case (int)MOD::ConvertError::Over64RowPattern:
+                case (int)MOD::ConvertError::kOver64RowPattern:
                     return std::string("Patterns must have 64 or fewer rows.\n")
                             + std::string("       A workaround for this issue is planned for a future update to dmf2mod.");
                 default:

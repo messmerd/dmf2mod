@@ -346,10 +346,10 @@ struct ChannelState :
 namespace detail {
 
 // Compile-time for loop helper
-template<int start, class Reader, class Tuple, typename Function, int... Is>
-void CopyStateHelper(Reader const* reader, Tuple& t, const Function& f, std::integer_sequence<int, Is...>&&)
+template<int start, class Reader, class Tuple, typename Function, int... integers>
+void CopyStateHelper(Reader const* reader, Tuple& t, const Function& f, std::integer_sequence<int, integers...>&&)
 {
-    (f(std::get<Is>(t), reader->template Get<start + Is>()), ...);
+    (f(std::get<integers>(t), reader->template Get<start + integers>()), ...);
 }
 
 // Function F arguments are: (inner data tuple element reference, inner data)
@@ -360,13 +360,13 @@ void CopyState(Reader const* reader, Tuple& t, const Function& f)
 }
 
 // Compile-time for loop helper
-template<int start, bool oneshots, class Reader, typename Function, int... Is>
-void NextStateHelper(Reader const* reader, const Function& f, std::integer_sequence<int, Is...>&&)
+template<int start, bool oneshots, class Reader, typename Function, int... integers>
+void NextStateHelper(Reader const* reader, const Function& f, std::integer_sequence<int, integers...>&&)
 {
     if constexpr (oneshots)
-        (f(reader->template GetOneShotVec<start + Is>(), start + Is), ...);
+        (f(reader->template GetOneShotVec<start + integers>(), start + integers), ...);
     else
-        (f(reader->template GetVec<start + Is>(), start + Is), ...);
+        (f(reader->template GetVec<start + integers>(), start + integers), ...);
 }
 
 // Function F arguments are: (wrapped state/one-shot data vector, index)
@@ -485,13 +485,13 @@ public:
     // Returns a tuple of all the state values at the current read position
     StateData Copy() const
     {
-        StateData retVal;
-        detail::CopyState<State::kLowerBound, State::kUpperBound>(this, retVal,
-            [](auto& retValElem, const auto& val) constexpr
+        StateData return_val;
+        detail::CopyState<State::kLowerBound, State::kUpperBound>(this, return_val,
+            [](auto& return_val_elem, const auto& val) constexpr
         {
-            retValElem = val;
+            return_val_elem = val;
         });
-        return retVal;
+        return return_val;
     }
 
     /*
@@ -676,10 +676,10 @@ template<class T> using ChannelStateReader = StateReader<ChannelState<T>>;
 namespace detail {
 
 // Compile-time for loop helper
-template<int start, class Writer, class Tuple, int... Is>
-void ResumeStateHelper(Writer* writer, const Tuple& t, std::integer_sequence<int, Is...>&&)
+template<int start, class Writer, class Tuple, int... integers>
+void ResumeStateHelper(Writer* writer, const Tuple& t, std::integer_sequence<int, integers...>&&)
 {
-    (writer->template Set<start + Is>(std::get<Is>(t)), ...);
+    (writer->template Set<start + integers>(std::get<integers>(t)), ...);
 }
 
 // Calls writer->Set() for each element in the tuple t
@@ -903,7 +903,9 @@ struct StateReaders
     {
         global_reader.Reset();
         for (auto& temp : channel_readers)
+        {
             temp.Reset();
+        }
     }
 };
 
@@ -917,7 +919,9 @@ struct StateReaderWriters
     {
         global_reader_writer.Reset();
         for (auto& temp : channel_reader_writers)
+        {
             temp.Reset();
+        }
     }
 
     void Save()
@@ -925,7 +929,9 @@ struct StateReaderWriters
         saved_channel_states_.resize(channel_reader_writers.size());
         saved_global_data_ = global_reader_writer.Copy();
         for (unsigned i = 0; i < channel_reader_writers.size(); ++i)
+        {
             saved_channel_states_[i] = channel_reader_writers[i].Copy();
+        }
     }
 
     void Restore()
@@ -933,7 +939,9 @@ struct StateReaderWriters
         assert(saved_channel_states_.size() == channel_reader_writers.size());
         global_reader_writer.Restore(saved_global_data_);
         for (unsigned i = 0; i < channel_reader_writers.size(); ++i)
+        {
             channel_reader_writers[i].Restore(saved_channel_states_[i]);
+        }
     }
 
 private:
@@ -954,14 +962,14 @@ public:
     // Creates and returns a pointer to a StateReaders object. The readers are valid only for as long as ModuleState is valid.
     std::shared_ptr<StateReaders<ModuleClass>> GetReaders() const
     {
-        auto retVal = std::make_shared<StateReaders<ModuleClass>>();
-        retVal->global_reader.AssignState(&global_state_);
-        retVal->channel_readers.resize(channel_states_.size());
+        auto return_val = std::make_shared<StateReaders<ModuleClass>>();
+        return_val->global_reader.AssignState(&global_state_);
+        return_val->channel_readers.resize(channel_states_.size());
         for (unsigned i = 0; i < channel_states_.size(); ++i)
         {
-            retVal->channel_readers[i].AssignState(&channel_states_[i], i);
+            return_val->channel_readers[i].AssignState(&channel_states_[i], i);
         }
-        return retVal;
+        return return_val;
     }
 
 private:
@@ -974,14 +982,14 @@ private:
     // Creates and returns a pointer to a StateReaderWriters object. The reader/writers are valid only for as long as ModuleState is valid.
     std::shared_ptr<StateReaderWriters<ModuleClass>> GetReaderWriters()
     {
-        auto retVal = std::make_shared<StateReaderWriters<ModuleClass>>();
-        retVal->global_reader_writer.AssignStateWrite(&global_state_);
-        retVal->channel_reader_writers.resize(channel_states_.size());
+        auto return_val = std::make_shared<StateReaderWriters<ModuleClass>>();
+        return_val->global_reader_writer.AssignStateWrite(&global_state_);
+        return_val->channel_reader_writers.resize(channel_states_.size());
         for (unsigned i = 0; i < channel_states_.size(); ++i)
         {
-            retVal->channel_reader_writers[i].AssignStateWrite(&channel_states_[i], i);
+            return_val->channel_reader_writers[i].AssignStateWrite(&channel_states_[i], i);
         }
-        return retVal;
+        return return_val;
     }
 
 private:

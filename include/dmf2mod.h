@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include "version.h"
 #include "factory.h"
 
 #include "dmf.h"

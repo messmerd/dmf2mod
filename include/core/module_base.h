@@ -30,8 +30,8 @@ using ConversionOptionsPtr = std::shared_ptr<ConversionOptions>;
 template<>
 struct Info<ModuleBase> : public InfoBase
 {
-    std::string friendlyName{};
-    std::string fileExtension{};
+    std::string friendly_name{};
+    std::string file_extension{};
 };
 
 // Base class for all module types (DMF, MOD, XM, etc.)
@@ -44,7 +44,7 @@ protected:
     // TODO: Use this
     enum class ExportState
     {
-        Empty, Invalid, Ready
+        kEmpty, kInvalid, kReady
     };
 
 public:
@@ -85,12 +85,12 @@ public:
     /*
      * Gets the Status object for the last import/export/convert
      */
-    const Status& GetStatus() const { return m_Status; }
+    const Status& GetStatus() const { return status_; }
 
     /*
      * Convenience wrapper for GetStatus().HandleResults()
      */
-    bool HandleResults() const { return m_Status.HandleResults(); }
+    bool HandleResults() const { return status_.HandleResults(); }
 
     /*
      * Get the title of the module
@@ -109,13 +109,13 @@ protected:
     virtual void ExportImpl(const std::string& filename) = 0;
     virtual void ConvertImpl(const ModulePtr& input) = 0;
 
-    ConversionOptionsPtr GetOptions() const { return m_Options; }
+    ConversionOptionsPtr GetOptions() const { return options_; }
 
-    Status m_Status;
+    Status status_;
 
 private:
 
-    ConversionOptionsPtr m_Options;
+    ConversionOptionsPtr options_;
 };
 
 } // namespace d2m

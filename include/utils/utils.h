@@ -21,14 +21,14 @@ class Utils
 public:
     // File utils
     static std::string GetBaseNameFromFilename(const std::string& filename);
-    static std::string ReplaceFileExtension(const std::string& filename, const std::string& newFileExtension);
+    static std::string ReplaceFileExtension(const std::string& filename, const std::string& new_file_extension);
     static std::string GetFileExtension(const std::string& filename);
     static bool FileExists(const std::string& filename);
 
     // File utils which require Factory initialization
     static ModuleType GetTypeFromFilename(const std::string& filename);
     static ModuleType GetTypeFromFileExtension(const std::string& extension);
-    static std::string GetExtensionFromType(ModuleType moduleType);
+    static std::string GetExtensionFromType(ModuleType module_type);
 
     // Command-line arguments and options utils
     static std::vector<std::string> GetArgsAsVector(int argc, char *argv[]);

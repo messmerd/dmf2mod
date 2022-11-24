@@ -13,6 +13,7 @@
 
 #include <string>
 #include <map>
+#include <array>
 
 namespace d2m {
 
@@ -23,21 +24,21 @@ namespace d2m {
 class DMF;
 
 template<>
-struct ModuleGlobalData<DMF> : public ModuleGlobalDataDefault<DataStorageType::COR> {};
+struct ModuleGlobalData<DMF> : public ModuleGlobalDataDefault<DataStorageType::kCOR> {};
 
 template<>
 struct Row<DMF>
 {
     NoteSlot note;
     int16_t volume;
-    Effect effect[4]; // Deflemask allows four effects columns per channel regardless of the system
+    std::array<Effect, 4> effect; // Deflemask allows four effects columns per channel regardless of the system
     int16_t instrument;
 };
 
 template<>
 struct ChannelMetadata<DMF>
 {
-    uint8_t effectColumnsCount;
+    uint8_t effect_columns_count;
 };
 
 template<>
@@ -146,9 +147,9 @@ struct System
 {
     enum class Type
     {
-        Error=0, YMU759, Genesis, Genesis_CH3, SMS, GameBoy,
-        PCEngine, NES, C64_SID_8580, C64_SID_6581, Arcade,
-        NeoGeo, NeoGeo_CH2, SMS_OPLL, NES_VRC7, NES_FDS
+        kError=0, kYMU759, kGenesis, kGenesis_CH3, kSMS, kGameBoy,
+        kPCEngine, kNES, kC64_SID_8580, kC64_SID_6581, kArcade,
+        kNeoGeo, kNeoGeo_CH2, kSMS_OPLL, kNES_VRC7, kNES_FDS
     };
 
     Type type;
@@ -163,15 +164,15 @@ struct System
 
 struct VisualInfo
 {
-    uint8_t highlightAPatterns;
-    uint8_t highlightBPatterns;
+    uint8_t highlight_a_patterns;
+    uint8_t highlight_b_patterns;
 };
 
 struct ModuleInfo
 {
-    uint8_t timeBase, tickTime1, tickTime2, framesMode, usingCustomHZ, customHZValue1, customHZValue2, customHZValue3;
-    uint32_t totalRowsPerPattern; // TODO: Should remove this eventually (duplicate w/ ModuleData)
-    uint8_t totalRowsInPatternMatrix; // (orders) TODO: Should remove this eventually (duplicate w/ ModuleData)
+    uint8_t time_base, tick_time1, tick_time2, frames_mode, using_custom_hz, custom_hz_value1, custom_hz_value2, custom_hz_value3;
+    uint32_t total_rows_per_pattern; // TODO: Should remove this eventually (duplicate w/ ModuleData)
+    uint8_t total_rows_in_pattern_matrix; // (orders) TODO: Should remove this eventually (duplicate w/ ModuleData)
 };
 
 struct FMOps
@@ -192,7 +193,7 @@ struct FMOps
 
     union
     {
-        uint8_t SSGMode;
+        uint8_t ssg_mode;
         uint8_t egs; // EG-S in SMS OPLL / NES VRC7. 0 if OFF; 8 if ON.
     };
 
@@ -203,9 +204,9 @@ struct Instrument
 {
     enum InstrumentMode
     {
-        InvalidMode=0,
-        StandardMode,
-        FMMode
+        kInvalidMode=0,
+        kStandardMode,
+        kFMMode
     };
 
     std::string name;
@@ -216,25 +217,25 @@ struct Instrument
         // Standard Instruments
         struct
         {
-            uint8_t volEnvSize, arpEnvSize, dutyNoiseEnvSize, wavetableEnvSize;
-            int32_t *volEnvValue, *arpEnvValue, *dutyNoiseEnvValue, *wavetableEnvValue;
-            int8_t volEnvLoopPos, arpEnvLoopPos, dutyNoiseEnvLoopPos, wavetableEnvLoopPos;
-            uint8_t arpMacroMode;
+            uint8_t vol_env_size, arp_env_size, duty_noise_env_size, wavetable_env_size;
+            int32_t *vol_env_value, *arp_env_value, *duty_noise_env_value, *wavetable_env_value;
+            int8_t vol_env_loop_pos, arp_env_loop_pos, duty_noise_env_loop_pos, wavetable_env_loop_pos;
+            uint8_t arp_macro_mode;
 
             // Commodore 64 exclusive
-            uint8_t c64TriWaveEn, c64SawWaveEn, c64PulseWaveEn, c64NoiseWaveEn,
-                c64Attack, c64Decay, c64Sustain, c64Release, c64PulseWidth, c64RingModEn,
-                c64SyncModEn, c64ToFilter, c64VolMacroToFilterCutoffEn, c64UseFilterValuesFromInst;
-            uint8_t c64FilterResonance, c64FilterCutoff, c64FilterHighPass, c64FilterLowPass, c64FilterCH2Off;
+            uint8_t c64_tri_wave_en, c64_saw_wave_en, c64_pulse_wave_en, c64_noise_wave_en,
+                c64_attack, c64_decay, c64_sustain, c64_release, c64_pulse_width, c64_ring_mod_en,
+                c64_sync_mod_en, c64_to_filter, c64_vol_macro_to_filter_cutoff_en, c64_use_filter_values_from_inst;
+            uint8_t c64_filter_resonance, c64_filter_cutoff, c64_filter_high_pass, c64_filter_low_pass, c64_filter_ch2_off;
 
             // Game Boy exclusive
-            uint8_t gbEnvVol, gbEnvDir, gbEnvLen, gbSoundLen;
+            uint8_t gb_env_vol, gb_env_dir, gb_env_len, gb_sound_len;
         } std;
 
         // FM Instruments
         struct
         {
-            uint8_t numOperators;
+            uint8_t num_operators;
 
             union
             {
@@ -243,7 +244,7 @@ struct Instrument
             };
 
             uint8_t fb;
-            uint8_t opllPreset; // SMS OPLL / NES VRC7 exclusive
+            uint8_t opll_preset; // SMS OPLL / NES VRC7 exclusive
 
             union {
                 struct {
@@ -264,7 +265,7 @@ struct PCMSample
     uint32_t size;
     std::string name;
     uint8_t rate, pitch, amp, bits;
-    uint16_t *data;
+    uint16_t* data;
 };
 
 // Deflemask Game Boy channels
@@ -272,7 +273,7 @@ namespace GameBoyChannel
 {
     enum
     {
-        SQW1=0, SQW2=1, WAVE=2, NOISE=3
+        kSquare1=0, kSquare2=1, kWave=2, kNoise=3
     };
 }
 
@@ -305,8 +306,8 @@ public:
 
     enum ImportError
     {
-        Success=0,
-        UnspecifiedError
+        kSuccess=0,
+        kUnspecifiedError
     };
 
     enum class ImportWarning {};
@@ -317,7 +318,7 @@ public:
 
     using SystemType = dmf::System::Type;
 
-    static const dmf::System& Systems(SystemType systemType);
+    static const dmf::System& Systems(SystemType system_type);
 
 private:
 
@@ -336,11 +337,11 @@ public:
     void GetBPM(unsigned& numerator, unsigned& denominator) const;
     double GetBPM() const;
 
-    const dmf::System& GetSystem() const { return m_System; }
+    const dmf::System& GetSystem() const { return system_; }
 
-    uint8_t GetTotalWavetables() const { return m_TotalWavetables; }
-    uint32_t** GetWavetableValues() const { return m_WavetableValues; }
-    uint32_t GetWavetableValue(unsigned wavetable, unsigned index) const { return m_WavetableValues[wavetable][index]; }
+    uint8_t GetTotalWavetables() const { return total_wavetables_; }
+    uint32_t** GetWavetableValues() const { return wavetable_values_; }
+    uint32_t GetWavetableValue(unsigned wavetable, unsigned index) const { return wavetable_values_[wavetable][index]; }
 
 private:
 
@@ -349,32 +350,32 @@ private:
     void ConvertImpl(const ModulePtr& input) override;
     size_t GenerateDataImpl(size_t data_flags) const override;
 
-    using Reader = StreamReader<zstr::ifstream, Endianness::Little>;
+    using Reader = StreamReader<zstr::ifstream, Endianness::kLittle>;
 
-    dmf::System GetSystem(uint8_t systemByte) const;
+    dmf::System GetSystem(uint8_t system_byte) const;
     void LoadVisualInfo(Reader& fin);
     void LoadModuleInfo(Reader& fin);
     void LoadPatternMatrixValues(Reader& fin);
     void LoadInstrumentsData(Reader& fin);
-    dmf::Instrument LoadInstrument(Reader& fin, SystemType systemType);
+    dmf::Instrument LoadInstrument(Reader& fin, SystemType system_type);
     void LoadWavetablesData(Reader& fin);
     void LoadPatternsData(Reader& fin);
-    Row<DMF> LoadPatternRow(Reader& fin, uint8_t effectsColumnsCount);
+    Row<DMF> LoadPatternRow(Reader& fin, uint8_t effect_columns_count);
     void LoadPCMSamplesData(Reader& fin);
     dmf::PCMSample LoadPCMSample(Reader& fin);
 
 private:
-    uint8_t         m_DMFFileVersion;
-    dmf::System          m_System;
-    dmf::VisualInfo      m_VisualInfo;
-    dmf::ModuleInfo      m_ModuleInfo;
-    uint8_t         m_TotalInstruments;
-    dmf::Instrument*     m_Instruments;
-    uint8_t         m_TotalWavetables;
-    uint32_t*       m_WavetableSizes;
-    uint32_t**      m_WavetableValues;
-    uint8_t         m_TotalPCMSamples;
-    dmf::PCMSample*      m_PCMSamples;
+    uint8_t file_version_;
+    dmf::System system_;
+    dmf::VisualInfo visual_info_;
+    dmf::ModuleInfo module_info_;
+    uint8_t total_instruments_;
+    dmf::Instrument* instruments_;
+    uint8_t total_wavetables_;
+    uint32_t* wavetable_sizes_;
+    uint32_t** wavetable_values_;
+    uint8_t total_pcm_samples_;
+    dmf::PCMSample* pcm_samples_;
 };
 
 } // namespace d2m

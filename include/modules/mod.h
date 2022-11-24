@@ -24,7 +24,7 @@ namespace d2m {
 class MOD;
 
 template<>
-struct ModuleGlobalData<MOD> : public ModuleGlobalDataDefault<DataStorageType::ORC>
+struct ModuleGlobalData<MOD> : public ModuleGlobalDataDefault<DataStorageType::kORC>
 {
     // In the future, we'll be able to detect when a MOD module
     // was created with dmf2mod, which will help when converting
@@ -109,31 +109,27 @@ namespace Effects
         kFineVolSlideUp,
         kFineVolSlideDown,
         kDelayPattern,
-        kInvertLoop,
-
-        /* The following are not actual MOD effects, but they are useful during conversions */
-        kDutyCycleChange=50,
-        kWavetableChange=51
+        kInvertLoop
     };
 }
 
 // Higher enum value = higher priority
 enum EffectPriority
 {
-    EffectPriorityUnsupportedEffect=0,
-    EffectPriorityOtherEffect,
-    EffectPriorityVibrato,
-    //EffectPriorityVibratoVolSlide,
-    EffectPriorityArp,
-    //EffectPriorityVolSlide,
-    EffectPriorityVolumeChange,
-    EffectPriorityPort2Note,
-    //EffectPriorityPort2NoteVolSlide,
-    EffectPriorityPortDown,
-    EffectPriorityPortUp,
-    EffectPriorityTempoChange,
-    EffectPrioritySampleChange, /* Can always be performed */
-    EffectPriorityStructureRelated, /* Can always be performed */
+    kEffectPriorityUnsupportedEffect=0,
+    kEffectPriorityOtherEffect,
+    kEffectPriorityVibrato,
+    //kEffectPriorityVibratoVolSlide,
+    kEffectPriorityArp,
+    //kEffectPriorityVolSlide,
+    kEffectPriorityVolumeChange,
+    kEffectPriorityPort2Note,
+    //kEffectPriorityPort2NoteVolSlide,
+    kEffectPriorityPortDown,
+    kEffectPriorityPortUp,
+    kEffectPriorityTempoChange,
+    kEffectPrioritySampleChange, /* Can always be performed */
+    kEffectPriorityStructureRelated, /* Can always be performed */
 };
 
 /*
@@ -198,8 +194,8 @@ struct Sample
     unsigned length;
     int finetune;
     unsigned volume;
-    unsigned repeatOffset;
-    unsigned repeatLength;
+    unsigned repeat_offset;
+    unsigned repeat_length;
 
     std::vector<int8_t> data;
 };
@@ -233,25 +229,20 @@ public:
 
     enum class OptionEnum
     {
-        AmigaFilter, Arpeggio, Portamento, Port2Note, Vibrato, TempoType
-    };
-
-    enum class EffectsEnum
-    {
-        Min, Max
+        kAmigaFilter, kArpeggio, kPortamento, kPort2Note, kVibrato, kTempoType
     };
 
     enum class TempoType
     {
-        Accuracy, EffectCompatibility
+        kAccuracy, kEffectCompatibility
     };
 
-    inline bool UseAmigaFilter() const { return GetOption(OptionEnum::AmigaFilter).GetValue<bool>(); }
-    inline bool AllowArpeggio() const { return GetOption(OptionEnum::Arpeggio).GetValue<bool>(); }
-    inline bool AllowPortamento() const { return GetOption(OptionEnum::Portamento).GetValue<bool>(); }
-    inline bool AllowPort2Note() const { return GetOption(OptionEnum::Port2Note).GetValue<bool>(); }
-    inline bool AllowVibrato() const { return GetOption(OptionEnum::Vibrato).GetValue<bool>(); }
-    inline TempoType GetTempoType() const { return TempoType{GetOption(OptionEnum::TempoType).GetValueAsIndex()}; }
+    inline bool UseAmigaFilter() const { return GetOption(OptionEnum::kAmigaFilter).GetValue<bool>(); }
+    inline bool AllowArpeggio() const { return GetOption(OptionEnum::kArpeggio).GetValue<bool>(); }
+    inline bool AllowPortamento() const { return GetOption(OptionEnum::kPortamento).GetValue<bool>(); }
+    inline bool AllowPort2Note() const { return GetOption(OptionEnum::kPort2Note).GetValue<bool>(); }
+    inline bool AllowVibrato() const { return GetOption(OptionEnum::kVibrato).GetValue<bool>(); }
+    inline TempoType GetTempoType() const { return TempoType{GetOption(OptionEnum::kTempoType).GetValueAsIndex()}; }
 
     inline bool AllowEffects() const { return AllowArpeggio() || AllowPortamento() || AllowPort2Note() || AllowVibrato(); }
 
@@ -270,34 +261,34 @@ public:
     // Factory requires destructor to be public
     ~MOD() = default;
 
-    enum class ImportError {Success=0};
+    enum class ImportError {kSuccess=0};
     enum class ImportWarning {};
 
-    enum class ExportError {Success=0};
+    enum class ExportError {kSuccess=0};
     enum class ExportWarning {};
 
     enum class ConvertError
     {
-        Success=0,
-        NotGameBoy,
-        TooManyPatternMatrixRows,
-        Over64RowPattern,
-        WrongChannelCount
+        kSuccess=0,
+        kNotGameBoy,
+        kTooManyPatternMatrixRows,
+        kOver64RowPattern,
+        kWrongChannelCount
     };
 
     enum class ConvertWarning
     {
-        None=0,
-        PitchHigh,
-        TempoLow,
-        TempoHigh,
-        TempoLowCompat,
-        TempoHighCompat,
-        TempoAccuracy,
-        EffectIgnored,
-        WaveDownsample,
-        MultipleEffects,
-        LoopbackInaccuracy
+        kNone=0,
+        kPitchHigh,
+        kTempoLow,
+        kTempoHigh,
+        kTempoLowCompat,
+        kTempoHighCompat,
+        kTempoAccuracy,
+        kEffectIgnored,
+        kWaveDownsample,
+        kMultipleEffects,
+        kLoopbackInaccuracy
     };
 
     static constexpr unsigned kVolumeMax = 64u; // Yes, there are 65 different values for the volume
@@ -337,11 +328,11 @@ private:
     void ExportSampleData(std::ofstream& fout) const;
 
     //////////// Temporaries used during DMF-->MOD conversion
-    const bool m_UsingSetupPattern = true; // Whether to use a pattern at the start of the module to set up the initial tempo and other stuff.
+    static constexpr bool using_setup_pattern_ = true; // Whether to use a pattern at the start of the module to set up the initial tempo and other stuff.
 
     //////////// MOD file info
-    int8_t m_TotalMODSamples;
-    std::map<SoundIndexType<MOD>, mod::Sample> m_Samples;
+    int8_t total_mod_samples_;
+    std::map<SoundIndexType<MOD>, mod::Sample> samples_;
 };
 
 } // namespace d2m

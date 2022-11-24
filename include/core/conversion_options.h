@@ -57,7 +57,7 @@ public:
     /*
      * Get the filename of the output file. Returns empty string if error occurred.
      */
-    std::string GetOutputFilename() const { return m_output_file; }
+    std::string GetOutputFilename() const { return output_file_; }
 
     /*
      * Prints help message for this module's options
@@ -71,7 +71,7 @@ public:
 
 protected:
 
-    std::string m_output_file;
+    std::string output_file_;
 };
 
 

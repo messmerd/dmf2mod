@@ -18,7 +18,7 @@ jobs:
         cmake -S. -Bbin
         cmake --build .\bin --config Release
     - name: run
-      run: .\bin\Release\console\dmf2mod.exe
+      run: .\bin\console\Release\dmf2mod.exe
 
   build-linux:
 

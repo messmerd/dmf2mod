@@ -9,7 +9,6 @@
 
 #include "core/module.h"
 #include "utils/stream_reader.h"
-#include <zstr/zstr.hpp>
 
 #include <string>
 #include <map>
@@ -76,50 +75,6 @@ inline constexpr int kDMFVolumeMax = 15; /* ??? */
 inline constexpr int kDMFGameBoyVolumeMax = 15;
 inline constexpr int kDMFNoEffectVal = -1;
 
-// Effect codes used by the DMF format:
-namespace EffectCode
-{
-    enum
-    {
-        kNoEffect=-1,
-        kArp                    =0x0,
-        kPortUp                 =0x1,
-        kPortDown               =0x2,
-        kPort2Note              =0x3,
-        kVibrato                =0x4,
-        kPort2NoteVolSlide      =0x5,
-        kVibratoVolSlide        =0x6,
-        kTremolo                =0x7,
-        kPanning                =0x8,
-        kSetSpeedVal1           =0x9,
-        kVolSlide               =0xA,
-        kPosJump                =0xB,
-        kRetrig                 =0xC,
-        kPatBreak               =0xD,
-        kArpTickSpeed           =0xE0,
-        kNoteSlideUp            =0xE1,
-        kNoteSlideDown          =0xE2,
-        kSetVibratoMode         =0xE3,
-        kSetFineVibratoDepth    =0xE4,
-        kSetFinetune            =0xE5,
-        kSetSamplesBank         =0xEB,
-        kNoteCut                =0xEC,
-        kNoteDelay              =0xED,
-        kSyncSignal             =0xEE,
-        kSetGlobalFinetune      =0xEF,
-        kSetSpeedVal2           =0xF,
-
-        // Game Boy exclusive
-        kGameBoySetWave                 =0x10,
-        kGameBoySetNoisePolyCounterMode =0x11,
-        kGameBoySetDutyCycle            =0x12,
-        kGameBoySetSweepTimeShift       =0x13,
-        kGameBoySetSweepDir             =0x14
-
-        // TODO: Add enums for effects exclusive to the rest of Deflemask's systems.
-    };
-}
-
 // Custom dmf2mod internal effect codes (see effects.h)
 namespace Effects
 {
@@ -141,7 +96,6 @@ namespace Effects
         kGameBoySetSweepDir
     };
 }
-
 
 struct System
 {
@@ -350,19 +304,11 @@ private:
     void ConvertImpl(const ModulePtr& input) override;
     size_t GenerateDataImpl(size_t data_flags) const override;
 
-    using Reader = StreamReader<zstr::ifstream, Endianness::kLittle>;
+    // Use PIMPL to hide Import helper methods
+    class Importer;
+    std::unique_ptr<Importer> importer_pimpl_;
 
     dmf::System GetSystem(uint8_t system_byte) const;
-    void LoadVisualInfo(Reader& fin);
-    void LoadModuleInfo(Reader& fin);
-    void LoadPatternMatrixValues(Reader& fin);
-    void LoadInstrumentsData(Reader& fin);
-    dmf::Instrument LoadInstrument(Reader& fin, SystemType system_type);
-    void LoadWavetablesData(Reader& fin);
-    void LoadPatternsData(Reader& fin);
-    Row<DMF> LoadPatternRow(Reader& fin, uint8_t effect_columns_count);
-    void LoadPCMSamplesData(Reader& fin);
-    dmf::PCMSample LoadPCMSample(Reader& fin);
 
 private:
     uint8_t file_version_;

@@ -59,13 +59,13 @@ private:
     template<typename T, uint8_t num_bytes>
     struct LittleEndianReadOperator
     {
-        static constexpr uint_fast8_t ShiftAmount = (num_bytes - 1) * 8;
+        static constexpr uint_fast8_t kShiftAmount = (num_bytes - 1) * 8;
         static_assert(num_bytes > 0);
 
         inline void operator()()
         {
             value >>= 8;
-            value |= static_cast<T>(stream_.get()) << ShiftAmount;
+            value |= static_cast<T>(stream_.get()) << kShiftAmount;
         }
         IStream& stream_;
         T value{};

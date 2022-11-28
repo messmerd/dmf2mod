@@ -5,8 +5,8 @@
     See conversion_options.h
 */
 
-#include "conversion_options.h"
-#include "module_base.h"
+#include "core/conversion_options.h"
+#include "core/module_base.h"
 
 #include <iostream>
 

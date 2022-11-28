@@ -16,8 +16,6 @@
 #include <iostream>
 #include <iomanip>
 
-#include "utils.h"
-
 using namespace d2m;
 
 // Used for returning input/output info when parsing command-line arguments

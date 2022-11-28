@@ -5,7 +5,7 @@
     See global_options.h
 */
 
-#include "global_options.h"
+#include "core/global_options.h"
 
 using namespace d2m;
 using OptionEnum = GlobalOptions::OptionEnum;

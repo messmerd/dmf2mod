@@ -6,7 +6,7 @@
     for handling errors and warnings.
 */
 
-#include "status.h"
+#include "core/status.h"
 
 #include <iostream>
 

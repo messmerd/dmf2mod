@@ -5,7 +5,7 @@
     See module.h
 */
 
-#include "module.h"
+#include "core/module.h"
 #include "utils/utils.h"
 
 #include <cassert>

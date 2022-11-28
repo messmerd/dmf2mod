@@ -8,14 +8,14 @@
 
 #pragma once
 
-#include "module_base.h"
-#include "factory.h"
-#include "conversion_options.h"
-#include "status.h"
-#include "data.h"
-#include "generated_data.h"
-#include "note.h"
-#include "global_options.h"
+#include "core/module_base.h"
+#include "core/factory.h"
+#include "core/conversion_options.h"
+#include "core/status.h"
+#include "core/data.h"
+#include "core/generated_data.h"
+#include "core/note.h"
+#include "core/global_options.h"
 
 #include <string>
 #include <memory>

@@ -8,7 +8,9 @@
 #pragma once
 
 #include "version.h"
-#include "factory.h"
+#include "core/factory.h"
 
-#include "dmf.h"
-#include "mod.h"
+#include "modules/dmf.h"
+#include "modules/mod.h"
+
+#include "utils/utils.h"

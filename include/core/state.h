@@ -7,10 +7,10 @@
 
 #pragma once
 
-#include "config_types.h"
-#include "data.h"
-#include "note.h"
-#include "effects.h"
+#include "core/config_types.h"
+#include "core/data.h"
+#include "core/note.h"
+#include "core/effects.h"
 
 #include <vector>
 #include <tuple>
@@ -21,8 +21,6 @@
 #include <type_traits>
 #include <functional>
 #include <cassert>
-
-#include "gcem.hpp"
 
 namespace d2m {
 
@@ -57,6 +55,12 @@ struct wrapped_state_data<std::tuple<Ts...>>
 
 template<typename... T>
 using wrapped_state_data_t = typename wrapped_state_data<T...>::type;
+
+template<typename T>
+constexpr T abs(const T x) noexcept
+{
+    return x == T(0) ? T(0) : (x < T(0) ? -x : x);
+}
 
 } // namespace detail
 
@@ -356,7 +360,7 @@ void CopyStateHelper(Reader const* reader, Tuple& t, const Function& f, std::int
 template<int start, int end, class Reader, class Tuple, typename Function>
 void CopyState(Reader const* reader, Tuple& t, const Function& f)
 {
-    CopyStateHelper<start>(reader, t, f, std::make_integer_sequence<int, gcem::abs(start) + end>{});
+    CopyStateHelper<start>(reader, t, f, std::make_integer_sequence<int, detail::abs(start) + end>{});
 }
 
 // Compile-time for loop helper
@@ -373,7 +377,7 @@ void NextStateHelper(Reader const* reader, const Function& f, std::integer_seque
 template<int start, int end, bool oneshots, class Reader, typename Function>
 void NextState(Reader const* reader, const Function& f)
 {
-    NextStateHelper<start, oneshots>(reader, f, std::make_integer_sequence<int, gcem::abs(start) + end>{});
+    NextStateHelper<start, oneshots>(reader, f, std::make_integer_sequence<int, detail::abs(start) + end>{});
 }
 
 } // namespace detail
@@ -686,7 +690,7 @@ void ResumeStateHelper(Writer* writer, const Tuple& t, std::integer_sequence<int
 template<int start, int end, class Writer, class Tuple>
 void ResumeState(Writer* writer, const Tuple& t)
 {
-    ResumeStateHelper<start>(writer, t, std::make_integer_sequence<int, gcem::abs(start) + end>{});
+    ResumeStateHelper<start>(writer, t, std::make_integer_sequence<int, detail::abs(start) + end>{});
 }
 
 } // namespace detail

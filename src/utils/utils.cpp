@@ -5,10 +5,10 @@
     Defines various utility methods used by dmf2mod.
 */
 
-#include "utils.h"
+#include "utils/utils.h"
 
-#include "factory.h"
-#include "module.h"
+#include "core/factory.h"
+#include "core/module.h"
 
 #include <filesystem>
 

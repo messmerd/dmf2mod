@@ -7,8 +7,7 @@
 
 #pragma once
 
-#include "config_types.h"
-#include "options.h"
+#include "core/config_types.h"
 
 #include <string>
 #include <vector>
@@ -20,6 +19,7 @@
 #include <stdexcept>
 #include <typeindex>
 #include <utility>
+#include <cassert>
 
 namespace d2m {
 

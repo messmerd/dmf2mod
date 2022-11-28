@@ -8,9 +8,9 @@
 
 #pragma once
 
-#include "factory.h"
-#include "utils.h"
-#include "options.h"
+#include "core/factory.h"
+#include "core/options.h"
+#include "utils/utils.h"
 
 #include <string>
 #include <vector>

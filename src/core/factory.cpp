@@ -5,7 +5,7 @@
     Implements InitializeImpl for each factory.
 */
 
-#include "factory.h"
+#include "core/factory.h"
 #include "dmf2mod.h"
 
 using namespace d2m;

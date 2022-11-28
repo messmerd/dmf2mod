@@ -7,7 +7,7 @@
 
 #pragma once
 
-#include "note.h"
+#include "core/note.h"
 
 #include <vector>
 #include <algorithm>

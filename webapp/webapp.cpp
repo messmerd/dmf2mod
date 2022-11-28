@@ -6,10 +6,11 @@
 */
 
 #include "dmf2mod.h"
-#include "utils.h"
 
 #include <emscripten/emscripten.h>
 #include <emscripten/bind.h>
+
+#include <iostream>
 
 using namespace d2m;
 

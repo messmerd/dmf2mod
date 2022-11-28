@@ -5,10 +5,10 @@
     Defines GeneratedData and related class templates
 */
 
-#include "note.h"
-#include "data.h"
-#include "state.h"
-#include "module_base.h"
+#include "core/note.h"
+#include "core/data.h"
+#include "core/state.h"
+#include "core/module_base.h"
 
 #include <cstddef>
 #include <map>
@@ -98,7 +98,7 @@ void ClearAllGenDataHelper(Storage* storage, std::integer_sequence<int, integers
 template<int start, int end, class Storage>
 void ClearAllGenData(Storage* storage)
 {
-    ClearAllGenDataHelper<start>(storage, std::make_integer_sequence<int, gcem::abs(start) + end>{});
+    ClearAllGenDataHelper<start>(storage, std::make_integer_sequence<int, detail::abs(start) + end>{});
 }
 
 } // namespace detail

@@ -8,7 +8,7 @@
 #pragma once
 
 #include "core/module.h"
-#include "dmf.h"
+#include "modules/dmf.h"
 
 #include <string>
 #include <sstream>
@@ -45,51 +45,6 @@ struct Row<MOD>
 ///////////////////////////////////////////////////////////
 
 namespace mod {
-
-// Effect codes used by the MOD format:
-// An effect is represented with 12 bits, which is 3 groups of 4 bits: [a][x][y] or [a][b][x]
-// The effect code is [a] or [a][b], and the effect value is [x][y] or [x]. [x][y] codes are the
-// extended effects. All effect codes are stored below. Non-extended effects have 0x0 in the right-most
-// nibble in order to line up with the extended effects:
-namespace EffectCode
-{
-    enum
-    {
-        kNoEffect           =0x00,
-        kNoEffectVal        =0x00,
-        kNoEffectCode       =0x00, /* NoEffect is the same as ((uint16_t)NoEffectCode << 4) | NoEffectVal */
-        kArp                =0x00,
-        kPortUp             =0x10,
-        kPortDown           =0x20,
-        kPort2Note          =0x30,
-        kVibrato            =0x40,
-        kPort2NoteVolSlide  =0x50,
-        kVibratoVolSlide    =0x60,
-        kTremolo            =0x70,
-        kPanning            =0x80,
-        kSetSampleOffset    =0x90,
-        kVolSlide           =0xA0,
-        kPosJump            =0xB0,
-        kSetVolume          =0xC0,
-        kPatBreak           =0xD0,
-        kSetFilter          =0xE0,
-        kFineSlideUp        =0xE1,
-        kFineSlideDown      =0xE2,
-        kSetGlissando       =0xE3,
-        kSetVibratoWaveform =0xE4,
-        kSetFinetune        =0xE5,
-        kLoopPattern        =0xE6,
-        kSetTremoloWaveform =0xE7,
-        kRetriggerSample    =0xE9,
-        kFineVolSlideUp     =0xEA,
-        kFineVolSlideDown   =0xEB,
-        kCutSample          =0xEC,
-        kDelaySample        =0xED,
-        kDelayPattern       =0xEE,
-        kInvertLoop         =0xEF,
-        kSetSpeed           =0xF0
-    };
-}
 
 // Custom dmf2mod internal effect codes (see effects.h)
 namespace Effects

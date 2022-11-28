@@ -114,12 +114,13 @@ else()
     # Build and link to the bundled zlib
     set(ZLIB_ROOT ${DMF2MOD_ROOT}/extern/zlib)
     add_subdirectory(${ZLIB_ROOT} EXCLUDE_FROM_ALL)
-    target_include_directories(${PROJECT_NAME} PRIVATE ${ZLIB_DEPS} ${PROJECT_BINARY_DIR}/extern)
     target_link_libraries(${PROJECT_NAME} PRIVATE zlibstatic)
 
     # Includes
     target_include_directories(${PROJECT_NAME} PRIVATE
         ${INC_DIRS}
+        ${PROJECT_BINARY_DIR}/extern
+        ${PROJECT_BINARY_DIR}/extern/zlib
     )
 
     target_include_directories(${PROJECT_NAME} PUBLIC

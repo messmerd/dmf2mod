@@ -13,7 +13,7 @@ jobs:
       group: ${{ github.workflow }}-${{ github.ref }}
     steps:
       - uses: actions/checkout@v2
-      
+
       - name: Setup Emscripten
         uses: mymindstorm/setup-emsdk@v11
         with:
@@ -25,8 +25,8 @@ jobs:
 
       - name: Build web app
         run: |
-          emcmake cmake -S . -B ./bin/webapp
-          emmake make --dir=./bin/webapp
+          emcmake cmake -S. -Bbin/webapp
+          emmake make --dir=bin/webapp
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
@@ -35,4 +35,3 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./bin/webapp
           exclude_assets: '*.txt,CMakeFiles,*.cmake,Makefile'
-          

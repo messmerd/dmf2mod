@@ -41,6 +41,7 @@ add_executable(${PROJECT_NAME} ${DMF2MOD_SOURCES} ${WEBAPP_SOURCES})
 
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME dmf2mod)
+set_target_properties(${PROJECT_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/html)
 
 # Set linker flags
 set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "${WASM_LFLAGS} ${USE_WASM_FLAG} ${WARNING_FLAGS} --pre-js ${DMF2MOD_ROOT}/webapp/pre.js")
@@ -59,9 +60,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 )
 
 add_custom_command(
-    TARGET ${PROJECT_NAME} 
+    TARGET ${PROJECT_NAME}
     POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${DMF2MOD_ROOT}/webapp/ui"
-        "${CMAKE_BINARY_DIR}"
+        "${CMAKE_BINARY_DIR}/html"
 )

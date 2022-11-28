@@ -1,1 +1,0 @@
-/home/runner/work/dmf2mod/dmf2mod/emsdk-cache/emsdk-main/upstream/emscripten/emcc -O3 -DNDEBUG @CMakeFiles/example64.dir/objects1 -o example64.js @CMakeFiles/example64.dir/linkLibs.rsp

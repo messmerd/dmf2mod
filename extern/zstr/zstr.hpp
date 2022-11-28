@@ -16,10 +16,6 @@
 #include <memory>
 #include <iostream>
 
-#if __cplusplus == 201103L
-#include <zstr_make_unique_polyfill.h>
-#endif
-
 namespace zstr
 {
 
@@ -140,10 +136,10 @@ public:
           window_bits(_window_bits)
     {
         assert(sbuf_p);
-        in_buff = std::make_unique<char[]>(buff_size);
+        in_buff = std::unique_ptr<char[]>(new char[buff_size]);
         in_buff_start = in_buff.get();
         in_buff_end = in_buff.get();
-        out_buff = std::make_unique<char[]>(buff_size);
+        out_buff = std::unique_ptr<char[]>(new char[buff_size]);
         setg(out_buff.get(), out_buff.get(), out_buff.get());
     }
 
@@ -213,7 +209,7 @@ public:
                 else
                 {
                     // run inflate() on input
-                    if (! zstrm_p) zstrm_p = std::make_unique<detail::z_stream_wrapper>(true, Z_DEFAULT_COMPRESSION, window_bits);
+                    if (! zstrm_p) zstrm_p = std::unique_ptr<detail::z_stream_wrapper>(new detail::z_stream_wrapper(true, Z_DEFAULT_COMPRESSION, window_bits));
                     zstrm_p->next_in = reinterpret_cast< decltype(zstrm_p->next_in) >(in_buff_start);
                     zstrm_p->avail_in = uint32_t(in_buff_end - in_buff_start);
                     zstrm_p->next_out = reinterpret_cast< decltype(zstrm_p->next_out) >(out_buff_free_start);
@@ -255,7 +251,6 @@ private:
     bool is_text;
     int window_bits;
 
-    static const std::size_t default_buff_size = static_cast<std::size_t>(1 << 20);
 }; // class istreambuf
 
 class ostreambuf
@@ -267,12 +262,12 @@ public:
         : sbuf_p(_sbuf_p),
           in_buff(),
           out_buff(),
-          zstrm_p(std::make_unique<detail::z_stream_wrapper>(false, _level, _window_bits)),
+          zstrm_p(new detail::z_stream_wrapper(false, _level, _window_bits)),
           buff_size(_buff_size)
     {
         assert(sbuf_p);
-        in_buff = std::make_unique<char[]>(buff_size);
-        out_buff = std::make_unique<char[]>(buff_size);
+        in_buff = std::unique_ptr<char[]>(new char[buff_size]);
+        out_buff = std::unique_ptr<char[]>(new char[buff_size]);
         setp(in_buff.get(), in_buff.get() + buff_size);
     }
 
@@ -354,8 +349,6 @@ private:
     std::size_t buff_size;
     bool failed = false;
 
-public:
-    static const std::size_t default_buff_size = static_cast<std::size_t>(1 << 20);
 }; // class ostreambuf
 
 class istream
@@ -420,9 +413,9 @@ class ifstream
       public std::istream
 {
 public:
-    explicit ifstream(const std::string& filename, std::ios_base::openmode mode = std::ios_base::in)
+    explicit ifstream(const std::string filename, std::ios_base::openmode mode = std::ios_base::in, size_t buff_size = default_buff_size)
         : detail::strict_fstream_holder< strict_fstream::ifstream >(filename, mode),
-          std::istream(new istreambuf(_fs.rdbuf()))
+          std::istream(new istreambuf(_fs.rdbuf(), buff_size))
     {
         exceptions(std::ios_base::badbit);
     }
@@ -430,7 +423,7 @@ public:
     void close() {
         _fs.close();
     }
-    void open(const std::string& filename, std::ios_base::openmode mode = std::ios_base::in) {
+    void open(const std::string filename, std::ios_base::openmode mode = std::ios_base::in) {
         _fs.open(filename, mode);
         std::istream::operator=(std::istream(new istreambuf(_fs.rdbuf())));
     }
@@ -439,6 +432,7 @@ public:
     }
     virtual ~ifstream()
     {
+        if (_fs.is_open()) close();
         if (rdbuf()) delete rdbuf();
     }
 
@@ -454,10 +448,10 @@ class ofstream
       public std::ostream
 {
 public:
-    explicit ofstream(const std::string& filename, std::ios_base::openmode mode = std::ios_base::out,
-                      int level = Z_DEFAULT_COMPRESSION)
+    explicit ofstream(const std::string filename, std::ios_base::openmode mode = std::ios_base::out,
+                      int level = Z_DEFAULT_COMPRESSION, size_t buff_size = default_buff_size)
         : detail::strict_fstream_holder< strict_fstream::ofstream >(filename, mode | std::ios_base::binary),
-          std::ostream(new ostreambuf(_fs.rdbuf(), ostreambuf::default_buff_size, level))
+          std::ostream(new ostreambuf(_fs.rdbuf(), buff_size, level))
     {
         exceptions(std::ios_base::badbit);
     }
@@ -466,10 +460,10 @@ public:
         std::ostream::flush();
         _fs.close();
     }
-    void open(const std::string& filename, std::ios_base::openmode mode = std::ios_base::out, int level = Z_DEFAULT_COMPRESSION) {
+    void open(const std::string filename, std::ios_base::openmode mode = std::ios_base::out, int level = Z_DEFAULT_COMPRESSION) {
         flush();
         _fs.open(filename, mode | std::ios_base::binary);
-        std::ostream::operator=(std::ostream(new ostreambuf(_fs.rdbuf(), ostreambuf::default_buff_size, level)));
+        std::ostream::operator=(std::ostream(new ostreambuf(_fs.rdbuf(), default_buff_size, level)));
     }
     bool is_open() const {
         return _fs.is_open();
@@ -481,6 +475,7 @@ public:
     }
     virtual ~ofstream()
     {
+        if (_fs.is_open()) close();
         if (rdbuf()) delete rdbuf();
     }
 

@@ -22,8 +22,53 @@ namespace d2m {
 
 class DMF;
 
+namespace dmf {
+
+struct System
+{
+    enum class Type
+    {
+        kError=0,
+        kYMU759,
+        kGenesis,
+        kGenesis_CH3,
+        kSMS,
+        kGameBoy,
+        kPCEngine,
+        kNES,
+        kC64_SID_8580,
+        kC64_SID_6581,
+        kArcade,
+        kNeoGeo,
+        kNeoGeo_CH2,
+        kSMS_OPLL,
+        kNES_VRC7,
+        kNES_FDS
+    };
+
+    Type type;
+    uint8_t id;
+    std::string name;
+    uint8_t channels;
+};
+
+} // namespace dmf
+
 template<>
-struct ModuleGlobalData<DMF> : public ModuleGlobalDataDefault<DataStorageType::kCOR> {};
+struct ModuleGlobalData<DMF> : public ModuleGlobalDataDefault<DataStorageType::kCOR>
+{
+    uint8_t dmf_format_version;
+    dmf::System system;
+
+    // Visual info
+    uint8_t highlight_a_patterns;
+    uint8_t highlight_b_patterns;
+
+    // Module info
+    uint8_t frames_mode;
+    std::optional<uint16_t> custom_hz_value;
+    uint16_t global_tick;
+};
 
 template<>
 struct Row<DMF>
@@ -69,11 +114,8 @@ inline constexpr bool operator==(const SoundIndex<DMF>::Noise& lhs, const SoundI
 
 namespace dmf {
 
-inline constexpr int kDMFNoInstrument = -1;
-inline constexpr int kDMFNoVolume = -1;
-inline constexpr int kDMFVolumeMax = 15; /* ??? */
-inline constexpr int kDMFGameBoyVolumeMax = 15;
-inline constexpr int kDMFNoEffectVal = -1;
+//inline constexpr int kVolumeMax = 15; /* ??? */
+inline constexpr int kGameBoyVolumeMax = 15;
 
 // Custom dmf2mod internal effect codes (see effects.h)
 namespace Effects
@@ -97,36 +139,9 @@ namespace Effects
     };
 }
 
-struct System
-{
-    enum class Type
-    {
-        kError=0, kYMU759, kGenesis, kGenesis_CH3, kSMS, kGameBoy,
-        kPCEngine, kNES, kC64_SID_8580, kC64_SID_6581, kArcade,
-        kNeoGeo, kNeoGeo_CH2, kSMS_OPLL, kNES_VRC7, kNES_FDS
-    };
-
-    Type type;
-    uint8_t id;
-    std::string name;
-    uint8_t channels;
-
-    System() = default;
-    System(Type type, uint8_t id, std::string name, uint8_t channels)
-        : type(type), id(id), name(name), channels(channels) {}
-};
-
-struct VisualInfo
-{
-    uint8_t highlight_a_patterns;
-    uint8_t highlight_b_patterns;
-};
-
 struct ModuleInfo
 {
-    uint8_t time_base, tick_time1, tick_time2, frames_mode, using_custom_hz, custom_hz_value1, custom_hz_value2, custom_hz_value3;
-    uint32_t total_rows_per_pattern; // TODO: Should remove this eventually (duplicate w/ ModuleData)
-    uint8_t total_rows_in_pattern_matrix; // (orders) TODO: Should remove this eventually (duplicate w/ ModuleData)
+    uint8_t time_base, tick_time1, tick_time2;
 };
 
 struct FMOps
@@ -277,9 +292,10 @@ public:
     void GetBPM(unsigned& numerator, unsigned& denominator) const;
     double GetBPM() const;
 
-    const dmf::System& GetSystem() const { return system_; }
-    static const dmf::System& Systems(SystemType system_type);
+    const dmf::System& GetSystem() const { return GetGlobalData().system; }
+    static const dmf::System& SystemInfo(SystemType system_type);
 
+    // TODO: Create a module-independent storage system for wavetables, PCM samples, instruments, etc.
     uint8_t GetTotalWavetables() const { return total_wavetables_; }
     uint32_t** GetWavetableValues() const { return wavetable_values_; }
     uint32_t GetWavetableValue(unsigned wavetable, unsigned index) const { return wavetable_values_[wavetable][index]; }
@@ -300,12 +316,7 @@ private:
     // Import helper class
     class Importer;
 
-    dmf::System GetSystem(uint8_t system_byte) const;
-
-    uint8_t file_version_;
-    dmf::System system_;
-    dmf::VisualInfo visual_info_;
-    dmf::ModuleInfo module_info_;
+    dmf::ModuleInfo module_info_; // TODO: Eventually remove
     uint8_t total_instruments_;
     dmf::Instrument* instruments_;
     uint8_t total_wavetables_;

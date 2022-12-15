@@ -35,6 +35,11 @@ using namespace d2m;
 static constexpr uint8_t kDMFFileVersionMin = 17; // DMF files as old as version 17 (0x11) are supported
 static constexpr uint8_t kDMFFileVersionMax = 26; // DMF files as new as version 26 (0x1a) are supported
 
+// DMF format magic numbers
+//static constexpr int kDMFNoInstrument = -1;
+static constexpr int kDMFNoVolume = -1;
+[[maybe_unused]] static constexpr int kDMFNoEffectVal = -1;
+
 class DMF::Importer
 {
 public:
@@ -48,8 +53,8 @@ public:
 
 private:
     void LoadVisualInfo();
-    void LoadModuleInfo();
-    void LoadPatternMatrixValues();
+    void LoadModuleInfo(OrderIndex& num_orders, RowIndex& num_rows);
+    void LoadPatternMatrixValues(OrderIndex num_orders, RowIndex num_rows);
     void LoadInstrumentsData();
     auto LoadInstrument(SystemType system_type) -> dmf::Instrument;
     void LoadWavetablesData();
@@ -110,25 +115,25 @@ namespace d2m::dmf::EffectCode
 // Information about all the systems Deflemask supports
 static const std::map<DMF::SystemType, dmf::System> kDMFSystems =
 {
-    {DMF::SystemType::kError, dmf::System(DMF::SystemType::kError, 0x00, "ERROR", 0)},
-    {DMF::SystemType::kYMU759, dmf::System(DMF::SystemType::kYMU759, 0x01, "YMU759", 17)}, // Removed since DMF version 19 (0x13)
-    {DMF::SystemType::kGenesis, dmf::System(DMF::SystemType::kGenesis, 0x02, "Genesis", 10)},
-    {DMF::SystemType::kGenesis_CH3, dmf::System(DMF::SystemType::kGenesis_CH3, 0x42, "Genesis (Ext. CH3)", 13)},
-    {DMF::SystemType::kSMS, dmf::System(DMF::SystemType::kSMS, 0x03, "SMS", 4)},
-    {DMF::SystemType::kSMS_OPLL, dmf::System(DMF::SystemType::kSMS_OPLL, 0x43, "SMS + OPLL", 13)},
-    {DMF::SystemType::kGameBoy, dmf::System(DMF::SystemType::kGameBoy, 0x04, "Game Boy", 4)},
-    {DMF::SystemType::kPCEngine, dmf::System(DMF::SystemType::kPCEngine, 0x05, "PC Engine", 6)},
-    {DMF::SystemType::kNES, dmf::System(DMF::SystemType::kNES, 0x06, "NES", 5)},
-    {DMF::SystemType::kNES_VRC7, dmf::System(DMF::SystemType::kNES_VRC7, 0x46, "NES + VRC7", 11)},
-    {DMF::SystemType::kC64_SID_8580, dmf::System(DMF::SystemType::kC64_SID_8580, 0x07, "C64 (SID 8580)", 3)},
-    {DMF::SystemType::kC64_SID_6581, dmf::System(DMF::SystemType::kC64_SID_6581, 0x47, "C64 (SID 6581)", 3)},
-    {DMF::SystemType::kArcade, dmf::System(DMF::SystemType::kArcade, 0x08, "Arcade", 13)},
-    {DMF::SystemType::kNeoGeo, dmf::System(DMF::SystemType::kNeoGeo, 0x09, "Neo Geo", 13)},
-    {DMF::SystemType::kNeoGeo_CH2, dmf::System(DMF::SystemType::kNeoGeo_CH2, 0x49, "Neo Geo (Ext. CH2)", 16)},
-    {DMF::SystemType::kNES_FDS, dmf::System(DMF::SystemType::kNES_FDS, 0x86, "NES + FDS", 6)}
+    { DMF::SystemType::kError,        dmf::System{ DMF::SystemType::kError, 0x00, "ERROR", 0 } },
+    { DMF::SystemType::kYMU759,       dmf::System{ DMF::SystemType::kYMU759, 0x01, "YMU759", 17 } }, // Removed since DMF version 19 (0x13)
+    { DMF::SystemType::kGenesis,      dmf::System{ DMF::SystemType::kGenesis, 0x02, "Genesis", 10 } },
+    { DMF::SystemType::kGenesis_CH3,  dmf::System{ DMF::SystemType::kGenesis_CH3, 0x42, "Genesis (Ext. CH3)", 13 } },
+    { DMF::SystemType::kSMS,          dmf::System{ DMF::SystemType::kSMS, 0x03, "SMS", 4 } },
+    { DMF::SystemType::kSMS_OPLL,     dmf::System{ DMF::SystemType::kSMS_OPLL, 0x43, "SMS + OPLL", 13 } },
+    { DMF::SystemType::kGameBoy,      dmf::System{ DMF::SystemType::kGameBoy, 0x04, "Game Boy", 4 } },
+    { DMF::SystemType::kPCEngine,     dmf::System{ DMF::SystemType::kPCEngine, 0x05, "PC Engine", 6 } },
+    { DMF::SystemType::kNES,          dmf::System{ DMF::SystemType::kNES, 0x06, "NES", 5 } },
+    { DMF::SystemType::kNES_VRC7,     dmf::System{ DMF::SystemType::kNES_VRC7, 0x46, "NES + VRC7", 11 } },
+    { DMF::SystemType::kC64_SID_8580, dmf::System{ DMF::SystemType::kC64_SID_8580, 0x07, "C64 (SID 8580)", 3 } },
+    { DMF::SystemType::kC64_SID_6581, dmf::System{ DMF::SystemType::kC64_SID_6581, 0x47, "C64 (SID 6581)", 3 } },
+    { DMF::SystemType::kArcade,       dmf::System{ DMF::SystemType::kArcade, 0x08, "Arcade", 13 } },
+    { DMF::SystemType::kNeoGeo,       dmf::System{ DMF::SystemType::kNeoGeo, 0x09, "Neo Geo", 13 } },
+    { DMF::SystemType::kNeoGeo_CH2,   dmf::System{ DMF::SystemType::kNeoGeo_CH2, 0x49, "Neo Geo (Ext. CH2)", 16 } },
+    { DMF::SystemType::kNES_FDS,      dmf::System{ DMF::SystemType::kNES_FDS, 0x86, "NES + FDS", 6 } }
 };
 
-const dmf::System& DMF::Systems(DMF::SystemType system_type) { return kDMFSystems.at(system_type); }
+const dmf::System& DMF::SystemInfo(DMF::SystemType system_type) { return kDMFSystems.at(system_type); }
 
 static constexpr auto kPeriodTable = []() constexpr
 {
@@ -228,47 +233,10 @@ void DMF::ConvertImpl(const ModulePtr& input)
     throw NotImplementedException{};
 }
 
-dmf::System DMF::GetSystem(uint8_t system_byte) const
-{
-    for (const auto& map_pair : kDMFSystems)
-    {
-        if (map_pair.second.id == system_byte)
-            return map_pair.second;
-    }
-    return kDMFSystems.at(DMF::SystemType::kError); // Error: System byte invalid
-}
-
 void DMF::GetBPM(unsigned& numerator, unsigned& denominator) const
 {
-    // Gets the initial BPM of the module
-    unsigned int global_tick;
-    if (module_info_.using_custom_hz)
-    {
-        if (module_info_.custom_hz_value1 == 0) // No digits filled in
-        {
-            // NTSC is used by default if custom global tick box is selected but the value is left blank:
-            global_tick = 60;
-        }
-        else if (module_info_.custom_hz_value2 == 0) // One digit filled in
-        {
-            global_tick = (module_info_.custom_hz_value1 - 48);
-        }
-        else if (module_info_.custom_hz_value3 == 0) // Two digits filled in
-        {
-            global_tick = (module_info_.custom_hz_value1 - 48) * 10 + (module_info_.custom_hz_value2 - 48);
-        }
-        else // All three digits filled in
-        {
-            global_tick = (module_info_.custom_hz_value1 - 48) * 100 + (module_info_.custom_hz_value2 - 48) * 10 + (module_info_.custom_hz_value3 - 48);
-        }
-    }
-    else
-    {
-        global_tick = module_info_.frames_mode ? 60 : 50; // NTSC (60 Hz) or PAL (50 Hz)
-    }
-
-    // Experimentally determined equation for BPM:
-    numerator = 15 * global_tick;
+    // Gets the initial BPM of the module using experimentally determined equation for BPM
+    numerator = 15 * GetGlobalData().global_tick;
     denominator = module_info_.time_base * (module_info_.tick_time1 + module_info_.tick_time2);
 
     if (denominator == 0)
@@ -314,10 +282,12 @@ void DMF::Importer::Import()
         throw ModuleException(ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "DMF format header is bad.");
     }
 
-    dmf_.file_version_ = fin_.ReadInt();
-    if (dmf_.file_version_ < kDMFFileVersionMin || dmf_.file_version_ > kDMFFileVersionMax)
+    auto& global_data = dmf_.GetGlobalData();
+
+    global_data.dmf_format_version = fin_.ReadInt();
+    if (global_data.dmf_format_version < kDMFFileVersionMin || global_data.dmf_format_version > kDMFFileVersionMax)
     {
-        const bool too_high = dmf_.file_version_ > kDMFFileVersionMax;
+        const bool too_high = global_data.dmf_format_version > kDMFFileVersionMax;
         const int extreme_version = too_high ? kDMFFileVersionMax : kDMFFileVersionMin;
 
         std::stringstream stream;
@@ -326,13 +296,13 @@ void DMF::Importer::Import()
 
         std::string error_msg = "Deflemask file version must be " + std::to_string(extreme_version) + " (" + hex + ") or ";
         error_msg += too_high ? "lower.\n" : "higher.\n";
-        
+
         stream.clear();
         stream.str("");
-        stream << "0x" << std::setfill('0') << std::setw(2) << std::hex << (int)dmf_.file_version_;
+        stream << "0x" << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(global_data.dmf_format_version);
         hex = stream.str();
 
-        error_msg += "The given DMF file is version " + std::to_string(dmf_.file_version_) + " (" + hex + ").\n";
+        error_msg += "The given DMF file is version " + std::to_string(global_data.dmf_format_version) + " (" + hex + ").\n";
         if (too_high)
             error_msg += "       Dmf2mod needs to be updated to support this newer version.";
         else
@@ -343,18 +313,27 @@ void DMF::Importer::Import()
     else if (verbose)
     {
         std::stringstream stream;
-        stream << "0x" << std::setfill('0') << std::setw(2) << std::hex << (int)dmf_.file_version_;
+        stream << "0x" << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(global_data.dmf_format_version);
         std::string hex = stream.str();
 
-        std::cout << "DMF version " + std::to_string(dmf_.file_version_) + " (" + hex + ")\n";
+        std::cout << "DMF version " << global_data.dmf_format_version << " (" << hex << ")\n";
     }
 
     ///////////////// SYSTEM SET
 
-    dmf_.system_ = dmf_.GetSystem(fin_.ReadInt());
+    const auto system_byte = fin_.ReadInt();
+    global_data.system = kDMFSystems.at(SystemType::kError);
+    for (const auto& map_pair : kDMFSystems)
+    {
+        if (map_pair.second.id == system_byte)
+            global_data.system = map_pair.second;
+    }
+
+    if (global_data.system.type == SystemType::kError)
+        throw ModuleException(ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "Invalid system type");
 
     if (verbose)
-        std::cout << "System: " << dmf_.system_.name << " (channels: " << std::to_string(dmf_.system_.channels) << ")\n";
+        std::cout << "System: " << global_data.system.name << " (channels: " << global_data.system.channels << ")\n";
 
     ///////////////// VISUAL INFORMATION
 
@@ -367,12 +346,14 @@ void DMF::Importer::Import()
     }
 
     ///////////////// MODULE INFORMATION
-    LoadModuleInfo();
+    OrderIndex num_orders;
+    RowIndex num_rows;
+    LoadModuleInfo(num_orders, num_rows);
     if (verbose)
         std::cout << "Loaded module information.\n";
 
     ///////////////// PATTERN MATRIX VALUES
-    LoadPatternMatrixValues();
+    LoadPatternMatrixValues(num_orders, num_rows);
     if (verbose)
         std::cout << "Loaded pattern matrix values.\n";
 
@@ -404,51 +385,73 @@ void DMF::Importer::LoadVisualInfo()
 {
     dmf_.GetGlobalData().title = fin_.ReadPStr();
     dmf_.GetGlobalData().author = fin_.ReadPStr();
-    dmf_.visual_info_.highlight_a_patterns = fin_.ReadInt();
-    dmf_.visual_info_.highlight_b_patterns = fin_.ReadInt();
+    dmf_.GetGlobalData().highlight_a_patterns = fin_.ReadInt();
+    dmf_.GetGlobalData().highlight_b_patterns = fin_.ReadInt();
 }
 
-void DMF::Importer::LoadModuleInfo()
+void DMF::Importer::LoadModuleInfo(OrderIndex& num_orders, RowIndex& num_rows)
 {
     auto& module_info = dmf_.module_info_;
     module_info.time_base = fin_.ReadInt() + 1;
     module_info.tick_time1 = fin_.ReadInt();
     module_info.tick_time2 = fin_.ReadInt();
-    module_info.frames_mode = fin_.ReadInt();
-    module_info.using_custom_hz = fin_.ReadInt();
-    module_info.custom_hz_value1 = fin_.ReadInt();
-    module_info.custom_hz_value2 = fin_.ReadInt();
-    module_info.custom_hz_value3 = fin_.ReadInt();
 
-    if (dmf_.file_version_ >= 24) // DMF version 24 (0x18) and newer.
+    auto& global_data = dmf_.GetGlobalData();
+    global_data.frames_mode = fin_.ReadInt();
+
+    const bool using_custom_hz = fin_.ReadInt();
+
+    // Custom Hz integer is stored as 3 character ASCII string for god knows why
+    const auto custom_hz_str = fin_.ReadStr(3);
+    if (using_custom_hz)
+    {
+        if (custom_hz_str[0] == '\0')
+        {
+            // No digits filled in
+            // NTSC is used by default if custom global tick box is selected but the value is left blank
+            global_data.global_tick = 60;
+            global_data.custom_hz_value = 0;
+        }
+        else
+        {
+            // Convert to integer; Any unused digits at the end are '\0'
+            global_data.global_tick = static_cast<uint16_t>(std::stol(custom_hz_str));
+            global_data.custom_hz_value = global_data.global_tick;
+        }
+    }
+    else
+    {
+        // NTSC (60 Hz) or PAL (50 Hz)
+        global_data.global_tick = global_data.frames_mode ? 60 : 50;
+        global_data.custom_hz_value.reset();
+    }
+
+    if (global_data.dmf_format_version >= 24) // DMF version 24 (0x18) and newer.
     {
         // Newer versions read 4 bytes here
-        module_info.total_rows_per_pattern = fin_.ReadInt<false, 4>();
+        num_rows = static_cast<RowIndex>(fin_.ReadInt<false, 4>());
     }
     else // DMF version 23 (0x17) and older. WARNING: I don't have the specs for version 23 (0x17), so this may be wrong.
     {
         // Earlier versions such as 22 (0x16) only read one byte here
-        module_info.total_rows_per_pattern = fin_.ReadInt();
+        num_rows = fin_.ReadInt();
     }
 
-    module_info.total_rows_in_pattern_matrix = fin_.ReadInt();
+    num_orders = fin_.ReadInt();
 
     // Prior to Deflemask Version 0.11.1, arpeggio tick speed was stored here
     // I don't have the specs for DMF version 20 (0x14), but based on a real DMF file of that version, it is the first DMF version 
     //      to NOT contain the arpeggio tick speed byte.
-    if (dmf_.file_version_ <= 19) // DMF version 19 (0x13) and older
+    if (global_data.dmf_format_version <= 19) // DMF version 19 (0x13) and older
     {
         fin_.ReadInt(); // arpTickSpeed: Discard for now
     }
 }
 
-void DMF::Importer::LoadPatternMatrixValues()
+void DMF::Importer::LoadPatternMatrixValues(OrderIndex num_orders, RowIndex num_rows)
 {
     auto& module_data = dmf_.GetData();
-    module_data.AllocatePatternMatrix(
-        dmf_.system_.channels,
-        dmf_.module_info_.total_rows_in_pattern_matrix,
-        dmf_.module_info_.total_rows_per_pattern);
+    module_data.AllocatePatternMatrix(dmf_.GetSystem().channels, num_orders, num_rows);
 
     std::map<std::pair<ChannelIndex, PatternIndex>, std::string> channel_pattern_id_to_pattern_name_map;
 
@@ -460,7 +463,7 @@ void DMF::Importer::LoadPatternMatrixValues()
             module_data.SetPatternId(channel, order, pattern_id);
 
             // Version 1.1 introduces pattern names
-            if (dmf_.file_version_ >= 25) // DMF version 25 (0x19) and newer
+            if (dmf_.GetGlobalData().dmf_format_version >= 25) // DMF version 25 (0x19) and newer
             {
                 std::string pattern_name = fin_.ReadPStr();
                 if (pattern_name.size() > 0)
@@ -488,7 +491,7 @@ void DMF::Importer::LoadInstrumentsData()
 
     for (int i = 0; i < dmf_.total_instruments_; i++)
     {
-        dmf_.instruments_[i] = LoadInstrument(dmf_.system_.type);
+        dmf_.instruments_[i] = LoadInstrument(dmf_.GetSystem().type);
     }
 }
 
@@ -512,9 +515,10 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
 
     // Now we can import the instrument depending on the mode (Standard/FM)
 
+    const auto dmf_format_version = dmf_.GetGlobalData().dmf_format_version;
     if (inst.mode == dmf::Instrument::kStandardMode)
     {
-        if (dmf_.file_version_ <= 17) // DMF version 17 (0x11) or older
+        if (dmf_format_version <= 17) // DMF version 17 (0x11) or older
         {
             // Volume macro
             inst.std.vol_env_size = fin_.ReadInt();
@@ -555,7 +559,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
             inst.std.arp_env_value[i] = fin_.ReadInt<true, 4>();
         }
 
-        if (inst.std.arp_env_size > 0 || dmf_.file_version_ <= 17) // DMF version 17 and older always gets envelope loop position byte
+        if (inst.std.arp_env_size > 0 || dmf_format_version <= 17) // DMF version 17 and older always gets envelope loop position byte
             inst.std.arp_env_loop_pos = fin_.ReadInt();
         
         inst.std.arp_macro_mode = fin_.ReadInt();
@@ -570,7 +574,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
             inst.std.duty_noise_env_value[i] = fin_.ReadInt<true, 4>();
         }
 
-        if (inst.std.duty_noise_env_size > 0 || dmf_.file_version_ <= 17) // DMF version 17 and older always gets envelope loop position byte
+        if (inst.std.duty_noise_env_size > 0 || dmf_format_version <= 17) // DMF version 17 and older always gets envelope loop position byte
             inst.std.duty_noise_env_loop_pos = fin_.ReadInt();
 
         // Wavetable macro
@@ -583,7 +587,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
             inst.std.wavetable_env_value[i] = fin_.ReadInt<true, 4>();
         }
 
-        if (inst.std.wavetable_env_size > 0 || dmf_.file_version_ <= 17) // DMF version 17 and older always gets envelope loop position byte
+        if (inst.std.wavetable_env_size > 0 || dmf_format_version <= 17) // DMF version 17 and older always gets envelope loop position byte
             inst.std.wavetable_env_loop_pos = fin_.ReadInt();
 
         // Per system data
@@ -611,7 +615,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
             inst.std.c64_filter_low_pass = fin_.ReadInt();
             inst.std.c64_filter_ch2_off = fin_.ReadInt();
         }
-        else if (system_type == DMF::SystemType::kGameBoy && dmf_.file_version_ >= 18) // Using Game Boy and DMF version is 18 or newer
+        else if (system_type == DMF::SystemType::kGameBoy && dmf_format_version >= 18) // Using Game Boy and DMF version is 18 or newer
         {
             inst.std.gb_env_vol = fin_.ReadInt();
             inst.std.gb_env_dir = fin_.ReadInt();
@@ -627,7 +631,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
         inst.std.duty_noise_env_value = nullptr;
         inst.std.wavetable_env_value = nullptr;
 
-        if (dmf_.file_version_ > 18) // Newer than DMF version 18 (0x12)
+        if (dmf_format_version > 18) // Newer than DMF version 18 (0x12)
         {
             if (system_type == DMF::SystemType::kSMS_OPLL || system_type == DMF::SystemType::kNES_VRC7)
             {
@@ -663,7 +667,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
 
         for (int i = 0; i < inst.fm.num_operators; i++)
         {
-            if (dmf_.file_version_ > 18) // Newer than DMF version 18 (0x12)
+            if (dmf_format_version > 18) // Newer than DMF version 18 (0x12)
             {
                 inst.fm.ops[i].am = fin_.ReadInt();
                 inst.fm.ops[i].ar = fin_.ReadInt();
@@ -748,7 +752,7 @@ void DMF::Importer::LoadWavetablesData()
             dmf_.wavetable_values_[i][j] = fin_.ReadInt<false, 4>() & data_mask;
 
             // Bug fix for DMF version 25 (0x19): Transform 4-bit FDS wavetables into 6-bit
-            if (dmf_.GetSystem().type == DMF::SystemType::kNES_FDS && dmf_.file_version_ <= 25)
+            if (dmf_.GetSystem().type == DMF::SystemType::kNES_FDS && dmf_.GetGlobalData().dmf_format_version <= 25)
             {
                 dmf_.wavetable_values_[i][j] <<= 2; // x4
             }
@@ -830,7 +834,7 @@ auto DMF::Importer::LoadPatternRow(uint8_t effect_columns_count) -> Row<DMF>
     {
         const int16_t dmf_effect_code = fin_.ReadInt<true, 2>();
         row.effect[col].value = fin_.ReadInt<true, 2>();
-        assert(kEffectValueless == -1); // DMF valueless effect magic number is -1, and so must be kEffectValueless
+        assert(kEffectValueless == kDMFNoEffectVal); // DMF valueless effect magic number is -1, and so must be kEffectValueless
 
         // Convert DMF effect code to dmf2mod's internal representation
         EffectCode effect_code = Effects::kNoEffect;
@@ -906,7 +910,8 @@ auto DMF::Importer::LoadPCMSample() -> dmf::PCMSample
 
     sample.size = fin_.ReadInt<false, 4>();
 
-    if (dmf_.file_version_ >= 24) // DMF version 24 (0x18)
+    const auto dmf_format_version = dmf_.GetGlobalData().dmf_format_version;
+    if (dmf_format_version >= 24) // DMF version 24 (0x18)
     {
         // Read PCM sample name
         sample.name = fin_.ReadPStr();
@@ -921,7 +926,7 @@ auto DMF::Importer::LoadPCMSample() -> dmf::PCMSample
     sample.pitch = fin_.ReadInt();
     sample.amp = fin_.ReadInt();
 
-    if (dmf_.file_version_ >= 22) // DMF version 22 (0x16) and newer
+    if (dmf_format_version >= 22) // DMF version 22 (0x16) and newer
     {
         sample.bits = fin_.ReadInt();
     }
@@ -1085,7 +1090,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
         channel_state.SetInitial<ChannelCommon::kSoundIndex>(current_sound_index[i].second);
         channel_state.SetInitial<ChannelCommon::kNoteSlot>(NoteTypes::Empty{});
         channel_state.SetInitial<ChannelCommon::kNotePlaying>(false);
-        channel_state.SetInitial<ChannelCommon::kVolume>(dmf::kDMFGameBoyVolumeMax);
+        channel_state.SetInitial<ChannelCommon::kVolume>(dmf::kGameBoyVolumeMax);
         channel_state.SetInitial<ChannelCommon::kArp>(0);
         channel_state.SetInitial<ChannelCommon::kPort>({PortamentoStateData::kNone, 0});
         channel_state.SetInitial<ChannelCommon::kVibrato>(0);
@@ -1411,7 +1416,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                 periods[channel] = UpdatePeriod(periods[channel], row % 2, channel_state.Get<ChannelCommon::kPort>(), target_periods[channel]);
 
                 // CHANNEL STATE - VOLUME
-                if (row_data.volume != dmf::kDMFNoVolume)
+                if (row_data.volume != kDMFNoVolume)
                 {
                     // The WAVE channel volume changes whether a note is attached or not, but SQ1/SQ2 need a note
                     if (channel == dmf::GameBoyChannel::kWave)

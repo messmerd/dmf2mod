@@ -931,7 +931,7 @@ inline auto MOD::DMFConverter::ConvertEffects(ChannelStateReader<DMF>& state) ->
     if (state.GetDelta(ChannelState<DMF>::kVolume))
     {
         VolumeStateData dmf_volume = state.Get<ChannelState<DMF>::kVolume>();
-        uint8_t mod_volume = (uint8_t)std::round(dmf_volume / (double)dmf::kDMFGameBoyVolumeMax * (double)kVolumeMax); // Convert DMF volume to MOD volume
+        uint8_t mod_volume = (uint8_t)std::round(dmf_volume / (double)dmf::kGameBoyVolumeMax * (double)kVolumeMax); // Convert DMF volume to MOD volume
 
         return { kEffectPriorityVolumeChange, { mod::Effects::kSetVolume, mod_volume } };
     }
@@ -1009,9 +1009,9 @@ inline auto MOD::DMFConverter::ConvertNote(ChannelStateReader<DMF>& state, NoteR
 
                 set_vol_if_not = -1; // On sample changes, Protracker resets the volume
 
-                if (dmf_volume != dmf::kDMFGameBoyVolumeMax) // Currently, the default volume for all MOD samples is the maximum. TODO: Can optimize
+                if (dmf_volume != dmf::kGameBoyVolumeMax) // Currently, the default volume for all MOD samples is the maximum. TODO: Can optimize
                 {
-                    const uint8_t mod_volume = (uint8_t)std::round(dmf_volume / (double)dmf::kDMFGameBoyVolumeMax * (double)kVolumeMax); // Convert DMF volume to MOD volume
+                    const uint8_t mod_volume = (uint8_t)std::round(dmf_volume / (double)dmf::kGameBoyVolumeMax * (double)kVolumeMax); // Convert DMF volume to MOD volume
 
                     // If this volume change effect has a higher priority, use it
                     if (mod_effect.first <= kEffectPriorityVolumeChange)
@@ -1025,7 +1025,7 @@ inline auto MOD::DMFConverter::ConvertNote(ChannelStateReader<DMF>& state, NoteR
             else if (set_vol_if_not >= 0 && dmf_volume != set_vol_if_not)
             {
                 // Need to explicitly set volume for this note because of channel volume carrying over when looping back
-                const uint8_t mod_volume = (uint8_t)std::round(dmf_volume / (double)dmf::kDMFGameBoyVolumeMax * (double)kVolumeMax); // Convert DMF volume to MOD volume
+                const uint8_t mod_volume = (uint8_t)std::round(dmf_volume / (double)dmf::kGameBoyVolumeMax * (double)kVolumeMax); // Convert DMF volume to MOD volume
 
                 // If this volume change effect has a higher priority, use it
                 if (mod_effect.first <= kEffectPriorityVolumeChange)

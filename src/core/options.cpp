@@ -745,11 +745,11 @@ bool ModuleOptionUtils::ConvertToValue(const std::string& value_str, OptionDefin
         } break;
         case OptionDefinition::kInt:
         {
-            return_val = atoi(value_str.c_str());
+            return_val = std::stoi(value_str);
         } break;
         case OptionDefinition::kDouble:
         {
-            return_val = atof(value_str.c_str());
+            return_val = std::stof(value_str);
         } break;
         case OptionDefinition::kString:
         {

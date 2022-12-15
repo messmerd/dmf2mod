@@ -256,8 +256,6 @@ class DMF : public ModuleInterface<DMF>
 {
 public:
 
-    using options_t = DMFConversionOptions;
-
     enum ImportError
     {
         kSuccess=0,
@@ -272,7 +270,19 @@ public:
 
     using SystemType = dmf::System::Type;
 
+    // Factory requires destructor to be public
+    ~DMF();
+
+    // Returns the initial BPM of the module
+    void GetBPM(unsigned& numerator, unsigned& denominator) const;
+    double GetBPM() const;
+
+    const dmf::System& GetSystem() const { return system_; }
     static const dmf::System& Systems(SystemType system_type);
+
+    uint8_t GetTotalWavetables() const { return total_wavetables_; }
+    uint32_t** GetWavetableValues() const { return wavetable_values_; }
+    uint32_t GetWavetableValue(unsigned wavetable, unsigned index) const { return wavetable_values_[wavetable][index]; }
 
 private:
 
@@ -282,35 +292,16 @@ private:
     DMF();
     void CleanUp();
 
-public:
-
-    // Factory requires destructor to be public
-    ~DMF();
-
-    // Returns the initial BPM of the module
-    void GetBPM(unsigned& numerator, unsigned& denominator) const;
-    double GetBPM() const;
-
-    const dmf::System& GetSystem() const { return system_; }
-
-    uint8_t GetTotalWavetables() const { return total_wavetables_; }
-    uint32_t** GetWavetableValues() const { return wavetable_values_; }
-    uint32_t GetWavetableValue(unsigned wavetable, unsigned index) const { return wavetable_values_[wavetable][index]; }
-
-private:
-
     void ImportImpl(const std::string& filename) override;
     void ExportImpl(const std::string& filename) override;
     void ConvertImpl(const ModulePtr& input) override;
     size_t GenerateDataImpl(size_t data_flags) const override;
 
-    // Use PIMPL to hide Import helper methods
+    // Import helper class
     class Importer;
-    std::unique_ptr<Importer> importer_pimpl_;
 
     dmf::System GetSystem(uint8_t system_byte) const;
 
-private:
     uint8_t file_version_;
     dmf::System system_;
     dmf::VisualInfo visual_info_;

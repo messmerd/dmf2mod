@@ -8,7 +8,6 @@
 #pragma once
 
 #include "core/module.h"
-#include "modules/dmf.h"
 
 #include <string>
 #include <sstream>
@@ -29,7 +28,7 @@ struct ModuleGlobalData<MOD> : public ModuleGlobalDataDefault<DataStorageType::k
     // In the future, we'll be able to detect when a MOD module
     // was created with dmf2mod, which will help when converting
     // from MOD to another module type.
-    bool madeWithDmf2mod;
+    bool made_with_dmf2mod;
 };
 
 template<>
@@ -68,79 +67,6 @@ namespace Effects
     };
 }
 
-// Higher enum value = higher priority
-enum EffectPriority
-{
-    kEffectPriorityUnsupportedEffect=0,
-    kEffectPriorityOtherEffect,
-    kEffectPriorityVibrato,
-    //kEffectPriorityVibratoVolSlide,
-    kEffectPriorityArp,
-    //kEffectPriorityVolSlide,
-    kEffectPriorityVolumeChange,
-    kEffectPriorityPort2Note,
-    //kEffectPriorityPort2NoteVolSlide,
-    kEffectPriorityPortDown,
-    kEffectPriorityPortUp,
-    kEffectPriorityTempoChange,
-    kEffectPrioritySampleChange, /* Can always be performed */
-    kEffectPriorityStructureRelated, /* Can always be performed */
-};
-
-/*
- * MOD has only a 3 octave range while Deflemask has 8.
- * For this reason, a DMF square wave or wavetable may
- * need to be broken up into 1 to 3 different MOD samples
- * of varying sample lengths to emulate the full range of 
- * Deflemask. DMFSampleMapper handles the details of this.
- */
-class DMFSampleMapper
-{
-public:
-    enum class SampleType
-    {
-        kSilence, kSquare, kWave
-    };
-
-    enum class NoteRange
-    {
-        kFirst=0, kSecond=1, kThird=2
-    };
-
-    enum class NoteRangeName
-    {
-        kNone=-1, kLow=0, kMiddle=1, kHigh=2
-    };
-
-    DMFSampleMapper();
-
-    SoundIndexType<MOD> Init(SoundIndexType<DMF> dmf_sound_index, SoundIndexType<MOD> starting_sound_index, const std::pair<Note, Note>& dmf_note_range);
-    SoundIndexType<MOD> InitSilence();
-
-    Note GetMODNote(const Note& dmf_note, NoteRange& mod_note_range) const;
-    NoteRange GetMODNoteRange(const Note& dmf_note) const;
-    SoundIndexType<MOD> GetMODSampleId(const Note& dmf_note) const;
-    SoundIndexType<MOD> GetMODSampleId(NoteRange mod_note_range) const;
-    unsigned GetMODSampleLength(NoteRange mod_note_range) const;
-    NoteRange GetMODNoteRange(SoundIndexType<MOD> mod_sound_index) const;
-    NoteRangeName GetMODNoteRangeName(NoteRange mod_note_range) const;
-
-    int GetNumMODSamples() const { return num_mod_samples_; }
-    SampleType GetSampleType() const { return sample_type_; }
-    SoundIndexType<MOD> GetFirstMODSampleId() const { return mod_sound_indexes_[0]; }
-    bool IsDownsamplingNeeded() const { return downsampling_needed_; }
-
-private:
-    SoundIndexType<DMF> dmf_sound_index_;
-    std::array<SoundIndexType<MOD>, 3> mod_sound_indexes_; // Up to 3 MOD samples from one DMF sample
-    std::array<unsigned, 3> mod_sample_lengths_;
-    std::vector<Note> range_start_;
-    int num_mod_samples_;
-    SampleType sample_type_;
-    bool downsampling_needed_;
-    int mod_octave_shift_;
-};
-
 // Stores a MOD sample
 struct Sample
 {
@@ -154,8 +80,6 @@ struct Sample
 
     std::vector<int8_t> data;
 };
-
-using PriorityEffect = std::pair<mod::EffectPriority, d2m::Effect>;
 
 } // namespace mod
 
@@ -172,7 +96,7 @@ public:
 
 private:
     // Creates module-specific error message from an error code and string argument
-    std::string CreateErrorMessage(Category category, int error_code, const std::string& arg);
+    static std::string CreateErrorMessage(Category category, int error_code, const std::string& arg);
 };
 
 class MODConversionOptions : public ConversionOptionsInterface<MODConversionOptions>
@@ -253,10 +177,7 @@ private:
     // Only allow the Factory to construct this class
     friend class Builder<MOD, ModuleBase>;
 
-    MOD();
-    void CleanUp() {};
-
-    using SampleMap = std::map<SoundIndexType<DMF>, mod::DMFSampleMapper>;
+    MOD() = default;
 
     // Module requirements:
     void ImportImpl(const std::string& filename) override;
@@ -264,28 +185,17 @@ private:
     void ConvertImpl(const ModulePtr& input) override;
     size_t GenerateDataImpl(size_t data_flags) const override { return 1; }
 
-    // Conversion from DMF:
-    void ConvertFromDMF(const DMF& dmf);
-    void DMFConvertSamples(const DMF& dmf, SampleMap& sample_map);
-    void DMFConvertSampleData(const DMF& dmf, const SampleMap& sample_map);
-    void DMFConvertPatterns(const DMF& dmf, const SampleMap& sample_map);
-    mod::PriorityEffect DMFConvertEffects(ChannelStateReader<DMF>& state);
-    Row<MOD> DMFConvertNote(ChannelStateReader<DMF>& state, mod::DMFSampleMapper::NoteRange& note_range, bool& set_sample, int& set_vol_if_not, const SampleMap& sample_map, mod::PriorityEffect& mod_effect);
-    void ApplyEffects(std::array<Row<MOD>, 4>& row_data, const std::array<mod::PriorityEffect, 4>& mod_effect, std::vector<mod::PriorityEffect>& global_effects);
+    // DMF -> MOD conversion
+    class DMFConverter;
 
-    void DMFConvertInitialBPM(const DMF& dmf, unsigned& tempo, unsigned& speed);
-
-    // Export:
+    // Export helpers:
     void ExportModuleName(std::ofstream& fout) const;
     void ExportSampleInfo(std::ofstream& fout) const;
     void ExportModuleInfo(std::ofstream& fout) const;
     void ExportPatterns(std::ofstream& fout) const;
     void ExportSampleData(std::ofstream& fout) const;
 
-    //////////// Temporaries used during DMF-->MOD conversion
-    static constexpr bool using_setup_pattern_ = true; // Whether to use a pattern at the start of the module to set up the initial tempo and other stuff.
-
-    //////////// MOD file info
+    // MOD file info:
     int8_t total_mod_samples_;
     std::map<SoundIndexType<MOD>, mod::Sample> samples_;
 };

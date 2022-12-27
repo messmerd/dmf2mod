@@ -316,7 +316,7 @@ void DMF::Importer::Import()
         stream << "0x" << std::setfill('0') << std::setw(2) << std::hex << static_cast<int>(global_data.dmf_format_version);
         std::string hex = stream.str();
 
-        std::cout << "DMF version " << global_data.dmf_format_version << " (" << hex << ")\n";
+        std::cout << "DMF version " << std::to_string(global_data.dmf_format_version) << " (" << hex << ")\n";
     }
 
     ///////////////// SYSTEM SET
@@ -333,7 +333,7 @@ void DMF::Importer::Import()
         throw ModuleException(ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "Invalid system type");
 
     if (verbose)
-        std::cout << "System: " << global_data.system.name << " (channels: " << global_data.system.channels << ")\n";
+        std::cout << "System: " << global_data.system.name << " (channels: " << std::to_string(global_data.system.channels) << ")\n";
 
     ///////////////// VISUAL INFORMATION
 

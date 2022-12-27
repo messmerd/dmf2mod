@@ -59,7 +59,7 @@ protected:
     inline ModuleGlobalData<Derived>& GetGlobalData() { return GetData().GlobalData(); }
     inline std::shared_ptr<GeneratedData<Derived>> GetGeneratedDataMut() const { return generated_data_; }
 
-    // dataFlags specifies what data was requested to be generated
+    // data_flags specifies what data was requested to be generated
     virtual size_t GenerateDataImpl(size_t data_flags) const = 0;
 
 private:

@@ -1,10 +1,10 @@
 /*
-    conversion_options.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Defines an interface for conversion options.
-    All conversion options classes must inherit ConversionOptionsInterface.
-*/
+ * conversion_options.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Defines an interface for conversion options.
+ * All conversion options classes must inherit ConversionOptionsInterface.
+ */
 
 #pragma once
 

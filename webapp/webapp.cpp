@@ -1,9 +1,9 @@
 /*
-    webapp.cpp
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    A dmf2mod wrapper for WebAssembly.
-*/
+ * webapp.cpp
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * A dmf2mod wrapper for WebAssembly.
+ */
 
 #include "dmf2mod.h"
 

@@ -1,9 +1,9 @@
 /*
-    version.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    dmf2mod version info
-*/
+ * version.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * dmf2mod version info
+ */
 
 namespace d2m {
 

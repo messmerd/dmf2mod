@@ -1,10 +1,10 @@
 /*
-    options.cpp
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Defines Option, OptionCollection, OptionDefinition, and OptionDefinitionCollection,
-    which are used when working with command-line options.
-*/
+ * options.cpp
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Defines Option, OptionCollection, OptionDefinition, and OptionDefinitionCollection,
+ * which are used when working with command-line options.
+ */
 
 #include "core/options.h"
 #include "utils/utils.h"

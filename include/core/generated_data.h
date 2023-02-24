@@ -1,9 +1,11 @@
 /*
-    generated_data.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ * generated_data.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Defines GeneratedData and related class templates
+ */
 
-    Defines GeneratedData and related class templates
-*/
+#pragma once
 
 #include "core/note.h"
 #include "core/data.h"

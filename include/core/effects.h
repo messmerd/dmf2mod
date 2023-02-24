@@ -1,9 +1,9 @@
 /*
-    effects.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Defines effects which are common to many module file types
-*/
+ * effects.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Defines effects which are common to many module file types
+ */
 
 #pragma once
 

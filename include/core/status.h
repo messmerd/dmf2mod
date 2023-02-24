@@ -1,12 +1,12 @@
 /*
-    status.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Declares Status and ModuleException, which are used
-    for handling errors and warnings.
-
-    Defines NotImplementedException.
-*/
+ * status.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Declares Status and ModuleException, which are used
+ * for handling errors and warnings.
+ *
+ * Defines NotImplementedException.
+ */
 
 #pragma once
 

@@ -1,10 +1,10 @@
 /*
-    stream_reader.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Defines a header-only wrapper for std::istream and derived classes
-    which provides convenient methods for reading strings and integers
-*/
+ * stream_reader.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Defines a header-only wrapper for std::istream and derived classes
+ * which provides convenient methods for reading strings and integers
+ */
 
 #pragma once
 

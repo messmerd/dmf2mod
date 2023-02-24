@@ -1,9 +1,9 @@
 /*
-    utils.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Declares various utility methods used by dmf2mod.
-*/
+ * utils.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Declares various utility methods used by dmf2mod.
+ */
 
 #pragma once
 

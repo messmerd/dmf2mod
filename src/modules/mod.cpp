@@ -1,13 +1,13 @@
 /*
-    mod.cpp
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Defines all classes used for ProTracker's MOD files.
-
-    Several limitations apply in order to export. For example,
-    for DMF->MOD, the DMF file must use the Game Boy system,
-    patterns must have 64 or fewer rows, etc.
-*/
+ * mod.cpp
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Defines all classes used for ProTracker's MOD files.
+ *
+ * Several limitations apply in order to export. For example,
+ * for DMF->MOD, the DMF file must use the Game Boy system,
+ * patterns must have 64 or fewer rows, etc.
+ */
 
 #include "modules/mod.h"
 #include "modules/dmf.h"

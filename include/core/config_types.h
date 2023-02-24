@@ -1,9 +1,9 @@
 /*
-    config_types.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Defines the main enum used by the factory
-*/
+ * config_types.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Defines the main enum used by the factory
+ */
 
 #pragma once
 

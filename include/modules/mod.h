@@ -1,9 +1,9 @@
 /*
-    mod.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Declares all classes used for ProTracker's MOD files.
-*/
+ * mod.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Declares all classes used for ProTracker's MOD files.
+ */
 
 #pragma once
 

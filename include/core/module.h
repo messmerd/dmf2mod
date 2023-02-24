@@ -1,10 +1,10 @@
 /*
-    module.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Defines an interface for Modules.
-    All module classes must inherit ModuleInterface.
-*/
+ * module.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Defines an interface for Modules.
+ * All module classes must inherit ModuleInterface.
+ */
 
 #pragma once
 

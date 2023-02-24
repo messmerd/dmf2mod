@@ -1,14 +1,14 @@
 /*
-    console.cpp
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Cross-platform command-line frontend for the dmf2mod core.
-
-    Usage:
-        dmf2mod output.[ext] input.[ext] [options]
-        dmf2mod [ext] input.[ext] [options]
-        dmf2mod [option]
-*/
+ * console.cpp
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Cross-platform command-line frontend for the dmf2mod core.
+ *
+ * Usage:
+ *     dmf2mod output.[ext] input.[ext] [options]
+ *     dmf2mod [ext] input.[ext] [options]
+ *     dmf2mod [option]
+ */
 
 #include "dmf2mod.h"
 
@@ -17,6 +17,8 @@
 #include <iomanip>
 
 using namespace d2m;
+
+namespace {
 
 // Used for returning input/output info when parsing command-line arguments
 struct InputOutput
@@ -34,15 +36,17 @@ enum class OperationType
     kConversion
 };
 
-static OperationType ParseArgs(std::vector<std::string>& args, InputOutput& io);
-static void PrintHelp(const std::string& executable, ModuleType module_type);
+auto ParseArgs(std::vector<std::string>& args, InputOutput& io) -> OperationType;
+void PrintHelp(const std::string& executable, ModuleType module_type);
 
-int main(int argc, char *argv[])
+} // namespace
+
+auto main(int argc, char *argv[]) -> int
 {
     auto args = Utils::GetArgsAsVector(argc, argv);
 
     InputOutput io;
-    OperationType operation_type = ParseArgs(args, io);
+    auto operation_type = ParseArgs(args, io);
     if (operation_type == OperationType::kError)
         return 1;
 
@@ -50,7 +54,7 @@ int main(int argc, char *argv[])
     if (operation_type == OperationType::kInfo)
         return 0;
 
-    ConversionOptionsPtr options = Factory<ConversionOptions>::Create(io.output_type);
+    auto options = Factory<ConversionOptions>::Create(io.output_type);
     if (!options)
     {
         std::cerr << "ERROR: Failed to create ConversionOptionsBase-derived object for the module type '" << Utils::GetFileExtension(io.output_file) 
@@ -78,7 +82,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    ModulePtr input = Factory<ModuleBase>::Create(io.input_type);
+    auto input = Factory<ModuleBase>::Create(io.input_type);
     if (!input)
     {
         std::cerr << "ERROR: Not enough memory.\n";
@@ -95,7 +99,7 @@ int main(int argc, char *argv[])
     ////////// CONVERT //////////
 
     // Convert the input module to the output module type:
-    ModulePtr output = input->Convert(io.output_type, options);
+    auto output = input->Convert(io.output_type, options);
     if (!output)
     {
         std::cerr << "ERROR: Not enough memory or input and output types are the same.\n";
@@ -115,7 +119,9 @@ int main(int argc, char *argv[])
     return 0;
 }
 
-OperationType ParseArgs(std::vector<std::string>& args, InputOutput& io)
+namespace {
+
+auto ParseArgs(std::vector<std::string>& args, InputOutput& io) -> OperationType
 {
     io.input_file = "";
     io.input_type = ModuleType::kNone;
@@ -276,3 +282,5 @@ void PrintHelp(const std::string& executable, ModuleType module_type)
 
     GlobalOptions::Get().GetDefinitions()->PrintHelp();
 }
+
+} // namespace

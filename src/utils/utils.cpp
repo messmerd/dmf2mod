@@ -1,9 +1,9 @@
 /*
-    utils.cpp
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Defines various utility methods used by dmf2mod.
-*/
+ * utils.cpp
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Defines various utility methods used by dmf2mod.
+ */
 
 #include "utils/utils.h"
 

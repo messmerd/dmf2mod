@@ -1,9 +1,9 @@
 /*
-    dmf.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Declares all classes used for Deflemask's DMF files.
-*/
+ * dmf.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Declares all classes used for Deflemask's DMF files.
+ */
 
 #pragma once
 

@@ -1,12 +1,12 @@
 /*
-    dmf.cpp
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Defines all classes used for Deflemask's DMF files.
-
-    DMF file support was written according to the specs at
-    http://www.deflemask.com/DMF_SPECS.txt.
-*/
+ * dmf.cpp
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Defines all classes used for Deflemask's DMF files.
+ *
+ * DMF file support was written according to the specs at
+ * http://www.deflemask.com/DMF_SPECS.txt.
+ */
 
 #include "modules/dmf.h"
 #include "utils/utils.h"

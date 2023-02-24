@@ -1,9 +1,9 @@
 /*
-    global_options.cpp
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    See global_options.h
-*/
+ * global_options.cpp
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * See global_options.h
+ */
 
 #include "core/global_options.h"
 

@@ -1,9 +1,9 @@
 /*
-    note.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Defines a data structure for storing notes + helper functions.
-*/
+ * note.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Defines a data structure for storing notes + helper functions.
+ */
 
 #pragma once
 

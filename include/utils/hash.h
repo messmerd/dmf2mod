@@ -1,9 +1,9 @@
 /*
-    hash.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Custom hash functions
-*/
+ * hash.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Custom hash functions
+ */
 
 #pragma once
 

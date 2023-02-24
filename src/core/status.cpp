@@ -1,10 +1,10 @@
 /*
-    status.cpp
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Defines Status and ModuleException, which are used
-    for handling errors and warnings.
-*/
+ * status.cpp
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Defines Status and ModuleException, which are used
+ * for handling errors and warnings.
+ */
 
 #include "core/status.h"
 

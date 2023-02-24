@@ -1,9 +1,9 @@
 /*
-    module.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Defines the base class for Modules.
-*/
+ * module_base.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Defines the base class for Modules.
+ */
 
 #pragma once
 

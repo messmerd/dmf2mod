@@ -1,9 +1,9 @@
 /*
-    data.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Defines a class template for storing and accessing module data (orders, patterns, rows, etc.)
-*/
+ * data.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Defines a class template for storing and accessing module data (orders, patterns, rows, etc.)
+ */
 
 #pragma once
 

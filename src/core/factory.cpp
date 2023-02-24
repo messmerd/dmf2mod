@@ -1,9 +1,9 @@
 /*
-    factory.cpp
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Implements InitializeImpl for each factory.
-*/
+ * factory.cpp
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Implements InitializeImpl for each factory.
+ */
 
 #include "core/factory.h"
 #include "dmf2mod.h"

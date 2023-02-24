@@ -1,9 +1,9 @@
 /*
-    factory.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Implementation of the abstract factory pattern.
-*/
+ * factory.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Implementation of the abstract factory pattern.
+ */
 
 #pragma once
 

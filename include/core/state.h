@@ -1,9 +1,9 @@
 /*
-    state.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Defines GlobalState, ChannelState, StateReader, and ModuleState
-*/
+ * state.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Defines GlobalState, ChannelState, StateReader, and ModuleState
+ */
 
 #pragma once
 

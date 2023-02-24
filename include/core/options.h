@@ -1,10 +1,10 @@
 /*
-    options.h
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Declares Option, OptionCollection, OptionDefinition, and OptionDefinitionCollection, 
-    which are used when working with command-line options.
-*/
+ * options.h
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Declares Option, OptionCollection, OptionDefinition, and OptionDefinitionCollection, 
+ * which are used when working with command-line options.
+ */
 
 #pragma once
 
@@ -54,7 +54,7 @@ public:
     // OptionDefinition without accepted values; The value can be anything allowed by the variant
     template<typename T, std::enable_if_t<std::is_integral<T>{} || (std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>), bool> = true>
     OptionDefinition(OptionType type, T id, const std::string& name, char short_name, const ValueType& default_value, const std::string& description)
-        : option_type_(type), id_(static_cast<int>(id)), name_(name), short_name_(short_name), default_value_(default_value), accepted_values_({}), accepted_values_ordered_({}), description_(description)
+        : option_type_(type), id_(static_cast<int>(id)), name_(name), short_name_(short_name), default_value_(default_value), description_(description)
     {
         for (char c : name)
         {
@@ -68,11 +68,9 @@ public:
     }
 
     // OptionDefinition with accepted values; Ensures that default_value and accepted_values are the same type and are a valid variant alternative
-    template<typename T, typename U, 
-        std::enable_if_t<std::is_constructible_v<ValueType, U> && /* U must be a valid variant alternative */
-        (std::is_integral_v<T> || (std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>)), bool> = true> /* T must be int or enum class with int underlying type */
+    template<typename T, typename U, std::enable_if_t<std::is_constructible_v<ValueType, U>, bool> = true>
     OptionDefinition(OptionType type, T id, const std::string& name, char short_name, const U& default_value, const std::initializer_list<U>& accepted_values, const std::string& description)
-        : option_type_(type), id_(static_cast<int>(id)), name_(name), short_name_(short_name), default_value_(default_value), description_(description)
+        : OptionDefinition(type, id, name, short_name, default_value, description)
     {
         accepted_values_contain_spaces_ = false;
 
@@ -97,26 +95,17 @@ public:
 
         if (!found) // Avoid "unused variable" warning
             assert(false && "In OptionDefinition constructor: accepted_values must contain the default value.");
-
-        for (char c : name)
-        {
-            if (!std::isalnum(c))
-                assert(false && "In OptionDefinition constructor: name must only contain alphanumeric characters or be empty.");
-        }
-
-        assert((short_name == '\0' || std::isalpha(short_name)) && "In OptionDefinition constructor: short_name must be an alphabetic character or '\\0'.");
-
-        value_type_ = static_cast<Type>(default_value_.index());
     }
 
     // Allows the use of string literals, which are converted to std::string
     template<typename T, std::enable_if_t<std::is_integral_v<T> || (std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>), bool> = true>
     OptionDefinition(OptionType type, T id, const std::string& name, char short_name, const char* default_value, const std::initializer_list<std::string>& accepted_values, const std::string& description)
-        : OptionDefinition(type, id, name, short_name, std::string(default_value), accepted_values, description) {}
+        : OptionDefinition(type, id, name, short_name, std::string(default_value), accepted_values, description)
+    {
+    }
 
     // Allows custom accepted values text which is used when printing help for this option. accepted_values_ is empty.
-    template<typename T, typename U, std::enable_if_t<std::is_constructible_v<ValueType, U> && /* U must be a valid variant alternative */
-    (std::is_integral_v<T> || (std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>)), bool> = true> /* T must be int or enum class with int underlying type */
+    template<typename T, typename U, std::enable_if_t<std::is_constructible_v<ValueType, U>, bool> = true> /* U must be a valid variant alternative */
     OptionDefinition(OptionType type, T id, const std::string& name, char short_name, const U& default_value, const char* custom_accepted_values_text, const std::string& description)
         : OptionDefinition(type, id, name, short_name, default_value, description)
     {

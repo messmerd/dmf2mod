@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(dmf2mod VERSION "0.1.1")
+project(dmf2mod VERSION "0.2.0")
+set(PROJECT_VERSION_STAGE "alpha")
+if(PROJECT_VERSION_STAGE)
+    set(PROJECT_VERSION "${PROJECT_VERSION}-${PROJECT_VERSION_STAGE}")
+endif()
 
 enable_language(CXX)
 set(CMAKE_CXX_STANDARD 17)
@@ -77,13 +81,13 @@ message(STATUS "Release flags: ${CMAKE_CXX_FLAGS_RELEASE}")
 if(ENABLE_CPPCHECK)
     find_program(CPPCHECK cppcheck)
     if(CPPCHECK)
-    set(CMAKE_CXX_CPPCHECK
-        ${CPPCHECK}
-        --suppress=syntaxError
-        --enable=all
-        --inconclusive)
+        set(CMAKE_CXX_CPPCHECK
+            ${CPPCHECK}
+            --suppress=syntaxError
+            --enable=all
+            --inconclusive)
     else()
-    message(SEND_ERROR "cppcheck requested but executable not found")
+        message(SEND_ERROR "cppcheck requested but executable not found")
     endif()
 endif()
 

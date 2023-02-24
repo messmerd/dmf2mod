@@ -57,7 +57,6 @@ Options:
 Options when converting to MOD:
 
 ```text
---amiga                     Enables the Amiga filter 
 --arp                       Allow arpeggio effects 
 --port                      Allow portamento up/down effects 
 --port2note                 Allow portamento to note effects 

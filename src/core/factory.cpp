@@ -18,7 +18,6 @@ Factory<ConversionOptions>::InitializeImpl::InitializeImpl()
     auto mod_options = OptionDefinitionCollection
     {
         /* Type  / Option id                    / Full name    / Short / Default   / Possib. vals          / Description */
-        {kOption, MODOptionEnum::kAmigaFilter,    "amiga",       '\0',   false,                              "Enables the Amiga filter"},
         {kOption, MODOptionEnum::kArpeggio,       "arp",         '\0',   false,                              "Allow arpeggio effects"},
         {kOption, MODOptionEnum::kPortamento,     "port",        '\0',   false,                              "Allow portamento up/down effects"},
         {kOption, MODOptionEnum::kPort2Note,      "port2note",   '\0',   false,                              "Allow portamento to note effects"},

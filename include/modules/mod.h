@@ -108,7 +108,7 @@ public:
 
     enum class OptionEnum
     {
-        kAmigaFilter, kArpeggio, kPortamento, kPort2Note, kVibrato, kTempoType
+        kArpeggio, kPortamento, kPort2Note, kVibrato, kTempoType
     };
 
     enum class TempoType
@@ -116,7 +116,6 @@ public:
         kAccuracy, kEffectCompatibility
     };
 
-    inline bool UseAmigaFilter() const { return GetOption(OptionEnum::kAmigaFilter).GetValue<bool>(); }
     inline bool AllowArpeggio() const { return GetOption(OptionEnum::kArpeggio).GetValue<bool>(); }
     inline bool AllowPortamento() const { return GetOption(OptionEnum::kPortamento).GetValue<bool>(); }
     inline bool AllowPort2Note() const { return GetOption(OptionEnum::kPort2Note).GetValue<bool>(); }

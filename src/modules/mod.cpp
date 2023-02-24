@@ -775,13 +775,6 @@ void MOD::DMFConverter::ConvertPatterns(const SampleMap& sample_map)
         pat_break_row.effect = { Effects::kPatBreak, 0 };
         mod_data.SetRow(2, 0, 0, pat_break_row);
 
-        // Set Amiga Filter
-        Row<MOD> amiga_filter_row;
-        amiga_filter_row.sample = 0;
-        amiga_filter_row.note = NoteTypes::Empty{};
-        amiga_filter_row.effect = { mod::Effects::kSetFilter, !options_->GetOption(MODOptionEnum::kAmigaFilter).GetValue<bool>() };
-        mod_data.SetRow(3, 0, 0, amiga_filter_row);
-
         // All other channel rows in the pattern are already zeroed out so nothing needs to be done for them
     }
 

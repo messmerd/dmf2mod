@@ -234,6 +234,7 @@ struct PCMSample
     uint32_t size;
     std::string name;
     uint8_t rate, pitch, amp, bits;
+    uint32_t cut_start, cut_end;
     uint16_t* data;
 };
 

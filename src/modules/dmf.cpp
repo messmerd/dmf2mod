@@ -33,7 +33,7 @@
 using namespace d2m;
 
 static constexpr uint8_t kDMFFileVersionMin = 17; // DMF files as old as version 17 (0x11) are supported
-static constexpr uint8_t kDMFFileVersionMax = 26; // DMF files as new as version 26 (0x1a) are supported
+static constexpr uint8_t kDMFFileVersionMax = 27; // DMF files as new as version 27 (0x1b) are supported
 
 // DMF format magic numbers
 //static constexpr int kDMFNoInstrument = -1;
@@ -931,10 +931,37 @@ auto DMF::Importer::LoadPCMSample() -> dmf::PCMSample
         sample.bits = fin_.ReadInt();
     }
 
-    sample.data = new uint16_t[sample.size];
-    for (uint32_t i = 0; i < sample.size; i++)
+    if (dmf_format_version >= 27) // DMF version 27 (0x1b) and newer
     {
-        sample.data[i] = fin_.ReadInt<false, 2>();
+        sample.cut_start = fin_.ReadInt<false, 4>();
+        sample.cut_end = fin_.ReadInt<false, 4>();
+        if (sample.cut_start < 0 || sample.cut_start > sample.size)
+        {
+            throw ModuleException(ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "Sample cut start is out of range");
+        }
+        if (sample.cut_end < 0 || sample.cut_end > sample.size)
+        {
+            throw ModuleException(ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "Sample cut end is out of range");
+        }
+        if (sample.cut_end < sample.cut_start)
+        {
+            throw ModuleException(ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "Sample cut end is before sample cut start");
+        }
+    }
+    else
+    {
+        sample.cut_start = 0;
+        sample.cut_end = sample.size;
+    }
+
+    sample.data = nullptr;
+    if (sample.size > 0)
+    {
+        sample.data = new uint16_t[sample.size];
+        for (uint32_t i = 0; i < sample.size; i++)
+        {
+            sample.data[i] = fin_.ReadInt<false, 2>();
+        }
     }
 
     return sample;

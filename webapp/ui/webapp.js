@@ -1,9 +1,9 @@
 /*
-    webapp.js
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Event handlers and helper functions used by the dmf2mod web application
-*/
+ * webapp.js
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Event handlers and helper functions used by the dmf2mod web application
+ */
 
 /*global Module, FS*/
 const app = document.getElementById("dmf2mod_app");

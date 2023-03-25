@@ -5,6 +5,8 @@
  * dmf2mod version info
  */
 
+#pragma once
+
 namespace d2m {
 
 inline constexpr int kVersionMajor = @PROJECT_VERSION_MAJOR@;

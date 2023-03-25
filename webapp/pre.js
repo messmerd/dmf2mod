@@ -1,9 +1,9 @@
 /*
-    pre.js
-    Written by Dalton Messmer <messmer.dalton@gmail.com>.
-
-    Input to emscripten compiler.
-*/
+ * pre.js
+ * Written by Dalton Messmer <messmer.dalton@gmail.com>.
+ *
+ * Input to emscripten compiler.
+ */
 
 /*global Module, FS, errorMessage, warningMessage, statusMessageIsError*/
 

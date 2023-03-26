@@ -38,11 +38,11 @@ struct OptionWrapper
     std::string value;
 };
 
-static OptionDefinitionWrapper WrapOptionDefinition(const OptionDefinition& definition);
-static bool UnwrapOptions(ConversionOptionsPtr& options, const std::vector<OptionWrapper>& options_wrapped);
+static auto WrapOptionDefinition(const OptionDefinition& definition) -> OptionDefinitionWrapper;
+static auto UnwrapOptions(ConversionOptionsPtr& options, const std::vector<OptionWrapper>& options_wrapped) -> bool;
 static void SetStatusType(bool is_error);
 
-int main()
+auto main() -> int
 {
     // Initialize global options (for web app, user won't provide them)
     GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::kForce).SetValue(true);
@@ -60,7 +60,7 @@ int main()
  * Int is used instead of ModuleType to avoid the need to redefine the ModuleType
  *  enum in the Emscripten binding.
  */
-std::vector<int> GetAvailableModulesWrapper()
+auto GetAvailableModulesWrapper() -> std::vector<int>
 {
     std::vector<int> int_vec;
     const std::vector<ModuleType> modules = Factory<Module>::GetInitializedTypes();
@@ -71,7 +71,7 @@ std::vector<int> GetAvailableModulesWrapper()
 /*
  * Returns the module file extension when given a module type
  */
-std::string GetExtensionFromTypeWrapper(int module_type)
+auto GetExtensionFromTypeWrapper(int module_type) -> std::string
 {
     return Utils::GetExtensionFromType(static_cast<ModuleType>(module_type));
 }
@@ -79,14 +79,12 @@ std::string GetExtensionFromTypeWrapper(int module_type)
 /*
  * Returns a vector of option definitions for the given module type
  */
-std::vector<OptionDefinitionWrapper> GetOptionDefinitionsWrapper(int module_type)
+auto GetOptionDefinitionsWrapper(int module_type) -> std::vector<OptionDefinitionWrapper>
 {
     auto options = Factory<ConversionOptions>::GetInfo(static_cast<ModuleType>(module_type))->option_definitions;
     std::vector<OptionDefinitionWrapper> ret;
 
-    if (options.Count() == 0)
-        return ret;
-
+    if (options.Count() == 0) { return ret; }
     for (const auto& map_pair : options.GetIdMap())
     {
         ret.push_back(WrapOptionDefinition(map_pair.second));
@@ -99,7 +97,7 @@ std::vector<OptionDefinitionWrapper> GetOptionDefinitionsWrapper(int module_type
  * Imports and stores module from specified filename
  * Returns true upon failure
  */
-bool ModuleImport(std::string filename)
+auto ModuleImport(std::string filename) -> bool
 {
     SetStatusType(true);
 
@@ -143,16 +141,11 @@ bool ModuleImport(std::string filename)
  * Converts the previously imported module to a module of the given file extension.
  * Returns true if an error occurred, or false if successful.
  */
-bool ModuleConvert(std::string output_filename, const std::vector<OptionWrapper>& options_wrapped)
+auto ModuleConvert(std::string output_filename, const std::vector<OptionWrapper>& options_wrapped) -> bool
 {
-    if (!kModule)
-        return true; // Need to import the module first
-
-    if (output_filename.empty())
-        return true; // Invalid argument
-
-    if (output_filename == kInputFilename)
-        return true; // Same type; No conversion necessary
+    if (!kModule) { return true; } // Need to import the module first
+    if (output_filename.empty()) { return true; } // Invalid argument
+    if (output_filename == kInputFilename) { return true; } // Same type; No conversion necessary
 
     SetStatusType(true);
     const auto module_type = Utils::GetTypeFromFilename(output_filename);
@@ -171,12 +164,10 @@ bool ModuleConvert(std::string output_filename, const std::vector<OptionWrapper>
     }
 
     // Set options
-    if (UnwrapOptions(options, options_wrapped))
-        return true; // Error unwrapping options
+    if (UnwrapOptions(options, options_wrapped)) { return true; } // Error unwrapping options
 
     ModulePtr output = kModule->Convert(module_type, options);
-    if (!output)
-        return true;
+    if (!output) { return true; }
 
     if (output->GetStatus().ErrorOccurred())
     {
@@ -210,7 +201,7 @@ bool ModuleConvert(std::string output_filename, const std::vector<OptionWrapper>
 //  Helper functions  //
 ////////////////////////
 
-static OptionDefinitionWrapper WrapOptionDefinition(const OptionDefinition& definition)
+static auto WrapOptionDefinition(const OptionDefinition& definition) -> OptionDefinitionWrapper
 {
     OptionDefinitionWrapper ret;
     ret.id = definition.GetId();
@@ -230,7 +221,7 @@ static OptionDefinitionWrapper WrapOptionDefinition(const OptionDefinition& defi
     return ret;
 }
 
-static bool UnwrapOptions(ConversionOptionsPtr& options, const std::vector<OptionWrapper>& options_wrapped)
+static auto UnwrapOptions(ConversionOptionsPtr& options, const std::vector<OptionWrapper>& options_wrapped) -> bool
 {
     for (const auto& option_wrapped : options_wrapped)
     {
@@ -238,7 +229,9 @@ static bool UnwrapOptions(ConversionOptionsPtr& options, const std::vector<Optio
 
         OptionDefinition::ValueType val;
         if (ModuleOptionUtils::ConvertToValue(option_wrapped.value, option.GetDefinition()->GetValueType(), val))
+        {
             return true; // Error converting string to ValueType
+        }
 
         option.SetValue(std::move(val));
     }

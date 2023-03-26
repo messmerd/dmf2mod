@@ -49,7 +49,7 @@ public:
      * Cast ConversionOptionsPtr to std::shared_ptr<T> where T is the derived ConversionOptions class
      */
     template<class T, std::enable_if_t<std::is_base_of_v<ConversionOptionsBase, T>, bool> = true>
-    std::shared_ptr<T> Cast() const
+    [[nodiscard]] auto Cast() const -> std::shared_ptr<T>
     {
         return std::static_pointer_cast<T>(shared_from_this());
     }
@@ -57,7 +57,7 @@ public:
     /*
      * Get the filename of the output file. Returns empty string if error occurred.
      */
-    std::string GetOutputFilename() const { return output_file_; }
+    auto GetOutputFilename() const -> std::string { return output_file_; }
 
     /*
      * Prints help message for this module's options
@@ -86,9 +86,6 @@ protected:
         OptionCollection::SetDefinitions(&(this->GetInfo()->option_definitions));
     }
 
-    ConversionOptionsInterface(const ConversionOptionsInterface&) = delete;
-    ConversionOptionsInterface(ConversionOptionsInterface&&) = delete;
-
     void PrintHelp() const override
     {
         ConversionOptionsBase::PrintHelp(this->GetType());
@@ -96,6 +93,8 @@ protected:
 
 public:
 
+    ConversionOptionsInterface(const ConversionOptionsInterface&) = delete;
+    ConversionOptionsInterface(ConversionOptionsInterface&&) = delete;
     virtual ~ConversionOptionsInterface() = default;
 };
 

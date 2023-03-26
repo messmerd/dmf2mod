@@ -17,8 +17,7 @@ void ConversionOptionsBase::PrintHelp(ModuleType module_type)
     const auto& definitions = Factory<ConversionOptionsBase>::GetInfo(module_type)->option_definitions;
 
     std::string name = Factory<Module>::GetInfo(module_type)->file_extension;
-    if (name.empty())
-        return;
+    if (name.empty()) { return; }
 
     for (auto& c : name)
     {

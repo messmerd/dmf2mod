@@ -27,7 +27,7 @@ public:
     };
 
     static void Set(const OptionCollection& global_options) { global_options_ = global_options; }
-    static OptionCollection& Get() { return global_options_; }
+    static auto Get() -> OptionCollection& { return global_options_; }
 
 private:
     static OptionCollection global_options_;

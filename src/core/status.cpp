@@ -14,13 +14,10 @@ using namespace d2m;
 
 void Status::PrintError(bool use_std_err) const
 {
-    if (!ErrorOccurred())
-        return;
+    if (!ErrorOccurred()) { return; }
 
-    if (use_std_err)
-        std::cerr << error_->what() << "\n";
-    else
-        std::cout << error_->what() << "\n";
+    if (use_std_err) { std::cerr << error_->what() << "\n"; }
+    else { std::cout << error_->what() << "\n"; }
 }
 
 void Status::PrintWarnings(bool use_std_err) const
@@ -29,15 +26,13 @@ void Status::PrintWarnings(bool use_std_err) const
     {
         for (const auto& message : warning_messages_)
         {
-            if (use_std_err)
-                std::cerr << message << "\n";
-            else
-                std::cout << message << "\n";
+            if (use_std_err) { std::cerr << message << "\n"; }
+            else { std::cout << message << "\n"; }
         }
     }
 }
 
-bool Status::HandleResults() const
+auto Status::HandleResults() const -> bool
 {
     PrintError();
 
@@ -58,8 +53,7 @@ bool Status::HandleResults() const
 
     if (WarningsIssued())
     {
-        if (ErrorOccurred())
-            std::cerr << "\n";
+        if (ErrorOccurred()) { std::cerr << "\n"; }
 
         //const std::string plural = warning_messages_.size() > 1 ? "s" : "";
         //std::cout << "Warning" << plural << " issued during " << action_str << ":\n";
@@ -69,7 +63,7 @@ bool Status::HandleResults() const
     return ErrorOccurred();
 }
 
-std::string ModuleException::CreateCommonErrorMessage(Category category, int error_code, const std::string& arg)
+auto ModuleException::CreateCommonErrorMessage(Category category, int error_code, const std::string& arg) -> std::string
 {
     switch (category)
     {

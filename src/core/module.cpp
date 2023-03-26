@@ -12,7 +12,7 @@
 
 using namespace d2m;
 
-bool ModuleBase::Import(const std::string& filename)
+auto ModuleBase::Import(const std::string& filename) -> bool
 {
     status_.Reset(Status::Category::kImport);
     try
@@ -28,7 +28,7 @@ bool ModuleBase::Import(const std::string& filename)
     return true;
 }
 
-bool ModuleBase::Export(const std::string& filename)
+auto ModuleBase::Export(const std::string& filename) -> bool
 {
     status_.Reset(Status::Category::kExport);
     try
@@ -44,19 +44,17 @@ bool ModuleBase::Export(const std::string& filename)
     return true;
 }
 
-ModulePtr ModuleBase::Convert(ModuleType type, const ConversionOptionsPtr& options)
+auto ModuleBase::Convert(ModuleType type, const ConversionOptionsPtr& options) -> ModulePtr
 {
     ModuleBase* input = this; // For clarity
     input->status_.Reset(Status::Category::kConvert);
 
     // Don't convert if the types are the same
-    if (type == input->GetType())
-        return nullptr;
+    if (type == input->GetType()) { return nullptr; }
 
     // Create new module object
     ModulePtr output = Factory<ModuleBase>::Create(type);
-    if (!output)
-        return nullptr;
+    if (!output) { return nullptr; }
 
     output->status_.Reset(Status::Category::kConvert);
     output->options_ = options;

@@ -18,4 +18,4 @@ static const OptionDefinitionCollection kOptionDefinitions =
     {kCommand, OptionEnum::kVersion, "version", 'v', false, "Display the dmf2mod version."}
 };
 
-OptionCollection GlobalOptions::global_options_(&kOptionDefinitions);
+OptionCollection GlobalOptions::global_options_{&kOptionDefinitions};

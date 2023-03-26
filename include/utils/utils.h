@@ -20,18 +20,18 @@ class Utils
 {
 public:
     // File utils
-    static std::string GetBaseNameFromFilename(const std::string& filename);
-    static std::string ReplaceFileExtension(const std::string& filename, const std::string& new_file_extension);
-    static std::string GetFileExtension(const std::string& filename);
-    static bool FileExists(const std::string& filename);
+    [[nodiscard]] static auto GetBaseNameFromFilename(const std::string& filename) -> std::string;
+    [[nodiscard]] static auto ReplaceFileExtension(const std::string& filename, const std::string& new_file_extension) -> std::string;
+    [[nodiscard]] static auto GetFileExtension(const std::string& filename) -> std::string;
+    [[nodiscard]] static auto FileExists(const std::string& filename) -> bool;
 
     // File utils which require Factory initialization
-    static ModuleType GetTypeFromFilename(const std::string& filename);
-    static ModuleType GetTypeFromFileExtension(const std::string& extension);
-    static std::string GetExtensionFromType(ModuleType module_type);
+    [[nodiscard]] static auto GetTypeFromFilename(const std::string& filename) -> ModuleType;
+    [[nodiscard]] static auto GetTypeFromFileExtension(const std::string& extension) -> ModuleType;
+    [[nodiscard]] static auto GetExtensionFromType(ModuleType module_type) -> std::string;
 
     // Command-line arguments and options utils
-    static std::vector<std::string> GetArgsAsVector(int argc, char* argv[]);
+    [[nodiscard]] static auto GetArgsAsVector(int argc, char** argv) -> std::vector<std::string>;
 
     // String utils (borrowed from Stack Overflow)
     static inline void StringTrimLeft(std::string& str)

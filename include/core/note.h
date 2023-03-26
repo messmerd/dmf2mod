@@ -34,7 +34,7 @@ namespace NoteTypes
     enum { kEmpty, kNote, kOff }; // The order is important
 
     struct Empty {};
-    inline constexpr bool operator==(const Empty&, const Empty&) { return true; };
+    inline constexpr auto operator==(const Empty&, const Empty&) -> bool { return true; };
 
     struct alignas(1) Note
     {
@@ -44,60 +44,60 @@ namespace NoteTypes
         constexpr Note() : pitch(NotePitch::kC), octave(0) {}
         constexpr Note(NotePitch pitch, uint8_t octave) : pitch(pitch), octave(octave) {}
 
-        bool operator>(Note rhs) const
+        auto operator>(Note rhs) const -> bool
         {
             return (this->octave << 4) + static_cast<uint8_t>(this->pitch) > (rhs.octave << 4) + static_cast<uint8_t>(rhs.pitch);
         }
 
-        bool operator>=(Note rhs) const
+        auto operator>=(Note rhs) const -> bool
         {
             return (this->octave << 4) + static_cast<uint8_t>(this->pitch) >= (rhs.octave << 4) + static_cast<uint8_t>(rhs.pitch);
         }
 
-        bool operator<(Note rhs) const
+        auto operator<(Note rhs) const -> bool
         {
             return (this->octave << 4) + static_cast<uint8_t>(this->pitch) < (rhs.octave << 4) + static_cast<uint8_t>(rhs.pitch);
         }
 
-        bool operator<=(Note rhs) const
+        auto operator<=(Note rhs) const -> bool
         {
             return (this->octave << 4) + static_cast<uint8_t>(this->pitch) <= (rhs.octave << 4) + static_cast<uint8_t>(rhs.pitch);
         }
 
-        bool operator==(Note rhs) const
+        auto operator==(Note rhs) const -> bool
         {
             return this->octave == rhs.octave && this->pitch == rhs.pitch;
         }
 
-        bool operator!=(Note rhs) const
+        auto operator!=(Note rhs) const -> bool
         {
             return this->octave != rhs.octave || this->pitch != rhs.pitch;
         }
     };
 
     struct Off {};
-    inline constexpr bool operator==(const Off&, const Off&) { return true; };
+    inline constexpr auto operator==(const Off&, const Off&) -> bool { return true; };
 };
 
 using NoteSlot = std::variant<NoteTypes::Empty, NoteTypes::Note, NoteTypes::Off>;
 using Note = NoteTypes::Note; // For convenience
 
-inline constexpr bool NoteIsEmpty(const NoteSlot& note) { return note.index() == NoteTypes::kEmpty; }
-inline constexpr bool NoteHasPitch(const NoteSlot& note) { return note.index() == NoteTypes::kNote; }
-inline constexpr bool NoteIsOff(const NoteSlot& note) { return note.index() == NoteTypes::kOff; }
-inline constexpr const Note& GetNote(const NoteSlot& note)
+inline constexpr auto NoteIsEmpty(const NoteSlot& note) -> bool { return note.index() == NoteTypes::kEmpty; }
+inline constexpr auto NoteHasPitch(const NoteSlot& note) -> bool { return note.index() == NoteTypes::kNote; }
+inline constexpr auto NoteIsOff(const NoteSlot& note) -> bool { return note.index() == NoteTypes::kOff; }
+inline constexpr auto GetNote(const NoteSlot& note) -> const Note&
 {
     assert(NoteHasPitch(note) && "NoteSlot variant must be using the Note alternative");
     return std::get<Note>(note);
 }
 
-inline constexpr Note& GetNote(NoteSlot& note)
+inline constexpr auto GetNote(NoteSlot& note) -> Note&
 {
     assert(NoteHasPitch(note) && "NoteSlot variant must be using the Note alternative");
     return std::get<Note>(note);
 }
 
-inline int GetNoteRange(const Note& low, const Note& high)
+inline constexpr auto GetNoteRange(const Note& low, const Note& high) -> int
 {
     // Returns range in semitones. Assumes high >= low.
     // Range is inclusive on both ends.

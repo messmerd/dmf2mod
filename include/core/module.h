@@ -30,18 +30,20 @@ public:
 
     virtual ~ModuleInterface() = default;
 
-    inline const ModuleData<Derived>& GetData() const { return data_; }
-    inline const ModuleGlobalData<Derived>& GetGlobalData() const { return GetData().GlobalData(); }
-    inline std::shared_ptr<const GeneratedData<Derived>> GetGeneratedData() const { return generated_data_; }
+    inline auto GetData() const -> const ModuleData<Derived>& { return data_; }
+    inline auto GetGlobalData() const -> const ModuleGlobalData<Derived>& { return GetData().GlobalData(); }
+    inline auto GetGeneratedData() const -> std::shared_ptr<const GeneratedData<Derived>> { return generated_data_; }
 
-    const std::string& GetTitle() const final override { return GetGlobalData().title; }
-    const std::string& GetAuthor() const final override { return GetGlobalData().author; }
+    [[nodiscard]] auto GetTitle() const -> const std::string& final { return GetGlobalData().title; }
+    [[nodiscard]] auto GetAuthor() const -> const std::string& final { return GetGlobalData().author; }
 
-    size_t GenerateData(size_t data_flags = 0) const final override
+    [[nodiscard]] auto GenerateData(size_t data_flags = 0) const -> size_t final
     {
         // If generated data has already been created using the same data_flags, just return that
         if (generated_data_->IsValid() && generated_data_->GetGenerated().value() == data_flags)
+        {
             return generated_data_->GetStatus();
+        }
 
         // Else, need to generate data
         generated_data_->ClearAll();
@@ -55,12 +57,12 @@ protected:
 
     ModuleInterface() : generated_data_(std::make_shared<GeneratedData<Derived>>()) {}
 
-    inline ModuleData<Derived>& GetData() { return data_; }
-    inline ModuleGlobalData<Derived>& GetGlobalData() { return GetData().GlobalData(); }
-    inline std::shared_ptr<GeneratedData<Derived>> GetGeneratedDataMut() const { return generated_data_; }
+    inline auto GetData() -> ModuleData<Derived>& { return data_; }
+    inline auto GetGlobalData() -> ModuleGlobalData<Derived>& { return GetData().GlobalData(); }
+    inline auto GetGeneratedDataMut() const -> std::shared_ptr<GeneratedData<Derived>> { return generated_data_; }
 
     // data_flags specifies what data was requested to be generated
-    virtual size_t GenerateDataImpl(size_t data_flags) const = 0;
+    [[nodiscard]] virtual auto GenerateDataImpl(size_t data_flags) const -> size_t = 0;
 
 private:
 

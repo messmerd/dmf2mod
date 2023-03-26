@@ -42,7 +42,7 @@ public:
     virtual ~BuilderBase() = default;
 protected:
     BuilderBase() = default;
-    virtual std::shared_ptr<Base> Build() const = 0;
+    virtual auto Build() const -> std::shared_ptr<Base> = 0;
 };
 
 // Builds an instance of a factory-enabled class; Can specialize this, but it must inherit from BuilderBase and Factory<Base> must have access to its members.
@@ -54,7 +54,7 @@ class Builder : public BuilderBase<Base>
     friend class Factory<Base>; // Only the factory can use Builder
 
     // Default constructs an object of Derived wrapped in a shared_ptr. std::make_shared cannot be used for classes with a non-public constructor even if Builder is a friend.
-    std::shared_ptr<Base> Build() const override { return std::shared_ptr<Derived>(new Derived{}); };
+    auto Build() const -> std::shared_ptr<Base> override { return std::shared_ptr<Derived>(new Derived{}); };
 };
 
 
@@ -73,13 +73,7 @@ class Factory
 {
 private:
 
-    Factory() = delete;
     ~Factory() { Clear(); }
-
-    Factory(const Factory&) = delete;
-    Factory(Factory&&) = delete;
-    Factory& operator=(const Factory&) = delete;
-    Factory& operator=(Factory&&) = delete;
 
     struct InitializeImpl
     {
@@ -91,7 +85,7 @@ private:
      * Initialize must be called at the start of every public Factory method to
      * ensure lazy initialization of the Factory whenever it is first used.
      */
-    static bool Initialize()
+    static auto Initialize() -> bool
     {
         if (!initialized_)
         {
@@ -105,26 +99,31 @@ private:
 
 public:
 
-    static std::shared_ptr<Base> Create(ModuleType module_type)
+    Factory() = delete;
+    Factory(const Factory&) = delete;
+    Factory(Factory&&) = delete;
+    auto operator=(const Factory&) -> Factory& = delete;
+    auto operator=(Factory&&) -> Factory& = delete;
+
+    static auto Create(ModuleType module_type) -> std::shared_ptr<Base>
     {
         [[maybe_unused]] static bool init = Initialize();
-        if (builders_.find(module_type) != builders_.end())
-            return builders_.at(module_type)->Build();
+        if (builders_.find(module_type) != builders_.end()) { return builders_.at(module_type)->Build(); }
         assert(false && "Factory is not initialized for Base.");
         return nullptr;
     }
 
-    static Info<Base> const* GetInfo(ModuleType module_type)
+    static auto GetInfo(ModuleType module_type) -> const Info<Base>*
     {
         [[maybe_unused]] static bool init = Initialize();
-        if (info_.find(module_type) != info_.end())
-            return info_.at(module_type).get();
+        const auto it = info_.find(module_type);
+        if (it != info_.end()) { return it->second.get(); }
         assert(false && "Factory is not initialized for Base.");
         return nullptr;
     }
 
     template<class Derived, std::enable_if_t<detail::factory_enabled_v<Derived>, bool> = true>
-    static std::shared_ptr<Derived> Create()
+    static auto Create() -> std::shared_ptr<Derived>
     {
         // Initialize() not needed here because GetEnumFromType calls it
         static ModuleType module_type = GetEnumFromType<Derived>();
@@ -132,20 +131,20 @@ public:
     }
 
     template<class Derived, std::enable_if_t<detail::factory_enabled_v<Derived>, bool> = true>
-    static Info<Base> const* GetInfo()
+    static auto GetInfo() -> const Info<Base>*
     {
         // Initialize() not needed here because GetEnumFromType calls it
         static ModuleType module_type = GetEnumFromType<Derived>();
         return GetInfo(module_type);
     }
 
-    static const std::map<ModuleType, std::unique_ptr<const Info<Base>>>& TypeInfo()
+    static auto TypeInfo() -> const std::map<ModuleType, std::unique_ptr<const Info<Base>>>&
     {
         [[maybe_unused]] static bool init = Initialize();
         return info_;
     }
 
-    static std::vector<ModuleType> GetInitializedTypes()
+    static auto GetInitializedTypes() -> std::vector<ModuleType>
     {
         [[maybe_unused]] static bool init = Initialize();
         std::vector<ModuleType> vec;
@@ -157,12 +156,12 @@ public:
     }
 
     template<class Type, std::enable_if_t<detail::factory_enabled_v<Type>, bool> = true>
-    static ModuleType GetEnumFromType()
+    static auto GetEnumFromType() -> ModuleType
     {
         [[maybe_unused]] static bool init = Initialize();
         const auto& type = std::type_index(typeid(Type));
-        if (type_to_enum_.find(type) != type_to_enum_.end())
-            return type_to_enum_.at(type);
+        const auto it = type_to_enum_.find(type);
+        if (it != type_to_enum_.end()) { return it->second; }
         assert(false && "Factory is not initialized for Type.");
         return ModuleType::kNone;
     }
@@ -198,7 +197,7 @@ private:
     }
 
     template<ModuleType module_type, class Type, typename... Args>
-    static inline void Register(Args&&... info_args)
+    static void Register(Args&&... info_args)
     {
         Register<Type>(Info<Base>{ InfoBase{ module_type }, std::forward<Args>(info_args)... });
     }
@@ -209,8 +208,6 @@ private:
         info_.clear();
         initialized_ = false;
     }
-
-private:
 
     static std::map<ModuleType, std::unique_ptr<const BuilderBase<Base>>> builders_;
     static std::map<ModuleType, std::unique_ptr<const Info<Base>>> info_;
@@ -230,8 +227,8 @@ template<class Base> bool Factory<Base>::initialized_ = false;
 template<class Base>
 struct EnableReflection : public detail::EnableReflectionBase
 {
-    virtual ModuleType GetType() const = 0;
-    virtual Info<Base> const* GetInfo() const = 0;
+    [[nodiscard]] virtual auto GetType() const -> ModuleType = 0;
+    [[nodiscard]] virtual auto GetInfo() const -> const Info<Base>* = 0;
 };
 
 
@@ -245,12 +242,13 @@ struct EnableReflection : public detail::EnableReflectionBase
 template<class Derived, class Base>
 struct ReflectionImpl : public Base
 {
-    ModuleType GetType() const final override
+    [[nodiscard]] auto GetType() const -> ModuleType final
     {
         static const ModuleType module_type = Factory<Base>::template GetEnumFromType<Derived>();
         return module_type;
     }
-    Info<Base> const* GetInfo() const final override
+
+    [[nodiscard]] auto GetInfo() const -> const Info<Base>* final
     {
         return Factory<Base>::GetInfo(GetType());
     }

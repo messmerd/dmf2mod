@@ -25,17 +25,17 @@ namespace detail {
 struct GenDataDefinitionTag {};
 
 template<typename T>
-struct wrapped_gen_data {};
+struct WrappedGenData {};
 
 template<typename... Ts>
-struct wrapped_gen_data<std::tuple<Ts...>>
+struct WrappedGenData<std::tuple<Ts...>>
 {
     // type is either an empty tuple or a tuple with each Ts wrapped in an optional
     using type = std::conditional_t<sizeof...(Ts)==0, std::tuple<>, std::tuple<std::optional<Ts>...>>;
 };
 
 template<typename... T>
-using wrapped_gen_data_t = typename wrapped_gen_data<T...>::type;
+using WrappedGenDataType = typename WrappedGenData<T...>::type;
 
 } // namespace detail
 
@@ -123,26 +123,26 @@ public:
     using GenData = detail::tuple_cat_t<typename CommonDef::GenDataCommon, GenDataModuleSpecific>;
 
     // Single tuple of all wrapped data types stored by this gen data storage. They should all be optionals.
-    using GenDataWrapped = detail::wrapped_gen_data_t<GenData>;
+    using GenDataWrapped = detail::WrappedGenDataType<GenData>;
 
     // Returns an immutable reference to generated data at index gen_data_index
     template<int gen_data_index>
-    constexpr const auto& Get() const
+    [[nodiscard]] constexpr auto Get() const -> const auto&
     {
         return std::get<gen_data_index + CommonDef::kCommonCount>(data_);
     }
 
     // Returns a mutable reference to generated data at index gen_data_index
     template<int gen_data_index>
-    constexpr auto& Get()
+    [[nodiscard]] constexpr auto Get() -> auto&
     {
         return std::get<gen_data_index + CommonDef::kCommonCount>(data_);
     }
 
     // For convenience:
-    constexpr const std::optional<ModuleState<ModuleClass>>& GetState() const { return Get<GenDataEnumCommon::kState>(); }
-    constexpr std::optional<ModuleState<ModuleClass>>& GetState() { return Get<GenDataEnumCommon::kState>(); }
-    constexpr const std::optional<OrderIndex>& GetNumOrders() const { return Get<GenDataEnumCommon::kTotalOrders>(); }
+    [[nodiscard]] constexpr auto GetState() const -> const std::optional<ModuleState<ModuleClass>>& { return Get<GenDataEnumCommon::kState>(); }
+    [[nodiscard]] constexpr auto GetState() -> std::optional<ModuleState<ModuleClass>>& { return Get<GenDataEnumCommon::kState>(); }
+    [[nodiscard]] constexpr auto GetNumOrders() const -> const std::optional<OrderIndex>& { return Get<GenDataEnumCommon::kTotalOrders>(); }
 
     // Destroys any generated data at index gen_data_index. Call this after any change which would make the data invalid.
     template<int gen_data_index>
@@ -165,10 +165,10 @@ public:
         status_ = 0;
     }
 
-    bool IsValid() const { return generated_.has_value(); }
-    std::optional<size_t> GetGenerated() const { return generated_; }
+    [[nodiscard]] auto IsValid() const -> bool { return generated_.has_value(); }
+    [[nodiscard]] auto GetGenerated() const -> std::optional<size_t> { return generated_; }
     void SetGenerated(std::optional<size_t> val) { generated_ = val; }
-    size_t GetStatus() const { return status_; }
+    [[nodiscard]] auto GetStatus() const -> size_t { return status_; }
     void SetStatus(size_t val) { status_ = val; }
 
 protected:

@@ -16,13 +16,12 @@
 
 namespace d2m {
 
-namespace detail
-{
-    template<int N>
+namespace detail {
+    template<int times>
     struct LoopUnroller
     {
         template<typename Operation>
-        inline void operator()(Operation& op) { op(); LoopUnroller<N-1>{}(op); }
+        inline void operator()(Operation& op) { op(); LoopUnroller<times - 1>{}(op); }
     };
 
     template<>
@@ -42,14 +41,14 @@ namespace detail
                 >::type
             >::type
         >::type;
-}
+} // namespace detail
 
 enum class Endianness { kUnspecified, kLittle, kBig };
 
 /*
-    Wrapper for std::istream and derived classes which provides
-    convenient methods for reading strings and integers
-*/
+ * Wrapper for std::istream and derived classes which provides
+ * convenient methods for reading strings and integers
+ */
 template<class IStream, Endianness global_endian = Endianness::kUnspecified, std::enable_if_t<std::is_base_of_v<std::basic_istream<char>, IStream>, bool> = true>
 class StreamReader
 {
@@ -84,7 +83,7 @@ private:
     };
 
     template<typename T, bool is_signed, uint8_t num_bytes>
-    inline T ReadIntLittleEndian()
+    inline auto ReadIntLittleEndian() -> T
     {
         LittleEndianReadOperator<T, num_bytes> oper{stream()};
         detail::LoopUnroller<num_bytes>{}(oper);
@@ -101,7 +100,7 @@ private:
     }
 
     template<typename T, bool is_signed, uint8_t num_bytes>
-    inline T ReadIntBigEndian()
+    inline auto ReadIntBigEndian() -> T
     {
         BigEndianReadOperator<T> oper{stream()};
         detail::LoopUnroller<num_bytes>{}(oper);
@@ -119,7 +118,7 @@ private:
 
 public:
 
-    StreamReader() : stream_{} {}
+    StreamReader() = default;
 
     // StreamReader constructs and owns the istream object
     template<typename... Args>
@@ -127,13 +126,13 @@ public:
 
     StreamReader(const StreamReader&) = delete;
     StreamReader(StreamReader&&) = delete;
-    StreamReader& operator=(const StreamReader&) = delete;
-    StreamReader& operator=(StreamReader&&) = delete;
+    auto operator=(const StreamReader&) -> StreamReader& = delete;
+    auto operator=(StreamReader&&) -> StreamReader& = delete;
 
-    const IStream& stream() const { return stream_; }
-    IStream& stream() { return stream_; }
+    auto stream() const -> const IStream& { return stream_; }
+    auto stream() -> IStream& { return stream_; }
 
-    std::string ReadStr(unsigned length)
+    auto ReadStr(unsigned length) -> std::string
     {
         std::string temp_str;
         temp_str.assign(length, '\0');
@@ -141,14 +140,14 @@ public:
         return temp_str;
     }
 
-    std::string ReadPStr()
+    auto ReadPStr() -> std::string
     {
         // P-Strings (Pascal strings) are prefixed with a 1 byte length
         uint8_t string_length = stream_.get();
         return ReadStr(string_length);
     }
 
-    std::vector<char> ReadBytes(unsigned length)
+    auto ReadBytes(unsigned length) -> std::vector<char>
     {
         std::vector<char> temp_bytes;
         temp_bytes.assign(length, '\0');
@@ -167,9 +166,13 @@ public:
         {
             static_assert(endian != Endianness::kUnspecified, "Set the endianness when creating StreamReader or set it in this method's template parameters");
             if constexpr (endian == Endianness::kLittle)
+            {
                 return static_cast<ReturnType>(ReadIntLittleEndian<UIntType, is_signed, num_bytes>());
+            }
             else
+            {
                 return static_cast<ReturnType>(ReadIntBigEndian<UIntType, is_signed, num_bytes>());
+            }
         }
         else
         {

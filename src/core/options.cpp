@@ -18,19 +18,16 @@ using namespace d2m;
 
 // OptionDefinition
 
-std::string OptionDefinition::GetDisplayName() const
+auto OptionDefinition::GetDisplayName() const -> std::string
 {
-    if (!name_.empty())
-        return "--" + name_;
+    if (!name_.empty()) { return "--" + name_; }
     return "-" + std::string(1, short_name_);
 }
 
-bool OptionDefinition::IsValid(const ValueType& value) const
+auto OptionDefinition::IsValid(const ValueType& value) const -> bool
 {
-    if (value.index() != GetValueType())
-        return false;
-    if (!UsesAcceptedValues())
-        return true;
+    if (value.index() != GetValueType()) { return false; }
+    if (!UsesAcceptedValues()) { return true; }
     return accepted_values_.count(value) > 0;
 }
 
@@ -42,8 +39,7 @@ void OptionDefinition::PrintHelp() const
     if (HasShortName())
     {
         str1 += "-" + std::string(1, GetShortName());
-        if (HasName())
-            str1 += ", ";
+        if (HasName()) { str1 += ", "; }
     }
     if (HasName())
     {
@@ -56,7 +52,7 @@ void OptionDefinition::PrintHelp() const
     const OptionDefinition::Type option_type = GetValueType();
     if (UsesAcceptedValues() && option_type != OptionDefinition::kBool)
     {
-        str1 += preferred_separator + "[";
+        str1 += preferred_separator + '[';
 
         unsigned i = 0;
         const size_t total = GetAcceptedValuesOrdered().size();
@@ -69,22 +65,18 @@ void OptionDefinition::PrintHelp() const
                 case OptionDefinition::kDouble:
                     str1 += std::to_string(std::get<OptionDefinition::kDouble>(val)); break;
                 case OptionDefinition::kString:
-                    if (use_double_quotes)
-                        str1 += "\"" + std::get<OptionDefinition::kString>(val) + "\"";
-                    else
-                        str1 += std::get<OptionDefinition::kString>(val);
+                    if (use_double_quotes) { str1 += '"' + std::get<OptionDefinition::kString>(val) + '"'; }
+                    else { str1 += std::get<OptionDefinition::kString>(val); }
                     break;
                 default:
                     break;
             }
 
-            if (i + 1 != total)
-                str1 += ", ";
-
-            i++;
+            if (i + 1 != total) { str1 += ", "; }
+            ++i;
         }
 
-        str1 += "]";
+        str1 += ']';
     }
     else if (!custom_accepted_values_text_.empty()) // If it uses custom accepted values text
     {
@@ -107,7 +99,7 @@ void OptionDefinition::PrintHelp() const
         }
     }
 
-    std::string str2 = GetDescription() + " ";
+    std::string str2 = GetDescription() + ' ';
     switch (option_type)
     {
         case OptionDefinition::kBool:
@@ -124,14 +116,14 @@ void OptionDefinition::PrintHelp() const
         {
             str2 += "(Default: ";
             str2 += std::to_string(std::get<OptionDefinition::kInt>(GetDefaultValue()));
-            str2 += ")";
+            str2 += ')';
             break;
         }
         case OptionDefinition::kDouble:
         {
             str2 += "(Default: ";
             str2 += std::to_string(std::get<OptionDefinition::kDouble>(GetDefaultValue()));
-            str2 += ")";
+            str2 += ')';
             break;
         }
         case OptionDefinition::kString:
@@ -140,11 +132,9 @@ void OptionDefinition::PrintHelp() const
             if (!default_value.empty())
             {
                 str2 += "(Default: ";
-                if (use_double_quotes)
-                    str2 += "\"" + default_value + "\"";
-                else
-                    str2 += default_value;
-                str2 += ")";
+                if (use_double_quotes) { str2 += '"' + default_value + '"'; }
+                else { str2 += default_value; }
+                str2 += ')';
             }
             break;
         }
@@ -152,7 +142,7 @@ void OptionDefinition::PrintHelp() const
             break;
     }
 
-    std::cout << std::setw(30) << str1 << str2 << "\n";
+    std::cout << std::setw(30) << str1 << str2 << '\n';
 }
 
 // OptionDefinitionCollection
@@ -203,45 +193,40 @@ OptionDefinitionCollection::OptionDefinitionCollection(const std::initializer_li
     }
 }
 
-size_t OptionDefinitionCollection::Count() const
+auto OptionDefinitionCollection::Count() const -> size_t
 {
     return id_options_map_.size();
 }
 
-const OptionDefinition* OptionDefinitionCollection::FindById(int id) const
+auto OptionDefinitionCollection::FindById(int id) const -> const OptionDefinition*
 {
-    if (id_options_map_.count(id) == 0)
-        return nullptr;
+    if (id_options_map_.count(id) == 0) { return nullptr; }
     return &id_options_map_.at(id);
 }
 
-const OptionDefinition* OptionDefinitionCollection::FindByName(const std::string& name) const
+auto OptionDefinitionCollection::FindByName(const std::string& name) const -> const OptionDefinition*
 {
-    if (name_options_map_.count(name) == 0)
-        return nullptr;
+    if (name_options_map_.count(name) == 0) { return nullptr; }
     return name_options_map_.at(name);
 }
 
-const OptionDefinition* OptionDefinitionCollection::FindByShortName(char short_name) const
+auto OptionDefinitionCollection::FindByShortName(char short_name) const -> const OptionDefinition*
 {
-    if (short_name_options_map_.count(short_name) == 0)
-        return nullptr;
+    if (short_name_options_map_.count(short_name) == 0) { return nullptr; }
     return short_name_options_map_.at(short_name);
 }
 
-int OptionDefinitionCollection::FindIdByName(const std::string& name) const
+auto OptionDefinitionCollection::FindIdByName(const std::string& name) const -> int
 {
     const OptionDefinition* ptr = FindByName(name);
-    if (!ptr)
-        return kNotFound;
+    if (!ptr) { return kNotFound; }
     return ptr->GetId();
 }
 
-int OptionDefinitionCollection::FindIdByShortName(char short_name) const
+auto OptionDefinitionCollection::FindIdByShortName(char short_name) const -> int
 {
     const OptionDefinition* ptr = FindByShortName(short_name);
-    if (!ptr)
-        return kNotFound;
+    if (!ptr) { return kNotFound; }
     return ptr->GetId();
 }
 
@@ -256,21 +241,17 @@ void OptionDefinitionCollection::PrintHelp() const
 
 // Option
 
-Option::Option(OptionDefinitionCollection const* definitions, int id)
+Option::Option(const OptionDefinitionCollection* definitions, int id)
+    : definitions_{definitions}, id_{id}
 {
-    assert(definitions && "Option definition cannot be null.");
-    definitions_ = definitions;
-    id_ = id;
-    explicitly_provided_ = false;
+    assert(definitions_ && "Option definition cannot be null.");
     SetValueToDefault();
 }
 
-Option::Option(OptionDefinitionCollection const* definitions, int id, ValueType value)
+Option::Option(const OptionDefinitionCollection* definitions, int id, ValueType value)
+    : definitions_{definitions}, id_{id}
 {
-    assert(definitions && "Option definition cannot be null.");
-    definitions_ = definitions;
-    id_ = id;
-    explicitly_provided_ = false;
+    assert(definitions_ && "Option definition cannot be null.");
     SetValue(value);
 }
 
@@ -300,7 +281,7 @@ void Option::SetValue(ValueType&& value)
 
 void Option::SetValueToDefault()
 {
-    OptionDefinition const* definition = GetDefinition();
+    const OptionDefinition* definition = GetDefinition();
     value_ = definition->GetDefaultValue();
     if (GetDefinition()->UsesAcceptedValues())
     {
@@ -310,7 +291,7 @@ void Option::SetValueToDefault()
     }
 }
 
-OptionDefinition const* Option::GetDefinition() const
+auto Option::GetDefinition() const -> const OptionDefinition*
 {
     assert(definitions_ && "Option definitions were null.");
     const OptionDefinition* definition = definitions_->FindById(id_);
@@ -320,14 +301,12 @@ OptionDefinition const* Option::GetDefinition() const
 
 // OptionCollection
 
-OptionCollection::OptionCollection() : definitions_(nullptr), options_map_({}) {}
-
-OptionCollection::OptionCollection(OptionDefinitionCollection const* definitions)
+OptionCollection::OptionCollection(const OptionDefinitionCollection* definitions)
 {
     SetDefinitions(definitions);
 }
 
-void OptionCollection::SetDefinitions(OptionDefinitionCollection const* definitions)
+void OptionCollection::SetDefinitions(const OptionDefinitionCollection* definitions)
 {
     definitions_ = definitions;
 
@@ -348,28 +327,28 @@ void OptionCollection::SetDefinitions(OptionDefinitionCollection const* definiti
     }
 }
 
-const Option& OptionCollection::GetOption(std::string name) const
+auto OptionCollection::GetOption(std::string name) const -> const Option&
 {
     const int id = definitions_->FindIdByName(name);
     assert(id != OptionDefinitionCollection::kNotFound && "Option with the given name wasn't found in the collection.");
     return GetOption(id);
 }
 
-Option& OptionCollection::GetOption(std::string name)
+auto OptionCollection::GetOption(std::string name) -> Option&
 {
     const int id = definitions_->FindIdByName(name);
     assert(id != OptionDefinitionCollection::kNotFound && "Option with the given name wasn't found in the collection.");
     return GetOption(id);
 }
 
-const Option& OptionCollection::GetOption(char short_name) const
+auto OptionCollection::GetOption(char short_name) const -> const Option&
 {
     const int id = definitions_->FindIdByShortName(short_name);
     assert(id != OptionDefinitionCollection::kNotFound && "Option with the given short name wasn't found in the collection.");
     return GetOption(id);
 }
 
-Option& OptionCollection::GetOption(char short_name)
+auto OptionCollection::GetOption(char short_name) -> Option&
 {
     const int id = definitions_->FindIdByShortName(short_name);
     assert(id != OptionDefinitionCollection::kNotFound && "Option with the given short name wasn't found in the collection.");
@@ -385,7 +364,7 @@ void OptionCollection::SetValuesToDefault()
     }
 }
 
-bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unknown_args)
+auto OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unknown_args) -> bool
 {
     /* 
      * Examples of command-line arguments that can be parsed:
@@ -443,14 +422,14 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unk
     bool arg_might_be_value = false;
 
     // Main loop
-    for (int i = 0; i < static_cast<int>(args.size()); i++)
+    for (int i = 0; i < static_cast<int>(args.size()); ++i)
     {
         auto& arg = args[i];
         Utils::StringTrimBothEnds(arg);
         if (arg.empty())
         {
             args.erase(args.begin() + i);
-            i--; // Adjust for item just erased
+            --i; // Adjust for item just erased
             continue;
         }
 
@@ -463,8 +442,7 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unk
             handling_option = nullptr;
 
             // Set the value
-            if (SetValue(arg.c_str(), def))
-                return true; // Error occurred
+            if (SetValue(arg.c_str(), def)) { return true; } // Error occurred
 
             // Erase both the flag and value since they have been consumed
             args.erase(args.begin() + i - 1, args.begin() + i + 1);
@@ -548,7 +526,7 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unk
                 }
                 else // Using the form: "-abcdef" - this form cannot have a value after it
                 {
-                    for (unsigned j = 1; j < arg.size(); j++)
+                    for (unsigned j = 1; j < arg.size(); ++j)
                     {
                         const char c = arg[j];
                         if (!isalpha(c))
@@ -566,10 +544,9 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unk
                         }
 
                         const OptionDefinition* temp_def = definitions_->FindByShortName(c);
-                        
+
                         // Skip unrecognized options
-                        if (!temp_def)
-                            continue;
+                        if (!temp_def) { continue; }
 
                         if (temp_def->GetValueType() != OptionDefinition::kBool)
                         {
@@ -642,12 +619,11 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unk
             value_str = arg.substr(equals_pos + 1);
 
             // Set the value
-            if (SetValue(value_str.c_str(), def))
-                return true; // Error occurred
+            if (SetValue(value_str.c_str(), def)) { return true; } // Error occurred
 
             // Erase argument since it has been consumed
             args.erase(args.begin() + i);
-            i--; // Adjust for item just erased
+            --i; // Adjust for item just erased
         }
         else // No '=' present
         {
@@ -666,7 +642,7 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unk
 
                 // Erase argument since it has been consumed
                 args.erase(args.begin() + i);
-                i--; // Adjust for item just erased
+                --i; // Adjust for item just erased
             }
         }
     }
@@ -681,11 +657,10 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unk
     if (!ignore_unknown_args && !args.empty())
     {
         std::string error_str = "ERROR: Unknown option(s): ";
-        for (unsigned i = 0; i < args.size(); i++)
+        for (unsigned i = 0; i < args.size(); ++i)
         {
             error_str += args[i];
-            if (i != args.size() - 1)
-                error_str += ", ";
+            if (i != args.size() - 1) { error_str += ", "; }
         }
         std::cerr << error_str << "\n";
         return true;
@@ -696,9 +671,9 @@ bool OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unk
 
 // ModuleOptionUtils
 
-std::string ModuleOptionUtils::ConvertToString(const ValueType& value)
+auto ModuleOptionUtils::ConvertToString(const ValueType& value) -> std::string
 {
-    const OptionDefinition::Type type = static_cast<OptionDefinition::Type>(value.index());
+    const auto type = static_cast<OptionDefinition::Type>(value.index());
     switch (type)
     {
         case OptionDefinition::kBool:
@@ -714,7 +689,7 @@ std::string ModuleOptionUtils::ConvertToString(const ValueType& value)
     }
 }
 
-bool ModuleOptionUtils::ConvertToValue(const std::string& value_str, OptionDefinition::Type type, ValueType& return_val)
+auto ModuleOptionUtils::ConvertToValue(const std::string& value_str, OptionDefinition::Type type, ValueType& return_val) -> bool
 {
     switch (type)
     {
@@ -728,14 +703,8 @@ bool ModuleOptionUtils::ConvertToValue(const std::string& value_str, OptionDefin
                 ++i;
             }
 
-            if (value_str_lower == "0")
-                return_val = false;
-            else if (value_str_lower == "false")
-                return_val = false;
-            else if (value_str_lower == "1")
-                return_val = true;
-            else if (value_str_lower == "true")
-                return_val = true;
+            if (value_str_lower == "0" || value_str_lower == "false") { return_val = false; }
+            else if (value_str_lower == "1" || value_str_lower == "true") { return_val = true; }
             else
             {
                 // Error: Invalid value for boolean-typed option
@@ -760,7 +729,7 @@ bool ModuleOptionUtils::ConvertToValue(const std::string& value_str, OptionDefin
     return false;
 }
 
-bool ModuleOptionUtils::ConvertToValue(const char* value_str, OptionDefinition::Type type, ValueType& return_val)
+auto ModuleOptionUtils::ConvertToValue(const char* value_str, OptionDefinition::Type type, ValueType& return_val) -> bool
 {
     std::string value_str_const(value_str);
     return ConvertToValue(value_str_const, type, return_val);

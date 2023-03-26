@@ -73,40 +73,40 @@ namespace d2m::dmf::EffectCode
 {
     enum
     {
-        kNoEffect=-1,
-        kArp                    =0x0,
-        kPortUp                 =0x1,
-        kPortDown               =0x2,
-        kPort2Note              =0x3,
-        kVibrato                =0x4,
-        kPort2NoteVolSlide      =0x5,
-        kVibratoVolSlide        =0x6,
-        kTremolo                =0x7,
-        kPanning                =0x8,
-        kSetSpeedVal1           =0x9,
-        kVolSlide               =0xA,
-        kPosJump                =0xB,
-        kRetrig                 =0xC,
-        kPatBreak               =0xD,
-        kArpTickSpeed           =0xE0,
-        kNoteSlideUp            =0xE1,
-        kNoteSlideDown          =0xE2,
-        kSetVibratoMode         =0xE3,
-        kSetFineVibratoDepth    =0xE4,
-        kSetFinetune            =0xE5,
-        kSetSamplesBank         =0xEB,
-        kNoteCut                =0xEC,
-        kNoteDelay              =0xED,
-        kSyncSignal             =0xEE,
-        kSetGlobalFinetune      =0xEF,
-        kSetSpeedVal2           =0xF,
+        kNoEffect = -1,
+        kArp                    = 0x0,
+        kPortUp                 = 0x1,
+        kPortDown               = 0x2,
+        kPort2Note              = 0x3,
+        kVibrato                = 0x4,
+        kPort2NoteVolSlide      = 0x5,
+        kVibratoVolSlide        = 0x6,
+        kTremolo                = 0x7,
+        kPanning                = 0x8,
+        kSetSpeedVal1           = 0x9,
+        kVolSlide               = 0xA,
+        kPosJump                = 0xB,
+        kRetrig                 = 0xC,
+        kPatBreak               = 0xD,
+        kArpTickSpeed           = 0xE0,
+        kNoteSlideUp            = 0xE1,
+        kNoteSlideDown          = 0xE2,
+        kSetVibratoMode         = 0xE3,
+        kSetFineVibratoDepth    = 0xE4,
+        kSetFinetune            = 0xE5,
+        kSetSamplesBank         = 0xEB,
+        kNoteCut                = 0xEC,
+        kNoteDelay              = 0xED,
+        kSyncSignal             = 0xEE,
+        kSetGlobalFinetune      = 0xEF,
+        kSetSpeedVal2           = 0xF,
 
         // Game Boy exclusive
-        kGameBoySetWave                 =0x10,
-        kGameBoySetNoisePolyCounterMode =0x11,
-        kGameBoySetDutyCycle            =0x12,
-        kGameBoySetSweepTimeShift       =0x13,
-        kGameBoySetSweepDir             =0x14
+        kGameBoySetWave                 = 0x10,
+        kGameBoySetNoisePolyCounterMode = 0x11,
+        kGameBoySetDutyCycle            = 0x12,
+        kGameBoySetSweepTimeShift       = 0x13,
+        kGameBoySetSweepDir             = 0x14
 
         // TODO: Add enums for effects exclusive to the rest of Deflemask's systems.
     };
@@ -133,7 +133,7 @@ static const std::map<DMF::SystemType, dmf::System> kDMFSystems =
     { DMF::SystemType::kNES_FDS,      dmf::System{ DMF::SystemType::kNES_FDS, 0x86, "NES + FDS", 6 } }
 };
 
-const dmf::System& DMF::SystemInfo(DMF::SystemType system_type) { return kDMFSystems.at(system_type); }
+auto DMF::SystemInfo(DMF::SystemType system_type) -> const dmf::System& { return kDMFSystems.at(system_type); }
 
 static constexpr auto kPeriodTable = []() constexpr
 {
@@ -145,7 +145,7 @@ static constexpr auto kPeriodTable = []() constexpr
     return ret;
 }();
 
-static constexpr double GetPeriod(Note note)
+static constexpr auto GetPeriod(Note note) -> double
 {
     assert(static_cast<uint16_t>(note.pitch) < 12 && note.octave < 9);
     return kPeriodTable[static_cast<uint16_t>(note.pitch) + 12*note.octave];
@@ -240,10 +240,12 @@ void DMF::GetBPM(unsigned& numerator, unsigned& denominator) const
     denominator = module_info_.time_base * (module_info_.tick_time1 + module_info_.tick_time2);
 
     if (denominator == 0)
+    {
         throw std::runtime_error("Tried to divide by zero when calculating BPM.\n");
+    }
 }
 
-double DMF::GetBPM() const
+auto DMF::GetBPM() const -> double
 {
     // Returns the initial BPM of the module
     unsigned numerator, denominator;
@@ -258,20 +260,18 @@ void DMF::Importer::Import()
     dmf_.CleanUp();
     const bool verbose = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::kVerbose).GetValue<bool>();
 
-    if (verbose)
-        std::cout << "Starting to import the DMF file...\n";
+    if (verbose) { std::cout << "Starting to import the DMF file...\n"; }
 
     if (Utils::GetTypeFromFilename(filename_) != ModuleType::kDMF)
     {
-        throw ModuleException(ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "Input file has the wrong file extension.\nPlease use a DMF file.");
+        throw ModuleException{ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "Input file has the wrong file extension.\nPlease use a DMF file."};
     }
 
-    if (verbose)
-        std::cout << "DMF Filename: " << filename_ << "\n";
+    if (verbose) { std::cout << "DMF Filename: " << filename_ << "\n"; }
 
     if (fin_.stream().fail())
     {
-        throw ModuleException(ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "Failed to open DMF file.");
+        throw ModuleException{ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "Failed to open DMF file."};
     }
 
     ///////////////// FORMAT FLAGS
@@ -279,7 +279,7 @@ void DMF::Importer::Import()
     // Check header
     if (fin_.ReadStr(16) != ".DelekDefleMask.")
     {
-        throw ModuleException(ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "DMF format header is bad.");
+        throw ModuleException{ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "DMF format header is bad."};
     }
 
     auto& global_data = dmf_.GetGlobalData();
@@ -304,11 +304,15 @@ void DMF::Importer::Import()
 
         error_msg += "The given DMF file is version " + std::to_string(global_data.dmf_format_version) + " (" + hex + ").\n";
         if (too_high)
+        {
             error_msg += "       Dmf2mod needs to be updated to support this newer version.";
+        }
         else
+        {
             error_msg += "       You can convert older DMF files to a supported version by opening them in a newer version of DefleMask and then saving them.";
+        }
 
-        throw ModuleException(ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, error_msg);
+        throw ModuleException{ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, error_msg};
     }
     else if (verbose)
     {
@@ -326,14 +330,20 @@ void DMF::Importer::Import()
     for (const auto& map_pair : kDMFSystems)
     {
         if (map_pair.second.id == system_byte)
+        {
             global_data.system = map_pair.second;
+        }
     }
 
     if (global_data.system.type == SystemType::kError)
-        throw ModuleException(ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "Invalid system type");
+    {
+        throw ModuleException{ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "Invalid system type"};
+    }
 
     if (verbose)
+    {
         std::cout << "System: " << global_data.system.name << " (channels: " << std::to_string(global_data.system.channels) << ")\n";
+    }
 
     ///////////////// VISUAL INFORMATION
 
@@ -349,36 +359,29 @@ void DMF::Importer::Import()
     OrderIndex num_orders;
     RowIndex num_rows;
     LoadModuleInfo(num_orders, num_rows);
-    if (verbose)
-        std::cout << "Loaded module information.\n";
+    if (verbose) { std::cout << "Loaded module information.\n"; }
 
     ///////////////// PATTERN MATRIX VALUES
     LoadPatternMatrixValues(num_orders, num_rows);
-    if (verbose)
-        std::cout << "Loaded pattern matrix values.\n";
+    if (verbose) { std::cout << "Loaded pattern matrix values.\n"; }
 
     ///////////////// INSTRUMENTS DATA
     LoadInstrumentsData();
-    if (verbose)
-        std::cout << "Loaded instruments.\n";
+    if (verbose) { std::cout << "Loaded instruments.\n"; }
 
     ///////////////// WAVETABLES DATA
     LoadWavetablesData();
-    if (verbose)
-        std::cout << "Loaded " << std::to_string(dmf_.total_wavetables_) << " wavetable(s).\n";
+    if (verbose) { std::cout << "Loaded " << std::to_string(dmf_.total_wavetables_) << " wavetable(s).\n"; }
 
     ///////////////// PATTERNS DATA
     LoadPatternsData();
-    if (verbose)
-        std::cout << "Loaded patterns.\n";
+    if (verbose) { std::cout << "Loaded patterns.\n"; }
 
     ///////////////// PCM SAMPLES DATA
     LoadPCMSamplesData();
-    if (verbose)
-        std::cout << "Loaded PCM samples.\n";
+    if (verbose) { std::cout << "Loaded PCM samples.\n"; }
 
-    if (verbose)
-        std::cout << "Done importing DMF file.\n\n";
+    if (verbose) { std::cout << "Done importing DMF file.\n\n"; }
 }
 
 void DMF::Importer::LoadVisualInfo()
@@ -510,7 +513,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
         case 1:
             inst.mode = dmf::Instrument::kFMMode; break;
         default:
-            throw ModuleException(Status::Category::kImport, DMF::ImportError::kUnspecifiedError, "Invalid instrument mode");
+            throw ModuleException{Status::Category::kImport, DMF::ImportError::kUnspecifiedError, "Invalid instrument mode"};
     }
 
     // Now we can import the instrument depending on the mode (Standard/FM)
@@ -546,7 +549,9 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
             }
 
             if (inst.std.vol_env_size > 0)
+            {
                 inst.std.vol_env_loop_pos = fin_.ReadInt();
+            }
         }
 
         // Arpeggio macro
@@ -560,8 +565,10 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
         }
 
         if (inst.std.arp_env_size > 0 || dmf_format_version <= 17) // DMF version 17 and older always gets envelope loop position byte
+        {
             inst.std.arp_env_loop_pos = fin_.ReadInt();
-        
+        }
+
         inst.std.arp_macro_mode = fin_.ReadInt();
 
         // Duty/Noise macro
@@ -575,7 +582,9 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
         }
 
         if (inst.std.duty_noise_env_size > 0 || dmf_format_version <= 17) // DMF version 17 and older always gets envelope loop position byte
+        {
             inst.std.duty_noise_env_loop_pos = fin_.ReadInt();
+        }
 
         // Wavetable macro
         inst.std.wavetable_env_size = fin_.ReadInt();
@@ -588,7 +597,9 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
         }
 
         if (inst.std.wavetable_env_size > 0 || dmf_format_version <= 17) // DMF version 17 and older always gets envelope loop position byte
+        {
             inst.std.wavetable_env_loop_pos = fin_.ReadInt();
+        }
 
         // Per system data
         if (system_type == DMF::SystemType::kC64_SID_8580 || system_type == DMF::SystemType::kC64_SID_6581) // Using Commodore 64
@@ -680,8 +691,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
                 if (system_type == DMF::SystemType::kSMS_OPLL || system_type == DMF::SystemType::kNES_VRC7)
                 {
                     const uint8_t opll_preset = fin_.ReadInt();
-                    if (i == 0)
-                        inst.fm.opll_preset = opll_preset;
+                    if (i == 0) { inst.fm.opll_preset = opll_preset; }
 
                     inst.fm.ops[i].ksr = fin_.ReadInt();
                     inst.fm.ops[i].vib = fin_.ReadInt();
@@ -811,9 +821,13 @@ auto DMF::Importer::LoadPatternRow(uint8_t effect_columns_count) -> Row<DMF>
     {
         case 0:
             if (temp_octave == 0)
+            {
                 row.note = NoteTypes::Empty{};
+            }
             else
+            {
                 row.note = NoteTypes::Note{static_cast<NotePitch>(temp_pitch), temp_octave};
+            }
             break;
         case 100:
             row.note = NoteTypes::Off{};
@@ -822,9 +836,13 @@ auto DMF::Importer::LoadPatternRow(uint8_t effect_columns_count) -> Row<DMF>
             assert(temp_pitch <= 12);
             // Apparently, the note pitch for C- can be either 0 or 12. I'm setting it to 0 always.
             if (temp_pitch == 12)
+            {
                 row.note = NoteTypes::Note{NotePitch::kC, ++temp_octave};
+            }
             else
+            {
                 row.note = NoteTypes::Note{static_cast<NotePitch>(temp_pitch), temp_octave};
+            }
             break;
     }
 
@@ -937,15 +955,15 @@ auto DMF::Importer::LoadPCMSample() -> dmf::PCMSample
         sample.cut_end = fin_.ReadInt<false, 4>();
         if (sample.cut_start < 0 || sample.cut_start > sample.size)
         {
-            throw ModuleException(ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "Sample cut start is out of range");
+            throw ModuleException{ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "Sample cut start is out of range"};
         }
         if (sample.cut_end < 0 || sample.cut_end > sample.size)
         {
-            throw ModuleException(ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "Sample cut end is out of range");
+            throw ModuleException{ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "Sample cut end is out of range"};
         }
         if (sample.cut_end < sample.cut_start)
         {
-            throw ModuleException(ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "Sample cut end is before sample cut start");
+            throw ModuleException{ModuleException::Category::kImport, DMF::ImportError::kUnspecifiedError, "Sample cut end is before sample cut start"};
         }
     }
     else
@@ -980,14 +998,13 @@ auto DMF::Importer::LoadPCMSample() -> dmf::PCMSample
  * 1:  Error
  * 2:  An extra "loopback order" is needed
  */
-size_t DMF::GenerateDataImpl(size_t data_flags) const
+auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
 {
     auto& gen_data = *GetGeneratedDataMut();
     const auto& data = GetData();
 
     // Currently can only generate data for the Game Boy system
-    if (GetSystem().type != dmf::System::Type::kGameBoy)
-        return 1;
+    if (GetSystem().type != dmf::System::Type::kGameBoy) { return 1; }
 
     // Initialize state
     auto& state_data = gen_data.GetState().emplace();
@@ -1031,7 +1048,10 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
      * While it is based on the formulas apparently used by Deflemask, it is still not 100% accurate.
      */
 
-    const std::array ticks = {module_info_.time_base * module_info_.tick_time1, module_info_.time_base * module_info_.tick_time2}; // even, odd
+    const auto ticks = std::array{
+        module_info_.time_base * module_info_.tick_time1,
+        module_info_.time_base * module_info_.tick_time2
+    }; // even, odd
 
     constexpr double lowest_period = GetPeriod({NotePitch::kC, 2}); // C-2
     constexpr double highest_period = GetPeriod({NotePitch::kC, 8}); // C-8
@@ -1054,16 +1074,14 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                 {
                     // Target is a higher pitch
                     const double amount = port.value * ticks[even_odd_row] * 4 / 3.0;
-                    if (std::abs(target_period - period) < amount) // Close enough to target - snap to it
-                        return target_period;
+                    if (detail::abs(target_period - period) < amount) { return target_period; } // Close enough to target - snap to it
                     return period - amount;
                 }
                 else
                 {
                     // Target is a lower pitch
                     const double amount = port.value * ticks[even_odd_row];
-                    if (std::abs(target_period - period) < amount) // Close enough to target - snap to it
-                        return target_period;
+                    if (detail::abs(target_period - period) < amount) { return target_period; } // Close enough to target - snap to it
                     return period + amount;
                 }
             }
@@ -1134,14 +1152,12 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
         global_state.Reset();
         auto& channel_state = channel_states[channel];
 
-        if (channel == dmf::GameBoyChannel::kNoise)
-            continue;
+        if (channel == dmf::GameBoyChannel::kNoise) { continue; }
 
         for (OrderIndex order = 0; order < data.GetNumOrders(); ++order)
         {
             // Handle skipped orders for PosJump
-            if (skipped_orders[order])
-                continue;
+            if (skipped_orders[order]) { continue; }
 
             OrderIndex gen_data_order = order_map[order];
             RowIndex row_offset = starting_row[order];
@@ -1157,7 +1173,9 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                 {
                     // Portamento to note stops when next note is reached or on Note OFF
                     if (channel_state.Get<ChannelCommon::kPort>().type == PortamentoStateData::kToNote)
+                    {
                         channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0});
+                    }
                 }
 
                 // CHANNEL STATE - PORT2NOTE
@@ -1213,8 +1231,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                     for (auto iter = std::crbegin(row_data.effect); iter != std::crend(row_data.effect); ++iter)
                     {
                         const auto& effect = *iter;
-                        if (effect.code == Effects::kNoEffect)
-                            continue;
+                        if (effect.code == Effects::kNoEffect) { continue; }
 
                         const EffectValue effect_value = effect.value;
                         const uint8_t effect_value_normal = effect_value != kEffectValueless ? effect_value : 0;
@@ -1291,15 +1308,24 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
 
                         case dmf::Effects::kGameBoySetWave:
                             if (channel != dmf::GameBoyChannel::kWave || effect_value < 0)
-                                break; // TODO: Is this behavior correct?
+                            {
+                                // TODO: Is this behavior correct?
+                                break;
+                            }
                             if (effect_value >= GetTotalWavetables())
-                                break; // TODO: An invalid SetWave parameter exhibits strange behavior in Deflemask
+                            {
+                                // TODO: An invalid SetWave parameter exhibits strange behavior in Deflemask
+                                break;
+                            }
                             sound_index = SoundIndex<DMF>::Wave{effect_value_normal};
                             // TODO: If a sound index is set but a note with it is never played, it should later be removed from the channel state
                             break;
                         case dmf::Effects::kGameBoySetDutyCycle:
                             if (channel > dmf::GameBoyChannel::kSquare2 || effect_value < 0 || effect_value >= 4)
-                                break; // Valueless of invalid 12xx effects do not do anything. TODO: What is the effect in WAVE and NOISE channels?
+                            {
+                                // Valueless of invalid 12xx effects do not do anything. TODO: What is the effect in WAVE and NOISE channels?
+                                break;
+                            }
                             sound_index = SoundIndex<DMF>::Square{effect_value_normal};
                             // TODO: If a sound index is set but a note with it is never played, it should later be removed from the channel state
                             break;
@@ -1342,10 +1368,8 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                         if (need_to_set_port)
                         {
                             // If setting a port to a value of zero, use kNone instead
-                            if (temp_port.value != 0)
-                                channel_state.Set<ChannelCommon::kPort>(temp_port);
-                            else
-                                channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0});
+                            if (temp_port.value != 0) { channel_state.Set<ChannelCommon::kPort>(temp_port); }
+                            else { channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0}); }
                         }
                     }
 
@@ -1356,26 +1380,16 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                     }
 
                     // Set other effects' states (WIP)
-                    if (arp)
-                        channel_state.Set<ChannelCommon::kArp>(arp.value());
-                    if (vibrato)
-                        channel_state.Set<ChannelCommon::kVibrato>(vibrato.value());
-                    if (port2note_volslide)
-                        channel_state.Set<ChannelCommon::kPort2NoteVolSlide>(port2note_volslide.value());
-                    if (vibrato_volslide)
-                        channel_state.Set<ChannelCommon::kVibratoVolSlide>(vibrato_volslide.value());
-                    if (tremolo)
-                        channel_state.Set<ChannelCommon::kTremolo>(tremolo.value());
-                    if (panning)
-                        channel_state.Set<ChannelCommon::kPanning>(panning.value());
-                    if (volslide)
-                        channel_state.Set<ChannelCommon::kVolSlide>(volslide.value());
-                    if (retrigger)
-                        channel_state.SetOneShot<ChannelOneShotCommon::kRetrigger>(retrigger.value());
-                    if (note_cut)
-                        channel_state.SetOneShot<ChannelOneShotCommon::kNoteCut>(note_cut.value());
-                    if (note_delay)
-                        channel_state.SetOneShot<ChannelOneShotCommon::kNoteDelay>(note_delay.value());
+                    if (arp) { channel_state.Set<ChannelCommon::kArp>(arp.value()); }
+                    if (vibrato) { channel_state.Set<ChannelCommon::kVibrato>(vibrato.value()); }
+                    if (port2note_volslide) { channel_state.Set<ChannelCommon::kPort2NoteVolSlide>(port2note_volslide.value()); }
+                    if (vibrato_volslide) { channel_state.Set<ChannelCommon::kVibratoVolSlide>(vibrato_volslide.value()); }
+                    if (tremolo) { channel_state.Set<ChannelCommon::kTremolo>(tremolo.value()); }
+                    if (panning) { channel_state.Set<ChannelCommon::kPanning>(panning.value()); }
+                    if (volslide) { channel_state.Set<ChannelCommon::kVolSlide>(volslide.value()); }
+                    if (retrigger) { channel_state.SetOneShot<ChannelOneShotCommon::kRetrigger>(retrigger.value()); }
+                    if (note_cut) { channel_state.SetOneShot<ChannelOneShotCommon::kNoteCut>(note_cut.value()); }
+                    if (note_delay) { channel_state.SetOneShot<ChannelOneShotCommon::kNoteDelay>(note_delay.value()); }
 
                     if (sound_index.index() != SoundIndex<DMF>::kNone)
                     {
@@ -1401,10 +1415,8 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                     const Note& note = GetNote(note_slot);
 
                     // Update the period
-                    if (!port2note_used)
-                        periods[channel] = GetPeriod(note);
-                    else
-                        target_periods[channel] = GetPeriod(note);
+                    if (!port2note_used) { periods[channel] = GetPeriod(note); }
+                    else { target_periods[channel] = GetPeriod(note); }
 
                     const auto& sound_index = current_sound_index[channel].second;
 
@@ -1493,8 +1505,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                             switch (effect.code)
                             {
                                 case Effects::kPosJump:
-                                    if (ignore_pos_jump)
-                                        break;
+                                    if (ignore_pos_jump) { break; }
                                     if (!pos_jump.has_value() && (effect.value == kEffectValueless || effect.value >= data.GetNumOrders()))
                                     {
                                         ignore_pos_jump = true;
@@ -1504,10 +1515,8 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                                     ignore_pos_jump = true;
                                     break;
                                 case Effects::kPatBreak:
-                                    if (ignore_pat_break)
-                                        break;
-                                    if (order + 1 == data.GetNumOrders())
-                                        break; // PatBreak on last order has no effect
+                                    if (ignore_pat_break) { break; }
+                                    if (order + 1 == data.GetNumOrders()) { break; } // PatBreak on last order has no effect
                                     if (!pat_break.has_value() && (effect.value == kEffectValueless || effect.value >= data.GetNumRows()))
                                     {
                                         ignore_pat_break = true;
@@ -1540,20 +1549,14 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                     if (row_offset > 0 && !pat_break.has_value() && !pos_jump.has_value() && row == data.GetNumRows() - row_offset)
                     {
                         // If we're on the last order, a PosJump should be used instead
-                        if (order + 1 != data.GetNumOrders())
-                            pat_break = 0;
-                        else
-                            pos_jump = 0;
+                        if (order + 1 != data.GetNumOrders()) { pat_break = 0; }
+                        else { pos_jump = 0; }
                     }
 
                     // Set the global state if needed
-
-                    if (speed_a)
-                        global_state.Set<GlobalCommon::kSpeedA>(speed_a.value());
-                    if (speed_b)
-                        global_state.Set<GlobalCommon::kSpeedB>(speed_b.value());
-                    if (tempo)
-                        global_state.Set<GlobalCommon::kTempo>(tempo.value());
+                    if (speed_a) { global_state.Set<GlobalCommon::kSpeedA>(speed_a.value()); }
+                    if (speed_b) { global_state.Set<GlobalCommon::kSpeedB>(speed_b.value()); }
+                    if (tempo) { global_state.Set<GlobalCommon::kTempo>(tempo.value()); }
 
                     if (pat_break)
                     {
@@ -1603,7 +1606,10 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
                             }
 
                             // TODO: Could two PosJumps go to the same destination, creating situation with two loopback oneshots with the same order/row pos? Currently only allowing one loopback.
-                            loopbacks_temp.push_back({ GetOrderRowPosition(gen_data_order, gen_data_row), GetOrderRowPosition(order_map.at(pos_jump.value()), 0) }); // From/To
+                            loopbacks_temp.emplace_back(
+                                GetOrderRowPosition(gen_data_order, gen_data_row),
+                                GetOrderRowPosition(order_map.at(pos_jump.value()), 0)
+                            ); // From/To
                             global_state.SetOneShot<GlobalOneShotCommon::kPosJump>(order_map.at(pos_jump.value()));
 
                             // Any further orders or rows in this song are ignored because they unreachable.
@@ -1649,7 +1655,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
         global_state.Reset();
         global_state.SetWritePos(last_order_row);
         global_state.SetOneShot<GlobalOneShotCommon::kPosJump>(0);
-        loopbacks_temp.push_back({last_order_row, 0});
+        loopbacks_temp.emplace_back(last_order_row, 0);
     }
 
     // Write loopbacks to state
@@ -1676,8 +1682,7 @@ size_t DMF::GenerateDataImpl(size_t data_flags) const
             last = to;
 
             // Only proceed if using MOD-compatible loops
-            if (!mod_compat_loops)
-                continue;
+            if (!mod_compat_loops) { continue; }
 
             // When looping back, notes might carry over and need to be stopped with a Note OFF.
             // This for-loop checks whether that is true for any channel, and inserts a Note OFF if needed and possible.

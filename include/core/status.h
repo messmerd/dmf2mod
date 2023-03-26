@@ -36,21 +36,21 @@ public:
     // Module-specific error codes can be implemented using positive values
     enum class ImportError
     {
-        kSuccess=0
+        kSuccess = 0
     };
 
     enum class ExportError
     {
-        kSuccess=0,
-        kFileOpen=-1
+        kSuccess  = 0,
+        kFileOpen = -1
     };
     
     enum class ConvertError
     {
-        kSuccess=0,
-        kUnsuccessful=-1, // Applied to the input module
-        kInvalidArgument=-2,
-        kUnsupportedInputType=-3
+        kSuccess = 0,
+        kUnsuccessful         = -1, // Applied to the input module
+        kInvalidArgument      = -2,
+        kUnsupportedInputType = -3
     };
 
     // The type of error
@@ -62,30 +62,30 @@ public:
         kConvert
     };
 
-    const char* what() const throw() override
+    [[nodiscard]] auto what() const noexcept -> const char* override
     {
         return error_message_.c_str();
     }
 
-    std::string str() const
+    [[nodiscard]] auto str() const -> std::string
     {
         return error_message_;
     }
 
-    ~ModuleException() = default;
-    ModuleException(ModuleException&& other) noexcept = default;
-    ModuleException& operator=(ModuleException&& other) = default;
+    ~ModuleException() override = default;
+    ModuleException(ModuleException&&) noexcept = default;
+    auto operator=(ModuleException&&) -> ModuleException& = default;
 
 public: // Should this be protected once DMF gets its own DMFException class?
 
     ModuleException() = default;
-    ModuleException(const ModuleException& other) = default;
-    ModuleException& operator=(ModuleException& other) = default;
+    ModuleException(const ModuleException&) = default;
+    auto operator=(ModuleException&) -> ModuleException& = default;
 
     // Construct using an enum for an error code
     template<class T, std::enable_if_t<std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>, bool> = true>
     ModuleException(Category category, T error_code, const std::string& error_message = "")
-        : ModuleException(category, static_cast<int>(error_code), error_message) {}
+        : ModuleException{category, static_cast<int>(error_code), error_message} {}
 
     // Construct using an integer for an error code
     ModuleException(Category category, int error_code, const std::string& error_message = "")
@@ -120,7 +120,7 @@ protected:
     std::string error_message_;
 
 private:
-    std::string CreateCommonErrorMessage(Category category, int error_code, const std::string& arg);
+    auto CreateCommonErrorMessage(Category category, int error_code, const std::string& arg) -> std::string;
 };
 
 
@@ -131,20 +131,16 @@ public:
     // The source of the error/warning
     using Category = ModuleException::Category;
 
-    Status()
-    {
-        Clear();
-        category_ = Category::kNone;
-    }
+    Status() { Clear(); }
 
-    bool ErrorOccurred() const { return error_.get(); }
-    bool WarningsIssued() const { return !warning_messages_.empty(); }
+    [[nodiscard]] auto ErrorOccurred() const -> bool { return error_.get(); }
+    [[nodiscard]] auto WarningsIssued() const -> bool { return !warning_messages_.empty(); }
     
     void PrintError(bool use_std_err = true) const;
     void PrintWarnings(bool use_std_err = false) const;
 
     // Prints error and warnings that occurred during the last action. Returns true if an error occurred.
-    bool HandleResults() const;
+    [[nodiscard]] auto HandleResults() const -> bool;
 
     void Clear()
     {
@@ -154,10 +150,8 @@ public:
 
     void AddError(ModuleException&& error)
     {
-        if (!error_)
-            error_ = std::make_unique<ModuleException>(std::move(error));
-        else
-            *error_ = std::move(error);
+        if (!error_) { error_ = std::make_unique<ModuleException>(std::move(error)); }
+        else { *error_ = std::move(error); }
     }
 
     void AddWarning(const std::string& warning_message)
@@ -175,7 +169,7 @@ private:
 
     std::unique_ptr<ModuleException> error_;
     std::vector<std::string> warning_messages_;
-    Category category_;
+    Category category_ = Category::kNone;
 };
 
 
@@ -183,7 +177,7 @@ private:
 class NotImplementedException : public std::logic_error
 {
 public:
-    NotImplementedException() : std::logic_error("Function not yet implemented.") {}
+    NotImplementedException() : std::logic_error{"Function not yet implemented."} {}
 };
 
 } // namespace d2m

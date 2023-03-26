@@ -50,7 +50,7 @@ namespace Effects
 {
     enum
     {
-        kSetSampleOffset=1,
+        kSetSampleOffset = 1,
         kSetVolume,
         kSetFilter,
         kFineSlideUp,
@@ -96,15 +96,15 @@ public:
 
 private:
     // Creates module-specific error message from an error code and string argument
-    static std::string CreateErrorMessage(Category category, int error_code, const std::string& arg);
+    static auto CreateErrorMessage(Category category, int error_code, const std::string& arg) -> std::string;
 };
 
-class MODConversionOptions : public ConversionOptionsInterface<MODConversionOptions>
+class MODConversionOptions final : public ConversionOptionsInterface<MODConversionOptions>
 {
 public:
 
     // Factory requires destructor to be public
-    ~MODConversionOptions() = default;
+    ~MODConversionOptions() override = default;
 
     enum class OptionEnum
     {
@@ -116,13 +116,13 @@ public:
         kAccuracy, kEffectCompatibility
     };
 
-    inline bool AllowArpeggio() const { return GetOption(OptionEnum::kArpeggio).GetValue<bool>(); }
-    inline bool AllowPortamento() const { return GetOption(OptionEnum::kPortamento).GetValue<bool>(); }
-    inline bool AllowPort2Note() const { return GetOption(OptionEnum::kPort2Note).GetValue<bool>(); }
-    inline bool AllowVibrato() const { return GetOption(OptionEnum::kVibrato).GetValue<bool>(); }
-    inline TempoType GetTempoType() const { return TempoType{GetOption(OptionEnum::kTempoType).GetValueAsIndex()}; }
+    [[nodiscard]] inline auto AllowArpeggio() const -> bool { return GetOption(OptionEnum::kArpeggio).GetValue<bool>(); }
+    [[nodiscard]] inline auto AllowPortamento() const -> bool { return GetOption(OptionEnum::kPortamento).GetValue<bool>(); }
+    [[nodiscard]] inline auto AllowPort2Note() const -> bool { return GetOption(OptionEnum::kPort2Note).GetValue<bool>(); }
+    [[nodiscard]] inline auto AllowVibrato() const -> bool { return GetOption(OptionEnum::kVibrato).GetValue<bool>(); }
+    [[nodiscard]] inline auto GetTempoType() const -> TempoType { return TempoType{GetOption(OptionEnum::kTempoType).GetValueAsIndex()}; }
 
-    inline bool AllowEffects() const { return AllowArpeggio() || AllowPortamento() || AllowPort2Note() || AllowVibrato(); }
+    [[nodiscard]] inline auto AllowEffects() const -> bool { return AllowArpeggio() || AllowPortamento() || AllowPort2Note() || AllowVibrato(); }
 
 private:
 
@@ -132,17 +132,17 @@ private:
     MODConversionOptions() = default;
 };
 
-class MOD : public ModuleInterface<MOD>
+class MOD final : public ModuleInterface<MOD>
 {
 public:
 
     // Factory requires destructor to be public
-    ~MOD() = default;
+    ~MOD() override = default;
 
-    enum class ImportError {kSuccess=0};
+    enum class ImportError {kSuccess = 0};
     enum class ImportWarning {};
 
-    enum class ExportError {kSuccess=0};
+    enum class ExportError {kSuccess = 0};
     enum class ExportWarning {};
 
     enum class ConvertError
@@ -156,7 +156,7 @@ public:
 
     enum class ConvertWarning
     {
-        kNone=0,
+        kNone = 0,
         kPitchHigh,
         kTempoLow,
         kTempoHigh,
@@ -182,7 +182,7 @@ private:
     void ImportImpl(const std::string& filename) override;
     void ExportImpl(const std::string& filename) override;
     void ConvertImpl(const ModulePtr& input) override;
-    size_t GenerateDataImpl(size_t data_flags) const override { return 1; }
+    [[nodiscard]] auto GenerateDataImpl(size_t data_flags) const -> size_t override { return 1; }
 
     // DMF -> MOD conversion
     class DMFConverter;

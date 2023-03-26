@@ -28,7 +28,7 @@ struct System
 {
     enum class Type
     {
-        kError=0,
+        kError = 0,
         kYMU759,
         kGenesis,
         kGenesis_CH3,
@@ -104,9 +104,9 @@ struct SoundIndex<DMF>
     using type = std::variant<None, Square, Wave, Noise>;
 };
 
-inline constexpr bool operator==(const SoundIndex<DMF>::Square& lhs, const SoundIndex<DMF>::Square& rhs) { return lhs.id == rhs.id; }
-inline constexpr bool operator==(const SoundIndex<DMF>::Wave& lhs, const SoundIndex<DMF>::Wave& rhs) { return lhs.id == rhs.id; }
-inline constexpr bool operator==(const SoundIndex<DMF>::Noise& lhs, const SoundIndex<DMF>::Noise& rhs) { return lhs.id == rhs.id; }
+inline constexpr auto operator==(const SoundIndex<DMF>::Square& lhs, const SoundIndex<DMF>::Square& rhs) -> bool { return lhs.id == rhs.id; }
+inline constexpr auto operator==(const SoundIndex<DMF>::Wave& lhs, const SoundIndex<DMF>::Wave& rhs) -> bool { return lhs.id == rhs.id; }
+inline constexpr auto operator==(const SoundIndex<DMF>::Noise& lhs, const SoundIndex<DMF>::Noise& rhs) -> bool { return lhs.id == rhs.id; }
 
 ///////////////////////////////////////////////////////////
 // dmf namespace
@@ -122,7 +122,7 @@ namespace Effects
 {
     enum
     {
-        kArpTickSpeed=1,
+        kArpTickSpeed = 1,
         kNoteSlideUp,
         kNoteSlideDown,
         kSetVibratoMode,
@@ -173,7 +173,7 @@ struct Instrument
 {
     enum InstrumentMode
     {
-        kInvalidMode=0,
+        kInvalidMode = 0,
         kStandardMode,
         kFMMode
     };
@@ -187,7 +187,10 @@ struct Instrument
         struct
         {
             uint8_t vol_env_size, arp_env_size, duty_noise_env_size, wavetable_env_size;
-            int32_t *vol_env_value, *arp_env_value, *duty_noise_env_value, *wavetable_env_value;
+            int32_t* vol_env_value;
+            int32_t* arp_env_value;
+            int32_t* duty_noise_env_value;
+            int32_t* wavetable_env_value;
             int8_t vol_env_loop_pos, arp_env_loop_pos, duty_noise_env_loop_pos, wavetable_env_loop_pos;
             uint8_t arp_macro_mode;
 
@@ -215,16 +218,13 @@ struct Instrument
             uint8_t fb;
             uint8_t opll_preset; // SMS OPLL / NES VRC7 exclusive
 
-            union {
-                struct {
-                    uint8_t lfo, lfo2;
-                };
-                struct {
-                    uint8_t dc, dm; // SMS OPLL / NES VRC7 exclusive
-                };
+            union
+            {
+                struct { uint8_t lfo, lfo2; };
+                struct { uint8_t dc, dm; }; // SMS OPLL / NES VRC7 exclusive
             };
 
-            FMOps ops[4];
+            std::array<FMOps, 4> ops;
         } fm;
     };
 };
@@ -243,7 +243,7 @@ namespace GameBoyChannel
 {
     enum
     {
-        kSquare1=0, kSquare2=1, kWave=2, kNoise=3
+        kSquare1 = 0, kSquare2 = 1, kWave = 2, kNoise = 3
     };
 }
 
@@ -255,26 +255,26 @@ namespace GameBoyChannel
 
 class DMFConversionOptions : public ConversionOptionsInterface<DMFConversionOptions>
 {
+public:
+
+    // Factory requires destructor to be public
+    ~DMFConversionOptions() override = default;
+
 private:
 
     // Only allow the Factory to construct this class
     friend class Builder<DMFConversionOptions, ConversionOptionsBase>;
 
     DMFConversionOptions() = default;
-
-public:
-
-    // Factory requires destructor to be public
-    ~DMFConversionOptions() = default;
 };
 
-class DMF : public ModuleInterface<DMF>
+class DMF final : public ModuleInterface<DMF>
 {
 public:
 
     enum ImportError
     {
-        kSuccess=0,
+        kSuccess = 0,
         kUnspecifiedError
     };
 
@@ -287,19 +287,19 @@ public:
     using SystemType = dmf::System::Type;
 
     // Factory requires destructor to be public
-    ~DMF();
+    ~DMF() override;
 
     // Returns the initial BPM of the module
     void GetBPM(unsigned& numerator, unsigned& denominator) const;
-    double GetBPM() const;
+    [[nodiscard]] auto GetBPM() const -> double;
 
-    const dmf::System& GetSystem() const { return GetGlobalData().system; }
-    static const dmf::System& SystemInfo(SystemType system_type);
+    [[nodiscard]] auto GetSystem() const -> const dmf::System& { return GetGlobalData().system; }
+    [[nodiscard]] static auto SystemInfo(SystemType system_type) -> const dmf::System&;
 
     // TODO: Create a module-independent storage system for wavetables, PCM samples, instruments, etc.
-    uint8_t GetTotalWavetables() const { return total_wavetables_; }
-    uint32_t** GetWavetableValues() const { return wavetable_values_; }
-    uint32_t GetWavetableValue(unsigned wavetable, unsigned index) const { return wavetable_values_[wavetable][index]; }
+    [[nodiscard]] auto GetTotalWavetables() const -> uint8_t { return total_wavetables_; }
+    [[nodiscard]] auto GetWavetableValues() const -> uint32_t** { return wavetable_values_; }
+    [[nodiscard]] auto GetWavetableValue(unsigned wavetable, unsigned index) const -> uint32_t { return wavetable_values_[wavetable][index]; }
 
 private:
 
@@ -312,7 +312,7 @@ private:
     void ImportImpl(const std::string& filename) override;
     void ExportImpl(const std::string& filename) override;
     void ConvertImpl(const ModulePtr& input) override;
-    size_t GenerateDataImpl(size_t data_flags) const override;
+    [[nodiscard]] auto GenerateDataImpl(size_t data_flags) const -> size_t override;
 
     // Import helper class
     class Importer;

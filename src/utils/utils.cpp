@@ -27,16 +27,17 @@ auto Utils::ReplaceFileExtension(std::string_view filename, std::string_view new
     return std::filesystem::path{filename}.replace_extension(new_file_extension).string();
 }
 
-auto Utils::GetFileExtension(std::string_view filename) -> std::string_view
+auto Utils::GetFileExtension(std::string_view filename) -> std::string
 {
-    std::string_view ext = std::filesystem::path{filename}.extension().c_str();
+    const auto ext = std::filesystem::path{filename}.extension().string();
     if (!ext.empty()) { return ext.substr(1); } // Remove "."
     return "";
 }
 
 auto Utils::FileExists(std::string_view filename) -> bool
 {
-    return std::filesystem::exists(filename);
+    std::error_code ec;
+    return std::filesystem::is_regular_file(filename, ec);
 }
 
 // File utils which require Factory initialization

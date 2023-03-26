@@ -23,7 +23,7 @@ public:
     // File utils
     [[nodiscard]] static auto GetBaseNameFromFilename(std::string_view filename) -> std::string;
     [[nodiscard]] static auto ReplaceFileExtension(std::string_view filename, std::string_view new_file_extension) -> std::string;
-    [[nodiscard]] static auto GetFileExtension(std::string_view filename) -> std::string_view;
+    [[nodiscard]] static auto GetFileExtension(std::string_view filename) -> std::string;
     [[nodiscard]] static auto FileExists(std::string_view filename) -> bool;
 
     // File utils which require Factory initialization

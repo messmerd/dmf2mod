@@ -1171,8 +1171,8 @@ void MOD::ExportImpl(const std::string& filename)
 void MOD::ExportModuleName(std::ofstream& fout) const
 {
     // Print module name, truncating or padding with zeros as needed
-    const std::string& title = GetTitle();
-    for (unsigned i = 0; i < 20; i++)
+    const auto title = GetTitle();
+    for (unsigned i = 0; i < 20; ++i)
     {
         if (i < title.size())
         {
@@ -1470,17 +1470,17 @@ static auto GetWarningMessage(MOD::ConvertWarning warning, const std::string& in
         case MOD::ConvertWarning::kPitchHigh:
             return "Cannot use the highest Deflemask note (C-8) on some MOD players including ProTracker.";
         case MOD::ConvertWarning::kTempoLow:
-            return std::string("Tempo is too low. Using ~3.1 BPM instead.\n")
-                    + std::string("         ProTracker only supports tempos between ~3.1 and 765 BPM.");
+            return "Tempo is too low. Using ~3.1 BPM instead.\n"
+                   "         ProTracker only supports tempos between ~3.1 and 765 BPM.";
         case MOD::ConvertWarning::kTempoHigh:
-            return std::string("Tempo is too high for ProTracker. Using 127.5 BPM instead.\n")
-                    + std::string("         ProTracker only supports tempos between ~3.1 and 765 BPM.");
+            return "Tempo is too high for ProTracker. Using 127.5 BPM instead.\n"
+                   "         ProTracker only supports tempos between ~3.1 and 765 BPM.";
         case MOD::ConvertWarning::kTempoLowCompat:
-            return std::string("Tempo is too low. Using 16 BPM to retain effect compatibility.\n")
-                    + std::string("         Use --tempo=accuracy for the full tempo range.");
+            return "Tempo is too low. Using 16 BPM to retain effect compatibility.\n"
+                   "         Use --tempo=accuracy for the full tempo range.";
         case MOD::ConvertWarning::kTempoHighCompat:
-            return std::string("Tempo is too high. Using 127.5 BPM to retain effect compatibility.\n")
-                    + std::string("         Use --tempo=accuracy for the full tempo range.");
+            return "Tempo is too high. Using 127.5 BPM to retain effect compatibility.\n"
+                   "         Use --tempo=accuracy for the full tempo range.";
         case MOD::ConvertWarning::kTempoAccuracy:
             return "Tempo does not exactly match, but a value close to it is being used.";
         case MOD::ConvertWarning::kEffectIgnored:
@@ -1496,7 +1496,7 @@ static auto GetWarningMessage(MOD::ConvertWarning warning, const std::string& in
     }
 }
 
-auto MODException::CreateErrorMessage(Category category, int error_code, const std::string& arg) -> std::string
+auto MODException::CreateErrorMessage(Category category, int error_code, std::string_view arg) -> std::string
 {
     switch (category)
     {
@@ -1516,10 +1516,10 @@ auto MODException::CreateErrorMessage(Category category, int error_code, const s
                 case (int)MOD::ConvertError::kTooManyPatternMatrixRows:
                     return "Too many rows of patterns in the pattern matrix. 64 is the maximum. (63 if using Setup Pattern.)";
                 case (int)MOD::ConvertError::kOver64RowPattern:
-                    return std::string("Patterns must have 64 or fewer rows.\n")
-                            + std::string("       A workaround for this issue is planned for a future update to dmf2mod.");
+                    return "Patterns must have 64 or fewer rows.\n"
+                           "       A workaround for this issue is planned for a future update to dmf2mod.";
                 default:
-                    return arg;
+                    return std::string{arg};
             }
             break;
     }

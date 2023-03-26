@@ -12,6 +12,7 @@
 #include "core/status.h"
 
 #include <string>
+#include <string_view>
 #include <memory>
 
 namespace d2m {
@@ -95,12 +96,12 @@ public:
     /*
      * Get the title of the module
      */
-    [[nodiscard]] virtual auto GetTitle() const -> const std::string& = 0;
+    [[nodiscard]] virtual auto GetTitle() const -> std::string_view = 0;
 
     /*
      * Get the author of the module
      */
-    [[nodiscard]] virtual auto GetAuthor() const -> const std::string& = 0;
+    [[nodiscard]] virtual auto GetAuthor() const -> std::string_view = 0;
 
 protected:
     // Import() and Export() and Convert() are wrappers for these methods, which must be implemented by a module class:

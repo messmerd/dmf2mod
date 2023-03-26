@@ -34,8 +34,8 @@ public:
     inline auto GetGlobalData() const -> const ModuleGlobalData<Derived>& { return GetData().GlobalData(); }
     inline auto GetGeneratedData() const -> std::shared_ptr<const GeneratedData<Derived>> { return generated_data_; }
 
-    [[nodiscard]] auto GetTitle() const -> const std::string& final { return GetGlobalData().title; }
-    [[nodiscard]] auto GetAuthor() const -> const std::string& final { return GetGlobalData().author; }
+    [[nodiscard]] auto GetTitle() const -> std::string_view final { return GetGlobalData().title; }
+    [[nodiscard]] auto GetAuthor() const -> std::string_view final { return GetGlobalData().author; }
 
     [[nodiscard]] auto GenerateData(size_t data_flags = 0) const -> size_t final
     {

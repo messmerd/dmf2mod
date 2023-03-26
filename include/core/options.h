@@ -9,7 +9,9 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <map>
+#include <unordered_map>
 #include <set>
 #include <vector>
 #include <variant>
@@ -115,13 +117,13 @@ public:
     [[nodiscard]] auto GetOptionType() const -> OptionType { return option_type_; }
     [[nodiscard]] auto GetId() const -> int { return id_; }
     [[nodiscard]] auto GetValueType() const -> Type { return value_type_; }
-    [[nodiscard]] auto GetName() const -> std::string { return name_; };
+    [[nodiscard]] auto GetName() const -> std::string_view { return name_; };
     [[nodiscard]] auto GetShortName() const -> char { return short_name_; }
     [[nodiscard]] auto GetDisplayName() const -> std::string;
     [[nodiscard]] auto GetDefaultValue() const -> ValueType { return default_value_; }
     [[nodiscard]] auto GetAcceptedValues() const -> const std::map<ValueType, int>& { return accepted_values_; }
     [[nodiscard]] auto GetAcceptedValuesOrdered() const -> const std::vector<ValueType>& { return accepted_values_ordered_; }
-    [[nodiscard]] auto GetDescription() const -> std::string { return description_; }
+    [[nodiscard]] auto GetDescription() const -> std::string_view { return description_; }
 
     [[nodiscard]] auto HasName() const -> bool { return !name_.empty(); }
     [[nodiscard]] auto HasShortName() const -> bool { return short_name_ != '\0'; }
@@ -175,9 +177,9 @@ public:
 
     // Find methods
     [[nodiscard]] auto FindById(int id) const -> const OptionDefinition*;
-    [[nodiscard]] auto FindByName(const std::string& name) const -> const OptionDefinition*;
+    [[nodiscard]] auto FindByName(std::string_view name) const -> const OptionDefinition*;
     [[nodiscard]] auto FindByShortName(char short_name) const -> const OptionDefinition*;
-    [[nodiscard]] auto FindIdByName(const std::string& name) const -> int;
+    [[nodiscard]] auto FindIdByName(std::string_view name) const -> int;
     [[nodiscard]] auto FindIdByShortName(char short_name) const -> int;
 
     // Other
@@ -185,8 +187,8 @@ public:
 
 private:
     std::map<int, OptionDefinition> id_options_map_;
-    std::map<std::string, OptionDefinition*> name_options_map_;
-    std::map<char, OptionDefinition*> short_name_options_map_;
+    std::unordered_map<std::string_view, OptionDefinition*> name_options_map_;
+    std::unordered_map<char, OptionDefinition*> short_name_options_map_;
 };
 
 
@@ -312,10 +314,7 @@ public:
     [[nodiscard]] static auto ConvertToString(const ValueType& value) -> std::string;
 
     // Convert string + type to a ValueType
-    static auto ConvertToValue(const std::string& value_str, OptionDefinition::Type type, ValueType& return_val) -> bool;
-
-    // Convert string + type to a ValueType
-    static auto ConvertToValue(const char* value_str, OptionDefinition::Type type, ValueType& return_val) -> bool;
+    static auto ConvertToValue(std::string_view value_str, OptionDefinition::Type type, ValueType& return_val) -> bool;
 
 private:
 };

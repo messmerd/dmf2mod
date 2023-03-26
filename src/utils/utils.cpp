@@ -16,38 +16,38 @@ using namespace d2m;
 
 // File utils
 
-auto Utils::GetBaseNameFromFilename(const std::string& filename) -> std::string
+auto Utils::GetBaseNameFromFilename(std::string_view filename) -> std::string
 {
     return std::filesystem::path{filename}.stem().string();
 }
 
-auto Utils::ReplaceFileExtension(const std::string& filename, const std::string& new_file_extension) -> std::string
+auto Utils::ReplaceFileExtension(std::string_view filename, std::string_view new_file_extension) -> std::string
 {
     // new_file_extension may or may not contain a dot
     return std::filesystem::path{filename}.replace_extension(new_file_extension).string();
 }
 
-auto Utils::GetFileExtension(const std::string& filename) -> std::string
+auto Utils::GetFileExtension(std::string_view filename) -> std::string_view
 {
-    auto ext = std::filesystem::path{filename}.extension();
-    if (!ext.empty()) { return ext.string().substr(1); } // Remove "."
+    std::string_view ext = std::filesystem::path{filename}.extension().c_str();
+    if (!ext.empty()) { return ext.substr(1); } // Remove "."
     return "";
 }
 
-auto Utils::FileExists(const std::string& filename) -> bool
+auto Utils::FileExists(std::string_view filename) -> bool
 {
     return std::filesystem::exists(filename);
 }
 
 // File utils which require Factory initialization
 
-auto Utils::GetTypeFromFilename(const std::string& filename) -> ModuleType
+auto Utils::GetTypeFromFilename(std::string_view filename) -> ModuleType
 {
-    const std::string ext = Utils::GetFileExtension(filename);
+    const auto ext = Utils::GetFileExtension(filename);
     return GetTypeFromFileExtension(ext);
 }
 
-auto Utils::GetTypeFromFileExtension(const std::string& extension) -> ModuleType
+auto Utils::GetTypeFromFileExtension(std::string_view extension) -> ModuleType
 {
     if (extension.empty()) { return ModuleType::kNone; }
 

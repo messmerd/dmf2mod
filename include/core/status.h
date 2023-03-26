@@ -13,6 +13,7 @@
 #include "core/factory.h"
 
 #include <string>
+#include <string_view>
 #include <vector>
 #include <map>
 #include <exception>
@@ -67,7 +68,7 @@ public:
         return error_message_.c_str();
     }
 
-    [[nodiscard]] auto str() const -> std::string
+    [[nodiscard]] auto str() const -> std::string_view
     {
         return error_message_;
     }
@@ -84,15 +85,15 @@ public: // Should this be protected once DMF gets its own DMFException class?
 
     // Construct using an enum for an error code
     template<class T, std::enable_if_t<std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>, bool> = true>
-    ModuleException(Category category, T error_code, const std::string& error_message = "")
+    ModuleException(Category category, T error_code, std::string_view error_message = "")
         : ModuleException{category, static_cast<int>(error_code), error_message} {}
 
     // Construct using an integer for an error code
-    ModuleException(Category category, int error_code, const std::string& error_message = "")
+    ModuleException(Category category, int error_code, std::string_view error_message = "")
     {
         error_code_ = error_code;
 
-        std::string category_str;
+        std::string_view category_str;
         switch (category)
         {
             case Category::kNone:
@@ -107,11 +108,15 @@ public: // Should this be protected once DMF gets its own DMFException class?
 
         if (error_code_ > 0)
         {
-            error_message_ = "ERROR: " + category_str + error_message;
+            error_message_ = "ERROR: ";
+            error_message_ += category_str;
+            error_message_ += error_message;
         }
         else
         {
-            error_message_ = "ERROR: " + category_str + CreateCommonErrorMessage(category, error_code_, error_message);
+            error_message_ = "ERROR: ";
+            error_message_ += category_str;
+            error_message_ += CreateCommonErrorMessage(category, error_code_, error_message);
         }
     }
 
@@ -120,7 +125,7 @@ protected:
     std::string error_message_;
 
 private:
-    auto CreateCommonErrorMessage(Category category, int error_code, const std::string& arg) -> std::string;
+    auto CreateCommonErrorMessage(Category category, int error_code, std::string_view arg) -> std::string;
 };
 
 

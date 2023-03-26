@@ -63,7 +63,7 @@ auto Status::HandleResults() const -> bool
     return ErrorOccurred();
 }
 
-auto ModuleException::CreateCommonErrorMessage(Category category, int error_code, const std::string& arg) -> std::string
+auto ModuleException::CreateCommonErrorMessage(Category category, int error_code, std::string_view arg) -> std::string
 {
     switch (category)
     {
@@ -99,7 +99,7 @@ auto ModuleException::CreateCommonErrorMessage(Category category, int error_code
                 case (int)ConvertError::kInvalidArgument:
                     return "Invalid argument.";
                 case (int)ConvertError::kUnsupportedInputType:
-                    return "Input type '" + arg + "' is unsupported for this module.";
+                    return "Input type '" + std::string{arg} + "' is unsupported for this module.";
                 default:
                     return "";
             }

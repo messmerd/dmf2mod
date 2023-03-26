@@ -12,6 +12,7 @@
 #include <unordered_set>
 #include <iostream>
 #include <iomanip>
+#include <charconv>
 #include <cassert>
 
 using namespace d2m;
@@ -21,7 +22,7 @@ using namespace d2m;
 auto OptionDefinition::GetDisplayName() const -> std::string
 {
     if (!name_.empty()) { return "--" + name_; }
-    return "-" + std::string(1, short_name_);
+    return '-' + std::string(1, short_name_);
 }
 
 auto OptionDefinition::IsValid(const ValueType& value) const -> bool
@@ -38,21 +39,23 @@ void OptionDefinition::PrintHelp() const
     std::string str1 = "  ";
     if (HasShortName())
     {
-        str1 += "-" + std::string(1, GetShortName());
+        str1 += '-' + std::string(1, GetShortName());
         if (HasName()) { str1 += ", "; }
     }
     if (HasName())
     {
-        str1 += "--" + GetName();
+        str1 += "--";
+        str1 += GetName();
     }
 
     const bool use_double_quotes = accepted_values_contain_spaces_;
-    const std::string preferred_separator = GetOptionType() == kCommand ? " " : "=";
+    const char preferred_separator = GetOptionType() == kCommand ? ' ' : '=';
 
     const OptionDefinition::Type option_type = GetValueType();
     if (UsesAcceptedValues() && option_type != OptionDefinition::kBool)
     {
-        str1 += preferred_separator + '[';
+        str1 += preferred_separator;
+        str1 += '[';
 
         unsigned i = 0;
         const size_t total = GetAcceptedValuesOrdered().size();
@@ -99,7 +102,7 @@ void OptionDefinition::PrintHelp() const
         }
     }
 
-    std::string str2 = GetDescription() + ' ';
+    std::string str2 = std::string{GetDescription()} + ' ';
     switch (option_type)
     {
         case OptionDefinition::kBool:
@@ -128,11 +131,16 @@ void OptionDefinition::PrintHelp() const
         }
         case OptionDefinition::kString:
         {
-            const std::string default_value = std::get<OptionDefinition::kString>(GetDefaultValue());
+            const std::string_view default_value = std::get<OptionDefinition::kString>(GetDefaultValue());
             if (!default_value.empty())
             {
                 str2 += "(Default: ";
-                if (use_double_quotes) { str2 += '"' + default_value + '"'; }
+                if (use_double_quotes)
+                {
+                    str2 += '"';
+                    str2 += default_value;
+                    str2 += '"';
+                }
                 else { str2 += default_value; }
                 str2 += ')';
             }
@@ -154,7 +162,7 @@ OptionDefinitionCollection::OptionDefinitionCollection(const OptionDefinitionCol
     {
         OptionDefinition* module_option = &map_pair.second;
 
-        const std::string name = module_option->GetName();
+        const auto name = module_option->GetName();
         name_options_map_[name] = module_option;
 
         const char short_name = module_option->GetShortName();
@@ -178,7 +186,7 @@ OptionDefinitionCollection::OptionDefinitionCollection(const std::initializer_li
         // Name mapping
         if (option.HasName())
         {
-            const std::string name = option.GetName();
+            const auto name = option.GetName();
             assert(name_options_map_.count(name) == 0 && "OptionDefinitionCollection(...): Duplicate option name found.");
             name_options_map_[name] = &id_options_map_[id];
         }
@@ -204,7 +212,7 @@ auto OptionDefinitionCollection::FindById(int id) const -> const OptionDefinitio
     return &id_options_map_.at(id);
 }
 
-auto OptionDefinitionCollection::FindByName(const std::string& name) const -> const OptionDefinition*
+auto OptionDefinitionCollection::FindByName(std::string_view name) const -> const OptionDefinition*
 {
     if (name_options_map_.count(name) == 0) { return nullptr; }
     return name_options_map_.at(name);
@@ -216,7 +224,7 @@ auto OptionDefinitionCollection::FindByShortName(char short_name) const -> const
     return short_name_options_map_.at(short_name);
 }
 
-auto OptionDefinitionCollection::FindIdByName(const std::string& name) const -> int
+auto OptionDefinitionCollection::FindIdByName(std::string_view name) const -> int
 {
     const OptionDefinition* ptr = FindByName(name);
     if (!ptr) { return kNotFound; }
@@ -389,7 +397,7 @@ auto OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unk
     std::unordered_set<int> options_parsed;
 
     // Sets the value of an option given a value string
-    auto SetValue = [this, &options_parsed](const char* value_str, const OptionDefinition* option_def) -> bool
+    auto SetValue = [this, &options_parsed](std::string_view value_str, const OptionDefinition* option_def) -> bool
     {
         auto& option = options_map_[option_def->GetId()];
 
@@ -401,7 +409,7 @@ auto OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unk
 
         if (!option_def->IsValid(value_temp))
         {
-            const std::string option_type_str = option_def->GetOptionType() == kOption ? "option" : "command";
+            const std::string_view option_type_str = option_def->GetOptionType() == kOption ? "option" : "command";
             std::cerr << "ERROR: The value \"" << value_str << "\" is not valid for the " << option_type_str << " \"" << option_def->GetDisplayName() << "\".\n";
             return true; // The value is not valid for this option definition
         }
@@ -578,7 +586,7 @@ auto OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unk
         else // --foo format argument
         {
             equals_pos = arg.find_first_of('=');
-            std::string name = arg.substr(2, equals_pos - 2); // From start to '=' or end of string - whichever comes first
+            auto name = std::string_view{arg}.substr(2, equals_pos - 2); // From start to '=' or end of string - whichever comes first
             def = definitions_->FindByName(name);
         }
 
@@ -600,7 +608,7 @@ auto OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unk
         if (options_parsed.count(def->GetId()) > 0)
         {
             // ERROR: Setting the same option twice
-            const std::string option_type_str = def->GetOptionType() == kOption ? "option" : "command";
+            const std::string_view option_type_str = def->GetOptionType() == kOption ? "option" : "command";
             if (using_short_name)
             {
                 std::cerr << "ERROR: The " << option_type_str << " \"-" << def->GetShortName() << "\" is used more than once.\n";
@@ -649,7 +657,7 @@ auto OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unk
 
     if (handling_option)
     {
-        const std::string option_type_str = handling_option->GetOptionType() == kOption ? "option" : "command";
+        const std::string_view option_type_str = handling_option->GetOptionType() == kOption ? "option" : "command";
         std::cerr << "ERROR: The " << option_type_str << " \"" << handling_option->GetDisplayName() << "\" did not provide a value.\n";
         return true;
     }
@@ -689,13 +697,13 @@ auto ModuleOptionUtils::ConvertToString(const ValueType& value) -> std::string
     }
 }
 
-auto ModuleOptionUtils::ConvertToValue(const std::string& value_str, OptionDefinition::Type type, ValueType& return_val) -> bool
+auto ModuleOptionUtils::ConvertToValue(std::string_view value_str, OptionDefinition::Type type, ValueType& return_val) -> bool
 {
     switch (type)
     {
         case OptionDefinition::kBool:
         {
-            std::string value_str_lower = value_str;
+            auto value_str_lower = std::string{value_str};
             unsigned i = 0;
             while (i < value_str_lower.size())
             {
@@ -714,23 +722,20 @@ auto ModuleOptionUtils::ConvertToValue(const std::string& value_str, OptionDefin
         } break;
         case OptionDefinition::kInt:
         {
-            return_val = std::stoi(value_str);
+            int val = 0;
+            std::from_chars(value_str.data(), value_str.data() + value_str.size(), val);
+            return_val = val;
         } break;
         case OptionDefinition::kDouble:
         {
-            return_val = std::stof(value_str);
+            // TODO: Use std::from_chars when library support is available
+            return_val = std::stof(std::string{value_str});
         } break;
         case OptionDefinition::kString:
         {
-            return_val = value_str;
+            return_val = std::string{value_str};
         } break;
     }
 
     return false;
-}
-
-auto ModuleOptionUtils::ConvertToValue(const char* value_str, OptionDefinition::Type type, ValueType& return_val) -> bool
-{
-    std::string value_str_const(value_str);
-    return ConvertToValue(value_str_const, type, return_val);
 }

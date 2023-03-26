@@ -37,11 +37,11 @@ enum class OperationType
 };
 
 auto ParseArgs(std::vector<std::string>& args, InputOutput& io) -> OperationType;
-void PrintHelp(const std::string& executable, ModuleType module_type);
+void PrintHelp(std::string_view executable, ModuleType module_type);
 
 } // namespace
 
-auto main(int argc, char *argv[]) -> int
+auto main(int argc, char** argv) -> int
 {
     auto args = Utils::GetArgsAsVector(argc, argv);
 
@@ -262,7 +262,7 @@ auto ParseArgs(std::vector<std::string>& args, InputOutput& io) -> OperationType
     return OperationType::kError;
 }
 
-void PrintHelp(const std::string& executable, ModuleType module_type)
+void PrintHelp(std::string_view executable, ModuleType module_type)
 {
     // If module-specific help was requested
     if (module_type != ModuleType::kNone)

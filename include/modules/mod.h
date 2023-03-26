@@ -91,12 +91,12 @@ class MODException : public ModuleException
 {
 public:
     template<class T>
-    MODException(Category category, T error_code, const std::string& args = "")
+    MODException(Category category, T error_code, std::string_view args = "")
         : ModuleException(category, static_cast<int>(error_code), CreateErrorMessage(category, static_cast<int>(error_code), args)) {}
 
 private:
     // Creates module-specific error message from an error code and string argument
-    static auto CreateErrorMessage(Category category, int error_code, const std::string& arg) -> std::string;
+    static auto CreateErrorMessage(Category category, int error_code, std::string_view arg) -> std::string;
 };
 
 class MODConversionOptions final : public ConversionOptionsInterface<MODConversionOptions>

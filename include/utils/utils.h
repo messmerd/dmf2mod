@@ -10,6 +10,7 @@
 #include "core/config_types.h"
 
 #include <string>
+#include <string_view>
 #include <vector>
 #include <algorithm>
 
@@ -20,14 +21,14 @@ class Utils
 {
 public:
     // File utils
-    [[nodiscard]] static auto GetBaseNameFromFilename(const std::string& filename) -> std::string;
-    [[nodiscard]] static auto ReplaceFileExtension(const std::string& filename, const std::string& new_file_extension) -> std::string;
-    [[nodiscard]] static auto GetFileExtension(const std::string& filename) -> std::string;
-    [[nodiscard]] static auto FileExists(const std::string& filename) -> bool;
+    [[nodiscard]] static auto GetBaseNameFromFilename(std::string_view filename) -> std::string;
+    [[nodiscard]] static auto ReplaceFileExtension(std::string_view filename, std::string_view new_file_extension) -> std::string;
+    [[nodiscard]] static auto GetFileExtension(std::string_view filename) -> std::string_view;
+    [[nodiscard]] static auto FileExists(std::string_view filename) -> bool;
 
     // File utils which require Factory initialization
-    [[nodiscard]] static auto GetTypeFromFilename(const std::string& filename) -> ModuleType;
-    [[nodiscard]] static auto GetTypeFromFileExtension(const std::string& extension) -> ModuleType;
+    [[nodiscard]] static auto GetTypeFromFilename(std::string_view filename) -> ModuleType;
+    [[nodiscard]] static auto GetTypeFromFileExtension(std::string_view extension) -> ModuleType;
     [[nodiscard]] static auto GetExtensionFromType(ModuleType module_type) -> std::string;
 
     // Command-line arguments and options utils

@@ -3,8 +3,6 @@
  * Written by Dalton Messmer <messmer.dalton@gmail.com>.
  *
  * Defines a class template for storing and accessing module data (orders, patterns, rows, etc.)
- *
- * TODO: Remove inheritance and virtual methods where possible
  */
 
 #pragma once
@@ -31,9 +29,9 @@ enum class DataStorageType
 };
 
 /*
-    Global data for a module. This is information such as the title and author.
-    Can be customized if a module type has more global information to be stored.
-*/
+ * Global data for a module. This is information such as the title and author.
+ * Can be customized if a module type has more global information to be stored.
+ */
 
 template<DataStorageType data_storage_type = DataStorageType::kNone>
 struct ModuleGlobalDataDefault
@@ -47,10 +45,10 @@ template<class ModuleClass>
 struct ModuleGlobalData : public ModuleGlobalDataDefault<> {};
 
 /*
-    Different modules have significantly different per-channel row contents, so
-    providing one single generic implementation for use by every module doesn't
-    make much sense. Each module should provide their own Row implementation.
-*/
+ * Different modules have significantly different per-channel row contents, so
+ * providing one single generic implementation for use by every module doesn't
+ * make much sense. Each module should provide their own Row implementation.
+ */
 
 struct RowDefault
 {
@@ -61,10 +59,10 @@ template<class ModuleClass>
 struct Row : public RowDefault {};
 
 /*
-    Some module formats contain additional data for each channel or row.
-    Specializations for ChannelMetadata and PatternMetadata can be created
-    for any module format which requires it.
-*/
+ * Some module formats contain additional data for each channel or row.
+ * Specializations for ChannelMetadata and PatternMetadata can be created
+ * for any module format which requires it.
+ */
 
 struct ChannelMetadataDefault
 {
@@ -83,8 +81,7 @@ template<class ModuleClass>
 struct PatternMetadata : public PatternMetadataDefault {};
 
 
-namespace detail
-{
+namespace detail {
     /*
      * The class templates below allow different module formats in dmf2mod to choose an underlying
      * storage data structure that works best for them while maintaining a common interface to
@@ -93,7 +90,7 @@ namespace detail
      * The motivation for this is that different module formats store their pattern matrix and
      * pattern data differently, so this affects the kind of C++ data structures their module data
      * more naturally maps to. If a data structure that maps more naturally to the module's data is used,
-     * better performance can be achieved when iterating through the data while importing/exporting.
+     * better performance should be possible when iterating through the data while importing/exporting.
      * Additionally, some formats such as MOD do not have per-channel patterns, meaning that all channels
      * are essentially linked together as far as patterns are concerned. This necessitates a flexible
      * way of storing module data which can work for any module format.
@@ -108,31 +105,50 @@ namespace detail
         [[nodiscard]] inline auto GetNumRows() const -> RowIndex { return num_rows_; }
     protected:
         virtual void CleanUpData() = 0;
-        virtual void SetPatternMatrix() = 0;
+        virtual void SetPatternMatrix(ChannelIndex channels, OrderIndex orders, RowIndex rows) = 0;
         virtual void SetNumPatterns() = 0;
         virtual void SetPatterns() = 0;
-        ChannelIndex num_channels_;
-        OrderIndex num_orders_;    // Total orders (pattern matrix rows)
-        RowIndex num_rows_;        // Rows per pattern
+        ChannelIndex num_channels_ = 0;
+        OrderIndex num_orders_ = 0;    // Total orders (pattern matrix rows)
+        RowIndex num_rows_ = 0;        // Rows per pattern
     };
 
     template<DataStorageType storage_type, class ModuleClass>
-    class ModuleDataStorage : public ModuleDataStorageBase
+    class ModuleDataStorage
     {
     public:
-        ModuleDataStorage() = delete; // This non-specialized primary template should never be used
-        ModuleDataStorage(const ModuleDataStorage&) = delete;
-        ModuleDataStorage(ModuleDataStorage&&) = delete;
-    protected:
-        void CleanUpData() override {}
-        void SetPatternMatrix() override {}
-        void SetNumPatterns() override {}
-        void SetPatterns() override {}
+        // This non-specialized primary template should never be used
+        ModuleDataStorage() = delete;
     };
 
     template<class ModuleClass>
     class ModuleDataStorage<DataStorageType::kCOR, ModuleClass> : public ModuleDataStorageBase
     {
+    public:
+        using RowType = Row<ModuleClass>;
+        using PatternType = RowType*; // [row]
+
+        using PatternMatrixType = std::vector<std::vector<PatternIndex>>; // [channel][order]
+        using NumPatternsType = std::vector<PatternIndex>; // [channel]
+        using PatternStorageType = std::vector<PatternType*>; // [channel][pattern id]
+        using PatternMetadataType = PatternMetadata<ModuleClass>;
+        using PatternMetadataStorageType = std::vector<std::vector<PatternMetadataType>>; // [channel][pattern id]
+
+        [[nodiscard]] inline auto GetPatternId(ChannelIndex channel, OrderIndex order) const -> PatternIndex { return pattern_matrix_[channel][order]; }
+        inline void SetPatternId(ChannelIndex channel, OrderIndex order, PatternIndex pattern_id) { pattern_matrix_[channel][order] = pattern_id; }
+        [[nodiscard]] inline auto GetNumPatterns(ChannelIndex channel) const -> PatternIndex { return num_patterns_[channel]; }
+        inline void SetNumPatterns(ChannelIndex channel, PatternIndex num_patterns) { num_patterns_[channel] = num_patterns; }
+        [[nodiscard]] inline auto GetPattern(ChannelIndex channel, OrderIndex order) const -> PatternType { return patterns_[channel][GetPatternId(channel, order)]; }
+        inline void SetPattern(ChannelIndex channel, OrderIndex order, PatternType&& pattern) { patterns_[channel][GetPatternId(channel, order)] = std::move(pattern); } // TODO: Deep copy?
+        [[nodiscard]] inline auto GetPatternById(ChannelIndex channel, PatternIndex pattern_id) const -> PatternType { return patterns_[channel][pattern_id]; }
+        inline void SetPatternById(ChannelIndex channel, PatternIndex pattern_id, PatternType&& pattern) { patterns_[channel][pattern_id] = std::move(pattern); } // TODO: Deep copy?
+        [[nodiscard]] inline auto GetRow(ChannelIndex channel, OrderIndex order, RowIndex row) const -> const RowType& { return GetPattern(channel, order)[row]; }
+        inline void SetRow(ChannelIndex channel, OrderIndex order, RowIndex row, const RowType& row_value) { GetPattern(channel, order)[row] = row_value; }
+        [[nodiscard]] inline auto GetRowById(ChannelIndex channel, PatternIndex pattern_id, RowIndex row) const -> const RowType& { return GetPatternById(channel, pattern_id)[row]; }
+        inline void SetRowById(ChannelIndex channel, PatternIndex pattern_id, RowIndex row, const RowType& row_value) { GetPatternById(channel, pattern_id)[row] = row_value; }
+        [[nodiscard]] inline auto GetPatternMetadata(ChannelIndex channel, PatternIndex pattern_id) const -> const PatternMetadataType& { return pattern_metadata_[channel][pattern_id]; }
+        inline void SetPatternMetadata(ChannelIndex channel, PatternIndex pattern_id, const PatternMetadataType& pattern_metadata) { pattern_metadata_[channel][pattern_id] = pattern_metadata; }
+
     protected:
         ModuleDataStorage() = default;
         ~ModuleDataStorage() override { CleanUpData(); }
@@ -158,10 +174,19 @@ namespace detail
             pattern_matrix_.clear();
             num_patterns_.clear();
             pattern_metadata_.clear();
+            num_channels_ = 0;
+            num_orders_ = 0;
+            num_rows_ = 0;
         }
 
-        void SetPatternMatrix() override
+        void SetPatternMatrix(ChannelIndex channels, OrderIndex orders, RowIndex rows) override
         {
+            CleanUpData();
+
+            num_channels_ = channels;
+            num_orders_ = orders;
+            num_rows_ = rows;
+
             pattern_matrix_.resize(num_channels_);
 
             for (ChannelIndex channel = 0; channel < num_channels_; ++channel)
@@ -206,32 +231,6 @@ namespace detail
             }
         }
 
-    public:
-        using RowType = Row<ModuleClass>;
-        using PatternType = RowType*; // [row]
-
-        using PatternMatrixType = std::vector<std::vector<PatternIndex>>; // [channel][order]
-        using NumPatternsType = std::vector<PatternIndex>; // [channel]
-        using PatternStorageType = std::vector<PatternType*>; // [channel][pattern id]
-        using PatternMetadataType = PatternMetadata<ModuleClass>;
-        using PatternMetadataStorageType = std::vector<std::vector<PatternMetadataType>>; // [channel][pattern id]
-
-        [[nodiscard]] inline auto GetPatternId(ChannelIndex channel, OrderIndex order) const -> PatternIndex { return pattern_matrix_[channel][order]; }
-        inline void SetPatternId(ChannelIndex channel, OrderIndex order, PatternIndex pattern_id) { pattern_matrix_[channel][order] = pattern_id; }
-        [[nodiscard]] inline auto GetNumPatterns(ChannelIndex channel) const -> PatternIndex { return num_patterns_[channel]; }
-        inline void SetNumPatterns(ChannelIndex channel, PatternIndex num_patterns) { num_patterns_[channel] = num_patterns; }
-        [[nodiscard]] inline auto GetPattern(ChannelIndex channel, OrderIndex order) const -> PatternType { return patterns_[channel][GetPatternId(channel, order)]; }
-        inline void SetPattern(ChannelIndex channel, OrderIndex order, PatternType&& pattern) { patterns_[channel][GetPatternId(channel, order)] = std::move(pattern); } // TODO: Deep copy?
-        [[nodiscard]] inline auto GetPatternById(ChannelIndex channel, PatternIndex pattern_id) const -> PatternType { return patterns_[channel][pattern_id]; }
-        inline void SetPatternById(ChannelIndex channel, PatternIndex pattern_id, PatternType&& pattern) { patterns_[channel][pattern_id] = std::move(pattern); } // TODO: Deep copy?
-        [[nodiscard]] inline auto GetRow(ChannelIndex channel, OrderIndex order, RowIndex row) const -> const RowType& { return GetPattern(channel, order)[row]; }
-        inline void SetRow(ChannelIndex channel, OrderIndex order, RowIndex row, const RowType& row_value) { GetPattern(channel, order)[row] = row_value; }
-        [[nodiscard]] inline auto GetRowById(ChannelIndex channel, PatternIndex pattern_id, RowIndex row) const -> const RowType& { return GetPatternById(channel, pattern_id)[row]; }
-        inline void SetRowById(ChannelIndex channel, PatternIndex pattern_id, RowIndex row, const RowType& row_value) { GetPatternById(channel, pattern_id)[row] = row_value; }
-        [[nodiscard]] inline auto GetPatternMetadata(ChannelIndex channel, PatternIndex pattern_id) const -> const PatternMetadataType& { return pattern_metadata_[channel][pattern_id]; }
-        inline void SetPatternMetadata(ChannelIndex channel, PatternIndex pattern_id, const PatternMetadataType& pattern_metadata) { pattern_metadata_[channel][pattern_id] = pattern_metadata; }
-
-    protected:
         PatternMatrixType pattern_matrix_{}; // Stores patterns IDs for each channel and order in the pattern matrix
         NumPatternsType num_patterns_{}; // Patterns per channel
         PatternStorageType patterns_{}; // [channel][pattern id]
@@ -241,51 +240,6 @@ namespace detail
     template<class ModuleClass>
     class ModuleDataStorage<DataStorageType::kORC, ModuleClass> : public ModuleDataStorageBase
     {
-    protected:
-        ModuleDataStorage() = default;
-        ~ModuleDataStorage() override { CleanUpData(); }
-
-        void CleanUpData() override
-        {
-            for (PatternIndex pattern_id = 0; pattern_id < num_patterns_; ++pattern_id)
-            {
-                for (RowIndex row = 0; row < num_rows_; ++row)
-                {
-                    delete[] patterns_[pattern_id][row];
-                    patterns_[pattern_id][row] = nullptr;
-                }
-                delete[] patterns_[pattern_id];
-                patterns_[pattern_id] = nullptr;
-            }
-            patterns_.clear();
-
-            pattern_matrix_.clear();
-            num_patterns_ = 0;
-            pattern_metadata_.clear();
-        }
-
-        void SetPatternMatrix() override { pattern_matrix_.resize(num_orders_); }
-        void SetNumPatterns() override { num_patterns_ = *std::max_element(pattern_matrix_.begin(), pattern_matrix_.end()) + 1; }
-
-        void SetPatterns() override
-        {
-            patterns_.resize(num_patterns_);
-            if constexpr (!std::is_empty_v<PatternMetadataType>)
-            {
-                // Only set it if it's going to be used
-                pattern_metadata_.resize(num_patterns_);
-            }
-
-            for (PatternIndex pattern_id = 0; pattern_id < num_patterns_; ++pattern_id)
-            {
-                patterns_[pattern_id] = new RowType*[num_rows_];
-                for (RowIndex row = 0; row < num_rows_; ++row)
-                {
-                    patterns_[pattern_id][row] = new RowType[num_channels_]();
-                }
-            }
-        }
-
     public:
         using RowType = Row<ModuleClass>;
         using PatternType = RowType**; // [row][channel]
@@ -312,6 +266,61 @@ namespace detail
         inline void SetPatternMetadata(PatternIndex pattern_id, const PatternMetadataType& pattern_metadata) { pattern_metadata_[pattern_id] = pattern_metadata; }
 
     protected:
+        ModuleDataStorage() = default;
+        ~ModuleDataStorage() override { CleanUpData(); }
+
+        void CleanUpData() override
+        {
+            for (PatternIndex pattern_id = 0; pattern_id < num_patterns_; ++pattern_id)
+            {
+                for (RowIndex row = 0; row < num_rows_; ++row)
+                {
+                    delete[] patterns_[pattern_id][row];
+                    patterns_[pattern_id][row] = nullptr;
+                }
+                delete[] patterns_[pattern_id];
+                patterns_[pattern_id] = nullptr;
+            }
+            patterns_.clear();
+
+            pattern_matrix_.clear();
+            num_patterns_ = 0;
+            pattern_metadata_.clear();
+            num_channels_ = 0;
+            num_orders_ = 0;
+            num_rows_ = 0;
+        }
+
+        void SetPatternMatrix(ChannelIndex channels, OrderIndex orders, RowIndex rows) override
+        {
+            CleanUpData();
+            num_channels_ = channels;
+            num_orders_ = orders;
+            num_rows_ = rows;
+            pattern_matrix_.resize(num_orders_);
+        }
+
+        void SetNumPatterns() override { num_patterns_ = *std::max_element(pattern_matrix_.begin(), pattern_matrix_.end()) + 1; }
+
+        void SetPatterns() override
+        {
+            patterns_.resize(num_patterns_);
+            if constexpr (!std::is_empty_v<PatternMetadataType>)
+            {
+                // Only set it if it's going to be used
+                pattern_metadata_.resize(num_patterns_);
+            }
+
+            for (PatternIndex pattern_id = 0; pattern_id < num_patterns_; ++pattern_id)
+            {
+                patterns_[pattern_id] = new RowType*[num_rows_];
+                for (RowIndex row = 0; row < num_rows_; ++row)
+                {
+                    patterns_[pattern_id][row] = new RowType[num_channels_]();
+                }
+            }
+        }
+
         PatternMatrixType pattern_matrix_{}; // Stores patterns IDs for each order in the pattern matrix
         NumPatternsType num_patterns_{}; // Number of patterns
         PatternStorageType patterns_{}; // [pattern id]
@@ -319,17 +328,17 @@ namespace detail
     };
 
     /*
-        Define additional ModuleDataStorage specializations here as needed
-    */
-}
+     * Define additional ModuleDataStorage specializations here as needed
+     */
+} // namespace detail
 
 /*
-    ModuleData stores and provides access to song data such as
-    orders, patterns, rows, and other information.
-*/
+ * ModuleData stores and provides access to song data such as
+ * orders, patterns, rows, and other information.
+ */
 
 template<class ModuleClass>
-class ModuleData final : public detail::ModuleDataStorage<ModuleGlobalData<ModuleClass>::storage_type, ModuleClass> // TODO: composition over inheritance?
+class ModuleData final : public detail::ModuleDataStorage<ModuleGlobalData<ModuleClass>::storage_type, ModuleClass>
 {
 public:
     using RowType = Row<ModuleClass>;
@@ -342,19 +351,13 @@ public:
 
     using Storage = typename detail::ModuleDataStorage<storage_type, ModuleClass>;
 
-    ModuleData() { CleanUp(); }
+    ModuleData() = default;
     ~ModuleData() override { CleanUp(); }
 
     // This is the 1st initialization method to call
     void AllocatePatternMatrix(ChannelIndex channels, OrderIndex orders, RowIndex rows)
     {
-        Storage::CleanUpData();
-
-        Storage::num_channels_ = channels;
-        Storage::num_orders_ = orders;
-        Storage::num_rows_ = rows;
-
-        Storage::SetPatternMatrix();
+        Storage::SetPatternMatrix(channels, orders, rows);
     }
 
     // This is the 2nd initialization method to call
@@ -408,11 +411,6 @@ public:
     void CleanUp()
     {
         Storage::CleanUpData();
-
-        Storage::num_channels_ = 0;
-        Storage::num_orders_ = 0;
-        Storage::num_rows_ = 0;
-
         channel_metadata_.clear();
         global_data_ = {};
     }

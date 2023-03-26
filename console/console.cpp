@@ -47,12 +47,10 @@ auto main(int argc, char *argv[]) -> int
 
     InputOutput io;
     auto operation_type = ParseArgs(args, io);
-    if (operation_type == OperationType::kError)
-        return 1;
+    if (operation_type == OperationType::kError) { return 1; }
 
     // A help message was printed or some other action that doesn't require conversion
-    if (operation_type == OperationType::kInfo)
-        return 0;
+    if (operation_type == OperationType::kInfo) { return 0; }
 
     auto options = Factory<ConversionOptions>::Create(io.output_type);
     if (!options)
@@ -75,8 +73,7 @@ auto main(int argc, char *argv[]) -> int
         for (unsigned i = 0; i < args.size(); i++)
         {
             std::cerr << args[i];
-            if (i + 1 != args.size())
-                std::cerr << ", ";
+            if (i + 1 != args.size()) { std::cerr << ", "; }
         }
         std::cerr << "\n";
         return 1;
@@ -93,8 +90,7 @@ auto main(int argc, char *argv[]) -> int
 
     // Import the input file by inferring module type:
     input->Import(io.input_file);
-    if (input->HandleResults())
-        return 1;
+    if (input->HandleResults()) { return 1; }
 
     ////////// CONVERT //////////
 
@@ -106,15 +102,13 @@ auto main(int argc, char *argv[]) -> int
         return 1;
     }
 
-    if (output->HandleResults())
-        return 1;
+    if (output->HandleResults()) { return 1; }
 
     ////////// EXPORT //////////
 
     // Export the converted module to disk:
     output->Export(io.output_file);
-    if (output->HandleResults())
-        return 1;
+    if (output->HandleResults()) { return 1; }
 
     return 0;
 }
@@ -164,17 +158,23 @@ auto ParseArgs(std::vector<std::string>& args, InputOutput& io) -> OperationType
         std::vector<std::string> args_only_flags(args.begin() + 3, args.end());
 
         if (GlobalOptions::Get().ParseArgs(args_only_flags, true))
+        {
             return OperationType::kError;
+        }
 
         if (GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::kVerbose).GetValue<bool>()) // If --verbose=true
         {
             const bool help_provided = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::kHelp).GetExplicitlyProvided();
             if (help_provided)
+            {
                 std::cout << "Ignoring the \"--help\" command.\n";
+            }
 
             const bool version_provided = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::kVersion).GetExplicitlyProvided();
             if (version_provided)
+            {
                 std::cout << "Ignoring the \"--version\" command.\n";
+            }
         }
 
         const bool force = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::kForce).GetValue<bool>();

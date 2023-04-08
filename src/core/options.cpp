@@ -162,7 +162,7 @@ OptionDefinitionCollection::OptionDefinitionCollection(const OptionDefinitionCol
     {
         OptionDefinition* module_option = &map_pair.second;
 
-        const auto name = module_option->GetName();
+        const auto name = std::string{module_option->GetName()};
         name_options_map_[name] = module_option;
 
         const char short_name = module_option->GetShortName();
@@ -186,7 +186,7 @@ OptionDefinitionCollection::OptionDefinitionCollection(const std::initializer_li
         // Name mapping
         if (option.HasName())
         {
-            const auto name = option.GetName();
+            const auto name = std::string{option.GetName()};
             assert(name_options_map_.count(name) == 0 && "OptionDefinitionCollection(...): Duplicate option name found.");
             name_options_map_[name] = &id_options_map_[id];
         }
@@ -212,7 +212,7 @@ auto OptionDefinitionCollection::FindById(int id) const -> const OptionDefinitio
     return &id_options_map_.at(id);
 }
 
-auto OptionDefinitionCollection::FindByName(std::string_view name) const -> const OptionDefinition*
+auto OptionDefinitionCollection::FindByName(const std::string& name) const -> const OptionDefinition*
 {
     if (name_options_map_.count(name) == 0) { return nullptr; }
     return name_options_map_.at(name);
@@ -224,7 +224,7 @@ auto OptionDefinitionCollection::FindByShortName(char short_name) const -> const
     return short_name_options_map_.at(short_name);
 }
 
-auto OptionDefinitionCollection::FindIdByName(std::string_view name) const -> int
+auto OptionDefinitionCollection::FindIdByName(const std::string& name) const -> int
 {
     const OptionDefinition* ptr = FindByName(name);
     if (!ptr) { return kNotFound; }
@@ -586,7 +586,7 @@ auto OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unk
         else // --foo format argument
         {
             equals_pos = arg.find_first_of('=');
-            auto name = std::string_view{arg}.substr(2, equals_pos - 2); // From start to '=' or end of string - whichever comes first
+            const auto name = arg.substr(2, equals_pos - 2); // From start to '=' or end of string - whichever comes first
             def = definitions_->FindByName(name);
         }
 

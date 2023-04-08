@@ -177,9 +177,9 @@ public:
 
     // Find methods
     [[nodiscard]] auto FindById(int id) const -> const OptionDefinition*;
-    [[nodiscard]] auto FindByName(std::string_view name) const -> const OptionDefinition*;
+    [[nodiscard]] auto FindByName(const std::string& name) const -> const OptionDefinition*;
     [[nodiscard]] auto FindByShortName(char short_name) const -> const OptionDefinition*;
-    [[nodiscard]] auto FindIdByName(std::string_view name) const -> int;
+    [[nodiscard]] auto FindIdByName(const std::string& name) const -> int;
     [[nodiscard]] auto FindIdByShortName(char short_name) const -> int;
 
     // Other
@@ -187,7 +187,7 @@ public:
 
 private:
     std::map<int, OptionDefinition> id_options_map_;
-    std::unordered_map<std::string_view, OptionDefinition*> name_options_map_;
+    std::unordered_map<std::string, OptionDefinition*> name_options_map_;
     std::unordered_map<char, OptionDefinition*> short_name_options_map_;
 };
 

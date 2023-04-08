@@ -12,5 +12,6 @@
 
 #include "modules/dmf.h"
 #include "modules/mod.h"
+#include "modules/debug.h"
 
 #include "utils/utils.h"

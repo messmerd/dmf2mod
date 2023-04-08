@@ -29,7 +29,7 @@ class MOD::DMFConverter
 {
 public:
     DMFConverter() = delete;
-    DMFConverter(MOD& mod, const DMF& dmf) : mod_{mod}, dmf_{dmf}, options_{mod.GetOptions()->Cast<const MODConversionOptions>()} {}
+    DMFConverter(MOD& mod, const DMF& dmf) : mod_{mod}, dmf_{dmf}, options_{mod.GetOptions()->Cast<MODConversionOptions>()} {}
     ~DMFConverter() = default;
 
     void Convert();

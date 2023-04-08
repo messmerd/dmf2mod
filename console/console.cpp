@@ -151,7 +151,7 @@ auto ParseArgs(std::vector<std::string>& args, InputOutput& io) -> OperationType
     {
         if (args[1] == "--help")
         {
-            PrintHelp(args[0], Utils::GetTypeFromFileExtension(args[2]));
+            PrintHelp(args[0], Utils::GetTypeFromCommandName(args[2]));
             return OperationType::kInfo;
         }
 
@@ -179,14 +179,13 @@ auto ParseArgs(std::vector<std::string>& args, InputOutput& io) -> OperationType
 
         const bool force = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::kForce).GetValue<bool>();
 
-        std::string output_file, input_file;
-
         // Get input file
         if (Utils::FileExists(args[2]))
         {
-            if (Utils::GetTypeFromFilename(args[2]) != ModuleType::kNone)
+            io.input_type = Utils::GetTypeFromFilename(args[2]);
+            if (io.input_type != ModuleType::kNone)
             {
-                input_file = args[2];
+                io.input_file = args[2];
             }
             else
             {
@@ -203,17 +202,25 @@ auto ParseArgs(std::vector<std::string>& args, InputOutput& io) -> OperationType
         // Get output file
         if (Utils::GetFileExtension(args[1]).empty())
         {
-            if (Utils::GetTypeFromFileExtension(args[1]) != ModuleType::kNone)
+            io.output_type = Utils::GetTypeFromCommandName(args[1]);
+            if (io.output_type != ModuleType::kNone)
             {
-                const size_t dot_pos = input_file.rfind('.');
-                if (dot_pos == 0 || dot_pos + 1 >= input_file.size())
+                const size_t dot_pos = io.input_file.rfind('.');
+                if (dot_pos == 0 || dot_pos + 1 >= io.input_file.size())
                 {
                     std::cerr << "ERROR: The input file is invalid.\n";
                     return OperationType::kError;
                 }
 
+                auto ext = Utils::GetExtensionFromType(io.output_type);
+                if (ext.empty())
+                {
+                    std::cerr << "ERROR: The output type does not have a file extension defined.\n";
+                    return OperationType::kError;
+                }
+
                 // Construct output filename from the input filename
-                output_file = input_file.substr(0, dot_pos + 1) + args[1];
+                io.output_file = io.input_file.substr(0, dot_pos + 1) + std::string{ext};
             }
             else
             {
@@ -223,24 +230,20 @@ auto ParseArgs(std::vector<std::string>& args, InputOutput& io) -> OperationType
         }
         else
         {
-            output_file = args[1];
-            if (Utils::GetTypeFromFilename(args[1]) == ModuleType::kNone)
+            io.output_file = args[1];
+            io.output_type = Utils::GetTypeFromFilename(args[1]);
+            if (io.output_type == ModuleType::kNone)
             {
                 std::cerr << "ERROR: '" << Utils::GetFileExtension(args[1]) << "' is not a valid module type.\n";
                 return OperationType::kError;
             }
         }
 
-        if (Utils::FileExists(output_file) && !force)
+        if (Utils::FileExists(io.output_file) && !force)
         {
-            std::cerr << "ERROR: The output file '" << output_file << "' already exists. Run with the '-f' flag to allow the file to be overwritten.\n";
+            std::cerr << "ERROR: The output file '" << io.output_file << "' already exists. Run with the '-f' flag to allow the file to be overwritten.\n";
             return OperationType::kError;
         }
-
-        io.input_file = input_file;
-        io.input_type = Utils::GetTypeFromFilename(input_file);
-        io.output_file = output_file;
-        io.output_type = Utils::GetTypeFromFilename(output_file);
 
         if (io.input_type == io.output_type)
         {

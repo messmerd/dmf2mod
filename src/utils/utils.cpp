@@ -31,7 +31,7 @@ auto Utils::GetFileExtension(std::string_view filename) -> std::string
 {
     const auto ext = std::filesystem::path{filename}.extension().string();
     if (!ext.empty()) { return ext.substr(1); } // Remove "."
-    return "";
+    return std::string{};
 }
 
 auto Utils::FileExists(std::string_view filename) -> bool
@@ -54,7 +54,7 @@ auto Utils::GetTypeFromFileExtension(std::string_view extension) -> ModuleType
 
     for (const auto& [type, info] : Factory<Module>::TypeInfo())
     {
-        if (static_cast<Info<Module> const*>(info.get())->file_extension == extension)
+        if (static_cast<const Info<Module>*>(info.get())->file_extension == extension)
         {
             return type;
         }
@@ -63,9 +63,24 @@ auto Utils::GetTypeFromFileExtension(std::string_view extension) -> ModuleType
     return ModuleType::kNone;
 }
 
-auto Utils::GetExtensionFromType(ModuleType moduleType) -> std::string
+auto Utils::GetTypeFromCommandName(std::string_view command_name) -> ModuleType
 {
-    return static_cast<Info<Module> const*>(Factory<Module>::GetInfo(moduleType))->file_extension;
+    if (command_name.empty()) { return ModuleType::kNone; }
+
+    for (const auto& [type, info] : Factory<Module>::TypeInfo())
+    {
+        if (static_cast<const Info<Module>*>(info.get())->command_name == command_name)
+        {
+            return type;
+        }
+    }
+
+    return ModuleType::kNone;
+}
+
+auto Utils::GetExtensionFromType(ModuleType moduleType) -> std::string_view
+{
+    return static_cast<const Info<Module>*>(Factory<Module>::GetInfo(moduleType))->file_extension;
 }
 
 // Command-line arguments and options utils

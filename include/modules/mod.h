@@ -139,15 +139,15 @@ public:
     // Factory requires destructor to be public
     ~MOD() override = default;
 
-    enum class ImportError {kSuccess = 0};
+    enum class ImportError { kSuccess = 0 };
     enum class ImportWarning {};
 
-    enum class ExportError {kSuccess = 0};
+    enum class ExportError { kSuccess = 0 };
     enum class ExportWarning {};
 
     enum class ConvertError
     {
-        kSuccess=0,
+        kSuccess = 0,
         kNotGameBoy,
         kTooManyPatternMatrixRows,
         kOver64RowPattern,

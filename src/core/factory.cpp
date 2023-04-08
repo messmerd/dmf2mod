@@ -10,13 +10,11 @@
 
 using namespace d2m;
 
-using MODOptionEnum = MODConversionOptions::OptionEnum;
-
 template<>
 Factory<ConversionOptions>::InitializeImpl::InitializeImpl()
 {
-    auto mod_options = OptionDefinitionCollection
-    {
+    using MODOptionEnum = MODConversionOptions::OptionEnum;
+    auto mod_options = OptionDefinitionCollection{
         /* Type  / Option id                    / Full name    / Short / Default   / Possib. vals          / Description */
         {kOption, MODOptionEnum::kArpeggio,       "arp",         '\0',   false,                              "Allow arpeggio effects"},
         {kOption, MODOptionEnum::kPortamento,     "port",        '\0',   false,                              "Allow portamento up/down effects"},
@@ -27,11 +25,26 @@ Factory<ConversionOptions>::InitializeImpl::InitializeImpl()
 
     Register<ModuleType::kDMF, DMFConversionOptions>();
     Register<ModuleType::kMOD, MODConversionOptions>(std::move(mod_options));
+
+#ifndef NDEBUG
+    using DebugOptionEnum = DebugConversionOptions::OptionEnum;
+    auto debug_options = OptionDefinitionCollection{
+        /* Type  / Option id                    / Full name    / Short / Default   / Possib. vals          / Description */
+        {kCommand, DebugOptionEnum::kDump,         "dump",       'd',    false,                              "Dump generated data"},
+        {kOption,  DebugOptionEnum::kAppend,       "append",     'a',    true,                               "Append results to log file or overwrite"},
+        {kOption,  DebugOptionEnum::kGenDataFlags, "gen",        'g',    0,                                  "Flags to use when generating data"}
+    };
+    Register<ModuleType::kDebug, DebugConversionOptions>(std::move(debug_options));
+#endif
 };
 
 template<>
 Factory<Module>::InitializeImpl::InitializeImpl()
 {
-    Register<ModuleType::kDMF, DMF>("Deflemask", "dmf");
-    Register<ModuleType::kMOD, MOD>("ProTracker", "mod");
+    Register<ModuleType::kDMF, DMF>("Deflemask", "dmf", "dmf");
+    Register<ModuleType::kMOD, MOD>("ProTracker", "mod", "mod");
+
+#ifndef NDEBUG
+    Register<ModuleType::kDebug, Debug>("Debug", "debug", "log");
+#endif
 };

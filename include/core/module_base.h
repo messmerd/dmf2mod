@@ -32,6 +32,7 @@ template<>
 struct Info<ModuleBase> : public InfoBase
 {
     std::string friendly_name;
+    std::string command_name;
     std::string file_extension;
 };
 

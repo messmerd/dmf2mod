@@ -16,17 +16,16 @@ void ConversionOptionsBase::PrintHelp(ModuleType module_type)
 {
     const auto& definitions = Factory<ConversionOptionsBase>::GetInfo(module_type)->option_definitions;
 
-    std::string name = Factory<Module>::GetInfo(module_type)->file_extension;
-    if (name.empty()) { return; }
+    std::string name = Factory<Module>::GetInfo(module_type)->command_name;
+    std::string ext = Factory<Module>::GetInfo(module_type)->command_name;
+    if (name.empty() || ext.empty()) { return; }
 
-    for (auto& c : name)
-    {
-        c = toupper(c);
-    }
+    for (auto& c : name) { c = toupper(c); }
+    for (auto& c : ext) { c = toupper(c); }
 
     if (definitions.Count() == 0)
     {
-        std::cout << name << " files have no conversion options.\n";
+        std::cout << ext << " files have no conversion options.\n";
         return;
     }
 

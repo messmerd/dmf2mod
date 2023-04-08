@@ -14,7 +14,10 @@ enum class ModuleType
 {
     kNone=0,
     kDMF,
-    kMOD
+    kMOD,
+#ifndef NDEBUG
+    kDebug,
+#endif
 };
 
 } // namespace d2m

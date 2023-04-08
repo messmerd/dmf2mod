@@ -29,7 +29,8 @@ public:
     // File utils which require Factory initialization
     [[nodiscard]] static auto GetTypeFromFilename(std::string_view filename) -> ModuleType;
     [[nodiscard]] static auto GetTypeFromFileExtension(std::string_view extension) -> ModuleType;
-    [[nodiscard]] static auto GetExtensionFromType(ModuleType module_type) -> std::string;
+    [[nodiscard]] static auto GetTypeFromCommandName(std::string_view command_name) -> ModuleType;
+    [[nodiscard]] static auto GetExtensionFromType(ModuleType module_type) -> std::string_view;
 
     // Command-line arguments and options utils
     [[nodiscard]] static auto GetArgsAsVector(int argc, char** argv) -> std::vector<std::string>;

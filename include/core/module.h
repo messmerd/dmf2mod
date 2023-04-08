@@ -55,7 +55,7 @@ public:
 
 protected:
 
-    ModuleInterface() : generated_data_(std::make_shared<GeneratedData<Derived>>()) {}
+    ModuleInterface() = default;
 
     inline auto GetData() -> ModuleData<Derived>& { return data_; }
     inline auto GetGlobalData() -> ModuleGlobalData<Derived>& { return GetData().GlobalData(); }
@@ -71,7 +71,7 @@ private:
 
     // Information about a module file which must be calculated.
     // Cannot be stored directly because other Modules need to modify its contents without modifying the Module
-    const std::shared_ptr<GeneratedData<Derived>> generated_data_;
+    const std::shared_ptr<GeneratedData<Derived>> generated_data_ = std::make_shared<GeneratedData<Derived>>();
 };
 
 } // namespace d2m

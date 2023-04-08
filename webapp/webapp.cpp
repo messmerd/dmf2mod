@@ -73,7 +73,7 @@ auto GetAvailableModulesWrapper() -> std::vector<int>
  */
 auto GetExtensionFromTypeWrapper(int module_type) -> std::string
 {
-    return Utils::GetExtensionFromType(static_cast<ModuleType>(module_type));
+    return std::string{Utils::GetExtensionFromType(static_cast<ModuleType>(module_type))};
 }
 
 /*

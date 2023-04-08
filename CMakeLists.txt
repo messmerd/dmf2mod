@@ -31,6 +31,7 @@ set(CORE_SOURCES
 set(MODULE_SOURCES
     ${SRC}/modules/dmf.cpp
     ${SRC}/modules/mod.cpp
+    ${SRC}/modules/debug.cpp
 )
 
 set(UTILS_SOURCES

@@ -40,8 +40,8 @@ struct StateDefinitionTag {};
 struct OneShotDefinitionTag {};
 
 // Sourced from: https://stackoverflow.com/a/53398815/8704745
-template<typename... input_t>
-using tuple_cat_t = decltype(std::tuple_cat(std::declval<input_t>()...));
+template<typename... Input>
+using tuple_cat_t = decltype(std::tuple_cat(std::declval<Input>()...));
 
 template<typename T>
 struct WrappedStateData {};
@@ -50,14 +50,14 @@ template<typename... Ts>
 struct WrappedStateData<std::tuple<Ts...>>
 {
     // type is either an empty tuple or a tuple with each Ts wrapped in a vector of pairs
-    using type = std::conditional_t<sizeof...(Ts)==0, std::tuple<>, std::tuple<std::vector<std::pair<OrderRowPosition, Ts>>...>>;
+    using type = std::conditional_t<sizeof...(Ts) == 0, std::tuple<>, std::tuple<std::vector<std::pair<OrderRowPosition, Ts>>...>>;
 };
 
-template<typename... T>
-using WrappedStateDataType = typename WrappedStateData<T...>::type;
+template<typename... Ts>
+using WrappedStateDataType = typename WrappedStateData<Ts...>::type;
 
 template<typename T>
-[[nodiscard]] constexpr auto abs(const T x) noexcept -> T
+[[nodiscard]] inline constexpr auto abs(const T x) noexcept -> T
 {
     return x == T(0) ? T(0) : (x < T(0) ? -x : x);
 }
@@ -124,9 +124,6 @@ template<class T> using SoundIndexStateData = typename SoundIndex<T>::type;
 
 struct GlobalStateCommonDefinition : public detail::StateDefinitionTag
 {
-    static constexpr int kCommonCount = 3; // # of variants in StateEnumCommon (remember to update this after changing the enum)
-    static constexpr int kLowerBound = -kCommonCount;
-
     // Common state data have negative indexes
     enum StateEnumCommon
     {
@@ -143,13 +140,13 @@ struct GlobalStateCommonDefinition : public detail::StateDefinitionTag
         SpeedBStateData,
         SpeedAStateData
         >;
+
+    static constexpr int kCommonCount = std::tuple_size_v<StateDataCommon>;
+    static constexpr int kLowerBound = -kCommonCount;
 };
 
 struct GlobalOneShotCommonDefinition : public detail::OneShotDefinitionTag
 {
-    static constexpr int kOneShotCommonCount = 3; // # of variants in OneShotEnumCommon (remember to update this after changing the enum)
-    static constexpr int kOneShotLowerBound = -kOneShotCommonCount;
-
     // Common one-shot data have negative indexes
     enum OneShotEnumCommon
     {
@@ -166,30 +163,28 @@ struct GlobalOneShotCommonDefinition : public detail::OneShotDefinitionTag
         PatBreakStateData,
         PosJumpStateData
         >;
+
+    static constexpr int kOneShotCommonCount = std::tuple_size_v<OneShotDataCommon>;
+    static constexpr int kOneShotLowerBound = -kOneShotCommonCount;
 };
 
-template<class ModuleClass>
 struct ChannelStateCommonDefinition : public detail::StateDefinitionTag
 {
-    static constexpr int kCommonCount = 12; // # of variants in StateEnumCommon (remember to update this after changing the enum)
-    static constexpr int kLowerBound = -kCommonCount;
-
     // Common state data have negative indexes
     enum StateEnumCommon
     {
         // Add additional variants here
-        kVolSlide          = -12,
-        kPanning           = -11,
-        kTremolo           = -10,
-        kVibratoVolSlide   = -9,
-        kPort2NoteVolSlide = -8,
-        kVibrato           = -7,
-        kPort              = -6, // should this be split into port up, port down, and port2note?
-        kArp               = -5,
-        kVolume            = -4,
-        kNotePlaying       = -3,
-        kNoteSlot          = -2,
-        kSoundIndex        = -1
+        kVolSlide          = -11,
+        kPanning           = -10,
+        kTremolo           = -9,
+        kVibratoVolSlide   = -8,
+        kPort2NoteVolSlide = -7,
+        kVibrato           = -6,
+        kPort              = -5, // should this be split into port up, port down, and port2note?
+        kArp               = -4,
+        kVolume            = -3,
+        kNotePlaying       = -2,
+        kNoteSlot          = -1
         // StateEnum contains values >= 0
     };
 
@@ -205,16 +200,15 @@ struct ChannelStateCommonDefinition : public detail::StateDefinitionTag
         ArpStateData,
         VolumeStateData,
         NotePlayingStateData,
-        NoteSlotStateData,
-        SoundIndexStateData<ModuleClass>
+        NoteSlotStateData
         >;
+
+    static constexpr int kCommonCount = std::tuple_size_v<StateDataCommon>;
+    static constexpr int kLowerBound = -kCommonCount;
 };
 
 struct ChannelOneShotCommonDefinition : public detail::OneShotDefinitionTag
 {
-    static constexpr int kOneShotCommonCount = 3; // # of variants in OneShotEnumCommon (remember to update this after changing the enum)
-    static constexpr int kOneShotLowerBound = -kOneShotCommonCount;
-
     // Common one-shot data have negative indexes
     enum OneShotEnumCommon
     {
@@ -231,14 +225,44 @@ struct ChannelOneShotCommonDefinition : public detail::OneShotDefinitionTag
         NoteCutStateData,
         RetriggerStateData
         >;
+
+    static constexpr int kOneShotCommonCount = std::tuple_size_v<OneShotDataCommon>;
+    static constexpr int kOneShotLowerBound = -kOneShotCommonCount;
 };
 
 ///////////////////////////////////////////////////////////
 // STATE STORAGE
 ///////////////////////////////////////////////////////////
 
+template<class CommonDef>
+class StateStorageCommon : public CommonDef
+{
+public:
+    using typename CommonDef::StateDataCommon;
+
+    // Tuple of all common data types stored by this state, wrapped. They should all be vectors of pairs.
+    using StateDataCommonWrapped = detail::WrappedStateDataType<StateDataCommon>;
+
+    virtual ~StateStorageCommon() = default;
+
+    template<int state_data_index, std::enable_if_t<(state_data_index < 0), bool> = true>
+    [[nodiscard]] constexpr auto Get2() const -> const auto&
+    {
+        return std::get<state_data_index + CommonDef::kCommonCount>(common_data_);
+    }
+
+    template<int state_data_index, std::enable_if_t<(state_data_index < 0), bool> = true>
+    [[nodiscard]] constexpr auto Get2() -> auto&
+    {
+        return std::get<state_data_index + CommonDef::kCommonCount>(common_data_);
+    }
+
+private:
+    StateDataCommonWrapped common_data_;
+};
+
 template<class CommonDef, typename... Ts>
-class StateStorage : public CommonDef
+class StateStorage : public StateStorageCommon<CommonDef>
 {
 public:
     static constexpr int kUpperBound = sizeof...(Ts); // # of module-specific state data types
@@ -246,34 +270,60 @@ public:
     // The StateEnum for any module-specific types should be defined
     //  in the GlobalState/ChannelState template specialization
 
-    using StateDataModuleSpecific = std::tuple<Ts...>;
+    using StateDataSpecialized = std::tuple<Ts...>;
 
-    // Single tuple of all data types stored by this state
-    using StateData = detail::tuple_cat_t<typename CommonDef::StateDataCommon, StateDataModuleSpecific>;
+    // Tuple of all specialized data types stored by this state, wrapped. They should all be vectors of pairs.
+    using StateDataSpecializedWrapped = detail::WrappedStateDataType<StateDataSpecialized>;
 
-    // Single tuple of all wrapped data types stored by this state. They should all be vectors of pairs.
-    using StateDataWrapped = detail::WrappedStateDataType<StateData>;
+    using CombinedStateData = detail::tuple_cat_t<typename StateStorageCommon<CommonDef>::StateDataCommon, StateDataSpecialized>;
 
-    // Returns an immutable reference to state data at index state_data_index
     template<int state_data_index>
     [[nodiscard]] constexpr auto Get() const -> const auto&
     {
-        return std::get<state_data_index + CommonDef::kCommonCount>(data_);
+        if constexpr (state_data_index >= 0) { return std::get<state_data_index>(specialized_data_); }
+        else { return StateStorageCommon<CommonDef>::template Get2<state_data_index>(); }
     }
 
-    // Returns a mutable reference to state data at index state_data_index
     template<int state_data_index>
     [[nodiscard]] constexpr auto Get() -> auto&
     {
-        return std::get<state_data_index + CommonDef::kCommonCount>(data_);
+        if constexpr (state_data_index >= 0) { return std::get<state_data_index>(specialized_data_); }
+        else { return StateStorageCommon<CommonDef>::template Get2<state_data_index>(); }
     }
 
 private:
-    StateDataWrapped data_; // Stores all state data
+    StateDataSpecializedWrapped specialized_data_;
+};
+
+template<class CommonDef>
+class OneShotStorageCommon : public CommonDef
+{
+public:
+    using typename CommonDef::OneShotDataCommon;
+
+    // Tuple of all common data types stored by this state, wrapped. They should all be vectors of pairs.
+    using OneShotDataCommonWrapped = detail::WrappedStateDataType<OneShotDataCommon>;
+
+    virtual ~OneShotStorageCommon() = default;
+
+    template<int oneshot_data_index, std::enable_if_t<(oneshot_data_index < 0), bool> = true>
+    [[nodiscard]] constexpr auto GetOneShot2() const -> const auto&
+    {
+        return std::get<oneshot_data_index + CommonDef::kOneShotCommonCount>(common_oneshot_data_);
+    }
+
+    template<int oneshot_data_index, std::enable_if_t<(oneshot_data_index < 0), bool> = true>
+    [[nodiscard]] constexpr auto GetOneShot2() -> auto&
+    {
+        return std::get<oneshot_data_index + CommonDef::kOneShotCommonCount>(common_oneshot_data_);
+    }
+
+private:
+    OneShotDataCommonWrapped common_oneshot_data_;
 };
 
 template<class CommonDef, typename... Ts>
-class OneShotStorage : public CommonDef
+class OneShotStorage : public OneShotStorageCommon<CommonDef>
 {
 public:
     static constexpr int kOneShotUpperBound = sizeof...(Ts); // # of module-specific one-shot data types
@@ -281,30 +331,27 @@ public:
     // The OneShotEnum for any module-specific types should be defined
     //  in the GlobalState/ChannelState template specialization
 
-    using OneShotDataModuleSpecific = std::tuple<Ts...>;
+    using OneShotDataSpecialized = std::tuple<Ts...>;
 
-    // Single tuple of all data types stored by this one-shot state
-    using OneShotData = detail::tuple_cat_t<typename CommonDef::OneShotDataCommon, OneShotDataModuleSpecific>;
+    // Tuple of all specialized data types stored by this state, wrapped. They should all be vectors of pairs.
+    using OneShotDataSpecializedWrapped = detail::WrappedStateDataType<OneShotDataSpecialized>;
 
-    // Single tuple of all wrapped data types stored by this one-shot state. They should all be vectors of pairs.
-    using OneShotDataWrapped = detail::WrappedStateDataType<OneShotData>;
-
-    // Returns an immutable reference to one-shot data at index oneshot_data_index
     template<int oneshot_data_index>
     [[nodiscard]] constexpr auto GetOneShot() const -> const auto&
     {
-        return std::get<oneshot_data_index + CommonDef::kOneShotCommonCount>(oneshot_data_);
+        if constexpr (oneshot_data_index >= 0) { return std::get<oneshot_data_index>(specialized_oneshot_data_); }
+        else { return OneShotStorageCommon<CommonDef>::template GetOneShot2<oneshot_data_index>(); }
     }
 
-    // Returns a mutable reference to one-shot data at index oneshot_data_index
     template<int oneshot_data_index>
     [[nodiscard]] constexpr auto GetOneShot() -> auto&
     {
-        return std::get<oneshot_data_index + CommonDef::kOneShotCommonCount>(oneshot_data_);
+        if constexpr (oneshot_data_index >= 0) { return std::get<oneshot_data_index>(specialized_oneshot_data_); }
+        else { return OneShotStorageCommon<CommonDef>::template GetOneShot2<oneshot_data_index>(); }
     }
 
 private:
-    OneShotDataWrapped oneshot_data_; // Stores all one-shot state data
+    OneShotDataSpecializedWrapped specialized_oneshot_data_;
 };
 
 ///////////////////////////////////////////////////////////
@@ -334,14 +381,44 @@ struct GlobalState :
 
 template<class ModuleClass>
 struct ChannelState :
-    public StateStorage<ChannelStateCommonDefinition<ModuleClass> /* Module-specific types go here in any specializations */>,
+    public StateStorage<ChannelStateCommonDefinition, SoundIndexStateData<ModuleClass> /* Module-specific types go here in any specializations */>,
     public OneShotStorage<ChannelOneShotCommonDefinition /* Module-specific types go here in any specializations */>
 {
-    using typename ChannelStateCommonDefinition<ModuleClass>::StateEnumCommon;
-    enum StateEnum {};
+    using typename ChannelStateCommonDefinition::StateEnumCommon;
+    enum StateEnum { kSoundIndex };
     using typename ChannelOneShotCommonDefinition::OneShotEnumCommon;
     enum OneShotEnum {};
 };
+
+namespace detail {
+    enum StateType { kState, kOneShot };
+
+    template<class CommonStorage, StateType state_type>
+    inline constexpr int kStorageCommonCount = state_type == kState ? CommonStorage::kCommonCount : CommonStorage::kOneShotCommonCount;
+
+    template<class CommonStorage, StateType state_type>
+    using CommonStorageDataType = std::conditional_t<state_type == kState, typename CommonStorage::StateDataCommon, typename CommonStorage::OneShotDataCommon>;
+    template<class SpecializedStorage, StateType state_type>
+    using SpecializedStorageDataType = std::conditional_t<state_type == kState, typename SpecializedStorage::StateDataSpecialized, typename SpecializedStorage::OneShotDataSpecialized>;
+
+    template<class CommonStorage, StateType state_type>
+    using CommonStorageWrappedDataType = std::conditional_t<state_type == kState, typename CommonStorage::StateDataCommonWrapped, typename CommonStorage::OneShotDataCommonWrapped>;
+    template<class SpecializedStorage, StateType state_type>
+    using SpecializedStorageWrappedDataType = std::conditional_t<state_type == kState, typename SpecializedStorage::StateDataSpecializedWrapped, typename SpecializedStorage::OneShotDataSpecializedWrapped>;
+
+    template<int data_index, class Storage, StateType state_type>
+    using GetTypeFromStorage = std::conditional_t<(data_index < 0),
+        std::tuple_element_t<static_cast<size_t>(data_index + kStorageCommonCount<Storage, state_type>), CommonStorageDataType<Storage, state_type>>,
+        std::tuple_element_t<static_cast<size_t>(data_index), SpecializedStorageDataType<Storage, state_type>>
+    >;
+
+    template<int data_index, class Storage, StateType state_type>
+    using GetWrappedTypeFromStorage = std::conditional_t<(data_index < 0),
+        std::tuple_element_t<data_index + kStorageCommonCount<Storage, state_type>, CommonStorageWrappedDataType<Storage, state_type>>,
+        std::tuple_element_t<static_cast<size_t>(data_index), SpecializedStorageWrappedDataType<Storage, state_type>>
+    >;
+
+} // namespace detail
 
 ///////////////////////////////////////////////////////////
 // STATE READER
@@ -351,21 +428,21 @@ namespace detail {
 
 // Compile-time for loop helper
 template<int start, class Reader, class Tuple, typename Function, int... integers>
-void CopyStateHelper(Reader const* reader, Tuple& t, const Function& f, std::integer_sequence<int, integers...>&&)
+void CopyStateHelper(const Reader* reader, Tuple& t, const Function& f, std::integer_sequence<int, integers...>&&)
 {
     (f(std::get<integers>(t), reader->template Get<start + integers>()), ...);
 }
 
 // Function F arguments are: (inner data tuple element reference, inner data)
 template<int start, int end, class Reader, class Tuple, typename Function>
-void CopyState(Reader const* reader, Tuple& t, const Function& f)
+void CopyState(const Reader* reader, Tuple& t, const Function& f)
 {
     CopyStateHelper<start>(reader, t, f, std::make_integer_sequence<int, detail::abs(start) + end>{});
 }
 
 // Compile-time for loop helper
 template<int start, bool oneshots, class Reader, typename Function, int... integers>
-void NextStateHelper(Reader const* reader, const Function& f, std::integer_sequence<int, integers...>&&)
+void NextStateHelper(const Reader* reader, const Function& f, std::integer_sequence<int, integers...>&&)
 {
     if constexpr (oneshots) { (f(reader->template GetOneShotVec<start + integers>(), start + integers), ...); }
     else { (f(reader->template GetVec<start + integers>(), start + integers), ...); }
@@ -373,7 +450,7 @@ void NextStateHelper(Reader const* reader, const Function& f, std::integer_seque
 
 // Function F arguments are: (wrapped state/one-shot data vector, index)
 template<int start, int end, bool oneshots, class Reader, typename Function>
-void NextState(Reader const* reader, const Function& f)
+void NextState(const Reader* reader, const Function& f)
 {
     NextStateHelper<start, oneshots>(reader, f, std::make_integer_sequence<int, detail::abs(start) + end>{});
 }
@@ -389,22 +466,21 @@ public:
 
     // Bring in dependencies:
     using State = StateClass;
-    using StateData = typename State::StateData;
-    using StateDataWrapped = typename State::StateDataWrapped;
+    //using StateData = typename State::StateData;
+    //using StateDataWrapped = typename State::StateDataWrapped;
     using StateEnumCommon = typename State::StateEnumCommon;
     using StateEnum = typename State::StateEnum;
 
-    using OneShotData = typename State::OneShotData;
-    using OneShotDataWrapped = typename State::OneShotDataWrapped;
+    //using OneShotData = typename State::OneShotData;
+    //using OneShotDataWrapped = typename State::OneShotDataWrapped;
     using OneShotEnumCommon = typename State::OneShotEnumCommon;
     using OneShotEnum = typename State::OneShotEnum;
 
     // Helpers:
-    template<int state_data_index> using get_data_t = std::tuple_element_t<state_data_index + State::kCommonCount, StateData>;
-    template<int state_data_index> using get_data_wrapped_t = std::tuple_element_t<state_data_index + State::kCommonCount, StateDataWrapped>;
-
-    template<int oneshot_data_index> using get_oneshot_data_t = std::tuple_element_t<oneshot_data_index + State::kOneShotCommonCount, OneShotData>;
-    template<int oneshot_data_index> using get_oneshot_data_wrapped_t = std::tuple_element_t<oneshot_data_index + State::kOneShotCommonCount, OneShotDataWrapped>;
+    template<int data_index, detail::StateType state_type>
+    using GetType = detail::GetTypeFromStorage<data_index, State, state_type>;
+    template<int data_index, detail::StateType state_type>
+    using GetWrappedType = detail::GetWrappedTypeFromStorage<data_index, State, state_type>;
 
     using Deltas = std::array<bool, State::kCommonCount + State::kUpperBound>;
     using OneShotDeltas = std::array<bool, State::kOneShotCommonCount + State::kOneShotUpperBound>;
@@ -413,8 +489,8 @@ public:
     StateReader(State* state) : state_{state} { Reset(); }
     virtual ~StateReader() = default;
 
-    void AssignState(State const* state) { state_ = state; channel_ = 0; }
-    void AssignState(State const* state, ChannelIndex channel) { state_ = state; channel_ = channel; }
+    void AssignState(const State* state) { state_ = state; channel_ = 0; }
+    void AssignState(const State* state, ChannelIndex channel) { state_ = state; channel_ = channel; }
 
     // Set current read position to the beginning of the Module's state data
     virtual void Reset()
@@ -428,7 +504,7 @@ public:
 
     // Get the specified state data vector (state_data_index)
     template<int state_data_index>
-    [[nodiscard]] inline constexpr auto GetVec() const -> const get_data_wrapped_t<state_data_index>&
+    [[nodiscard]] inline constexpr auto GetVec() const -> const GetWrappedType<state_data_index, detail::kState>&
     {
         assert(state_);
         return state_->template Get<state_data_index>();
@@ -436,7 +512,7 @@ public:
 
     // Get the specified one-shot data vector (oneshot_data_index)
     template<int oneshot_data_index>
-    [[nodiscard]] inline constexpr auto GetOneShotVec() const -> const get_oneshot_data_wrapped_t<oneshot_data_index>&
+    [[nodiscard]] inline constexpr auto GetOneShotVec() const -> const GetWrappedType<oneshot_data_index, detail::kOneShot>&
     {
         assert(state_);
         return state_->template GetOneShot<oneshot_data_index>();
@@ -444,7 +520,7 @@ public:
 
     // Get the specified state data (state_data_index) at the current read position
     template<int state_data_index>
-    [[nodiscard]] inline constexpr auto Get() const -> const get_data_t<state_data_index>&
+    [[nodiscard]] inline constexpr auto Get() const -> const GetType<state_data_index, detail::kState>&
     {
         const int vec_index = cur_indexes_[GetIndex(state_data_index)];
         const auto& vec = GetVec<state_data_index>();
@@ -454,24 +530,24 @@ public:
 
     // Get the specified state data (state_data_index) at the specified read index (vec_index) within the vector
     template<int state_data_index>
-    [[nodiscard]] inline constexpr auto Get(size_t vec_index) const -> const get_data_t<state_data_index>&
+    [[nodiscard]] inline constexpr auto Get(size_t vec_index) const -> const GetType<state_data_index, detail::kState>&
     {
         return GetVec<state_data_index>().at(vec_index).second;
     }
 
     // Get the specified one-shot data (oneshot_data_index) at the current read position. Only valid if GetOneShotDelta() returned true.
     template<int oneshot_data_index>
-    [[nodiscard]] inline constexpr auto GetOneShot() const -> const get_oneshot_data_t<oneshot_data_index>&
+    [[nodiscard]] inline constexpr auto GetOneShot() const -> const GetType<oneshot_data_index, detail::kOneShot>&
     {
         const int vec_index = cur_indexes_oneshot_[GetOneShotIndex(oneshot_data_index)];
         assert(vec_index > 0 && "Only call GetOneShot() if GetOneShotDelta() returned true");
-        return GetOneShotVec<oneshot_data_index>().at(vec_index-1).second;
+        return GetOneShotVec<oneshot_data_index>().at(vec_index - 1).second;
     }
 
     // Gets the specified state data (state_data_index) if it is exactly at the current read position.
     // TODO: This makes a copy. Try using std::reference_wrapper
     template<int state_data_index>
-    [[nodiscard]] inline constexpr auto GetImpulse() const -> std::optional<get_data_t<state_data_index>>
+    [[nodiscard]] inline constexpr auto GetImpulse() const -> std::optional<GetType<state_data_index, detail::kState>>
     {
         const auto& vec = GetVec<state_data_index>();
         assert(!vec.empty() && "The initial state must be set before reading");
@@ -484,9 +560,9 @@ public:
     }
 
     // Returns a tuple of all the state values at the current read position
-    [[nodiscard]] auto Copy() const -> StateData
+    [[nodiscard]] auto Copy() const -> typename State::CombinedStateData
     {
-        StateData return_val;
+        typename State::CombinedStateData return_val;
         detail::CopyState<State::kLowerBound, State::kUpperBound>(this, return_val,
             [](auto& return_val_elem, const auto& val) constexpr { return_val_elem = val; });
         return return_val;
@@ -573,7 +649,7 @@ public:
     }
 
     // Returns state data at given position, then restores position to what it was previously
-    [[nodiscard]] auto ReadAt(OrderRowPosition pos) -> StateData
+    [[nodiscard]] auto ReadAt(OrderRowPosition pos) -> typename State::CombinedStateData
     {
         const OrderRowPosition cur_pos_temp = cur_pos_;
         const auto deltas_temp = deltas_;
@@ -595,7 +671,7 @@ public:
     }
 
     // Returns state data at given position, then restores position to what it was previously
-    [[nodiscard]] inline auto ReadAt(OrderIndex order, RowIndex row) -> StateData
+    [[nodiscard]] inline auto ReadAt(OrderIndex order, RowIndex row) -> typename State::CombinedStateData
     {
         return ReadAt(GetOrderRowPosition(order, row));
     }
@@ -620,15 +696,15 @@ public:
     // Only useful for ChannelStateReader
     [[nodiscard]] inline auto GetChannel() const -> ChannelIndex { return channel_; }
 
-    // Gets a desired value from StateData
+    // Gets a desired value from CombinedStateData
     template<int state_data_index>
-    [[nodiscard]] static constexpr auto GetValue(const StateData& data) -> get_data_t<state_data_index>
+    [[nodiscard]] static constexpr auto GetValue(const typename State::CombinedStateData& data) -> GetType<state_data_index, detail::kState>
     {
         return std::get<GetIndex(state_data_index)>(data);
     }
 
     template<int state_data_index>
-    [[nodiscard]] constexpr auto Find(std::function<bool(const get_data_t<state_data_index>&)> cmp) const -> std::optional<std::pair<OrderRowPosition, get_data_t<state_data_index>>>
+    [[nodiscard]] constexpr auto Find(std::function<bool(const GetType<state_data_index, detail::kState>&)> cmp) const -> std::optional<std::pair<OrderRowPosition, GetType<state_data_index, detail::kState>>>
     {
         const auto& vec = GetVec<state_data_index>();
         assert(!vec.empty() && "The initial state must be set before reading");
@@ -694,14 +770,15 @@ public:
     // Bring in dependencies:
     using R = StateReader<StateClass>;
     using typename R::State;
-    using typename R::StateData;
     using typename R::StateEnumCommon;
     using typename R::StateEnum;
-    using typename R::OneShotData;
     using typename R::OneShotEnumCommon;
     using typename R::OneShotEnum;
-    template<int state_data_index> using get_data_t = typename R::template get_data_t<state_data_index>;
-    template<int oneshot_data_index> using get_oneshot_data_t = typename R::template get_oneshot_data_t<oneshot_data_index>;
+
+    template<int data_index, detail::StateType state_type>
+    using GetType = typename R::template GetType<data_index, state_type>;
+    template<int data_index, detail::StateType state_type>
+    using GetWrappedType = typename R::template GetWrappedType<data_index, state_type>;
 
     StateReaderWriter() : R{} {}
     StateReaderWriter(State* state) : R{state} {}
@@ -717,7 +794,7 @@ public:
 
     // Set the initial state
     template<int state_data_index>
-    void SetInitial(get_data_t<state_data_index>&& val)
+    void SetInitial(GetType<state_data_index, detail::kState>&& val)
     {
         SetWritePos(-1);
         assert(state_write_);
@@ -728,15 +805,15 @@ public:
 
     // Set the initial state
     template<int state_data_index>
-    inline void SetInitial(const get_data_t<state_data_index>& val)
+    inline void SetInitial(const GetType<state_data_index, detail::kState>& val)
     {
-        get_data_t<state_data_index> val_copy = val;
+        GetType<state_data_index, detail::kState> val_copy = val;
         SetInitial<state_data_index>(std::move(val_copy));
     }
 
     // Set the specified state data (state_data_index) at the current write position (the end of the vector) to val
     template<int state_data_index, bool ignore_duplicates = false>
-    void Set(get_data_t<state_data_index>&& val)
+    void Set(GetType<state_data_index, detail::kState>&& val)
     {
         assert(state_write_);
         auto& vec = state_write_->template Get<state_data_index>();
@@ -768,15 +845,15 @@ public:
 
     // Set the specified state data (state_data_index) at the current write position (the end of the vector) to val
     template<int state_data_index, bool ignore_duplicates = false>
-    inline void Set(const get_data_t<state_data_index>& val)
+    inline void Set(const GetType<state_data_index, detail::kState>& val)
     {
-        get_data_t<state_data_index> val_copy = val;
+        GetType<state_data_index, detail::kState> val_copy = val;
         Set<state_data_index, ignore_duplicates>(std::move(val_copy));
     }
 
     // Set the specified one-shot data (oneshot_data_index) at the current write position (the end of the vector) to val
     template<int oneshot_data_index>
-    void SetOneShot(get_oneshot_data_t<oneshot_data_index>&& val)
+    void SetOneShot(GetType<oneshot_data_index, detail::kOneShot>&& val)
     {
         assert(state_write_);
         auto& vec = state_write_->template GetOneShot<oneshot_data_index>();
@@ -813,14 +890,14 @@ public:
 
     // Set the specified state data (oneshot_data_index) at the current write position (the end of the vector) to val
     template<int oneshot_data_index>
-    inline void SetOneShot(const get_oneshot_data_t<oneshot_data_index>& val)
+    inline void SetOneShot(const GetType<oneshot_data_index, detail::kOneShot>& val)
     {
-        get_oneshot_data_t<oneshot_data_index> val_copy = val;
+        GetType<oneshot_data_index, detail::kOneShot> val_copy = val;
         SetOneShot<oneshot_data_index>(std::move(val_copy));
     }
 
     // Inserts state data at current position. Use with Copy() in order to "resume" a state.
-    void Resume(const StateData& vals)
+    void Resume(const typename State::CombinedStateData& vals)
     {
         // Calls Set() for each element in vals
         detail::ResumeState<State::kLowerBound, State::kUpperBound>(this, vals);
@@ -828,7 +905,7 @@ public:
 
     // Inserts data into the state at the current read position. The read/write position is invalid afterwards, so it is reset.
     template<int state_data_index, bool overwrite = false>
-    auto Insert(const get_data_t<state_data_index>& val) -> bool
+    auto Insert(const GetType<state_data_index, detail::kState>& val) -> bool
     {
         assert(state_write_);
         auto& vec = state_write_->template Get<state_data_index>();
@@ -858,7 +935,7 @@ public:
 
     // Inserts data into the state at a given position. The read/write position is invalid afterwards, so it is reset.
     template<int state_data_index, bool overwrite = false>
-    auto Insert(OrderRowPosition pos, const get_data_t<state_data_index>& val) -> bool
+    auto Insert(OrderRowPosition pos, const GetType<state_data_index, detail::kState>& val) -> bool
     {
         Reset();
         R::SetReadPos(pos);
@@ -922,8 +999,10 @@ struct StateReaderWriters
         }
     }
 
+    /*
     void Save()
     {
+        // TODO: Are oneshot states saved?
         saved_channel_states_.resize(channel_reader_writers.size());
         saved_global_data_ = global_reader_writer.Copy();
         for (unsigned i = 0; i < channel_reader_writers.size(); ++i)
@@ -934,6 +1013,7 @@ struct StateReaderWriters
 
     void Restore()
     {
+        // TODO: Are oneshot states restored?
         assert(saved_channel_states_.size() == channel_reader_writers.size());
         global_reader_writer.Restore(saved_global_data_);
         for (unsigned i = 0; i < channel_reader_writers.size(); ++i)
@@ -941,10 +1021,11 @@ struct StateReaderWriters
             channel_reader_writers[i].Restore(saved_channel_states_[i]);
         }
     }
+    */
 
 private:
-    typename GlobalState<ModuleClass>::StateData saved_global_data_;
-    std::vector<typename ChannelState<ModuleClass>::StateData> saved_channel_states_;
+    typename GlobalState<ModuleClass>::CombinedStateData saved_global_data_;
+    std::vector<typename ChannelState<ModuleClass>::CombinedStateData> saved_channel_states_;
 };
 
 

@@ -276,6 +276,7 @@ public:
     using StateDataSpecializedWrapped = detail::WrappedStateDataType<StateDataSpecialized>;
 
     using CombinedStateData = detail::tuple_cat_t<typename StateStorageCommon<CommonDef>::StateDataCommon, StateDataSpecialized>;
+    using CombinedStateDataWrapped = detail::WrappedStateDataType<CombinedStateData>;
 
     template<int state_data_index>
     [[nodiscard]] constexpr auto Get() const -> const auto&
@@ -335,6 +336,9 @@ public:
 
     // Tuple of all specialized data types stored by this state, wrapped. They should all be vectors of pairs.
     using OneShotDataSpecializedWrapped = detail::WrappedStateDataType<OneShotDataSpecialized>;
+
+    using CombinedOneShotData = detail::tuple_cat_t<typename OneShotStorageCommon<CommonDef>::OneShotDataCommon, OneShotDataSpecialized>;
+    using CombinedOneShotDataWrapped = detail::WrappedStateDataType<CombinedOneShotData>;
 
     template<int oneshot_data_index>
     [[nodiscard]] constexpr auto GetOneShot() const -> const auto&
@@ -396,27 +400,15 @@ namespace detail {
     template<class CommonStorage, StateType state_type>
     inline constexpr int kStorageCommonCount = state_type == kState ? CommonStorage::kCommonCount : CommonStorage::kOneShotCommonCount;
 
-    template<class CommonStorage, StateType state_type>
-    using CommonStorageDataType = std::conditional_t<state_type == kState, typename CommonStorage::StateDataCommon, typename CommonStorage::OneShotDataCommon>;
-    template<class SpecializedStorage, StateType state_type>
-    using SpecializedStorageDataType = std::conditional_t<state_type == kState, typename SpecializedStorage::StateDataSpecialized, typename SpecializedStorage::OneShotDataSpecialized>;
-
-    template<class CommonStorage, StateType state_type>
-    using CommonStorageWrappedDataType = std::conditional_t<state_type == kState, typename CommonStorage::StateDataCommonWrapped, typename CommonStorage::OneShotDataCommonWrapped>;
-    template<class SpecializedStorage, StateType state_type>
-    using SpecializedStorageWrappedDataType = std::conditional_t<state_type == kState, typename SpecializedStorage::StateDataSpecializedWrapped, typename SpecializedStorage::OneShotDataSpecializedWrapped>;
+    template<class Storage, StateType state_type>
+    using CombinedStorageDataType = std::conditional_t<state_type == kState, typename Storage::CombinedStateData, typename Storage::CombinedOneShotData>;
+    template<class Storage, StateType state_type>
+    using CombinedStorageWrappedDataType = std::conditional_t<state_type == kState, typename Storage::CombinedStateDataWrapped, typename Storage::CombinedOneShotDataWrapped>;
 
     template<int data_index, class Storage, StateType state_type>
-    using GetTypeFromStorage = std::conditional_t<(data_index < 0),
-        std::tuple_element_t<static_cast<size_t>(data_index + kStorageCommonCount<Storage, state_type>), CommonStorageDataType<Storage, state_type>>,
-        std::tuple_element_t<static_cast<size_t>(data_index), SpecializedStorageDataType<Storage, state_type>>
-    >;
-
+    using GetTypeFromStorage = std::tuple_element_t<data_index + kStorageCommonCount<Storage, state_type>, CombinedStorageDataType<Storage, state_type>>;
     template<int data_index, class Storage, StateType state_type>
-    using GetWrappedTypeFromStorage = std::conditional_t<(data_index < 0),
-        std::tuple_element_t<data_index + kStorageCommonCount<Storage, state_type>, CommonStorageWrappedDataType<Storage, state_type>>,
-        std::tuple_element_t<static_cast<size_t>(data_index), SpecializedStorageWrappedDataType<Storage, state_type>>
-    >;
+    using GetWrappedTypeFromStorage = std::tuple_element_t<data_index + kStorageCommonCount<Storage, state_type>, CombinedStorageWrappedDataType<Storage, state_type>>;
 
 } // namespace detail
 

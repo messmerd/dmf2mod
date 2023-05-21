@@ -105,6 +105,7 @@ void ClearAllGenData(Storage* storage)
 
 } // namespace detail
 
+
 template<class CommonDef, typename... Ts>
 class GeneratedDataStorage : public CommonDef
 {

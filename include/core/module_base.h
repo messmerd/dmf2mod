@@ -85,6 +85,11 @@ public:
     [[nodiscard]] virtual auto GenerateData(size_t data_flags = 0) const -> size_t = 0;
 
     /*
+     * Gets the generated data
+     */
+    //[[nodiscard]] virtual auto GetGeneratedData() const -> std::shared_ptr<const class GeneratedDataBase> = 0;
+
+    /*
      * Gets the Status object for the last import/export/convert
      */
     [[nodiscard]] auto GetStatus() const -> const Status& { return status_; }

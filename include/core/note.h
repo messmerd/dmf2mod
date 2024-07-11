@@ -13,7 +13,7 @@
 
 namespace d2m {
 
-enum class NotePitch : uint8_t
+enum class NotePitch : std::uint8_t
 {
     kC=0,
     kCS,
@@ -34,34 +34,34 @@ namespace NoteTypes
     enum { kEmpty, kNote, kOff }; // The order is important
 
     struct Empty {};
-    inline constexpr auto operator==(const Empty&, const Empty&) -> bool { return true; };
+    constexpr auto operator==(const Empty&, const Empty&) -> bool { return true; };
 
     struct alignas(1) Note
     {
         NotePitch pitch : 4;
-        uint8_t octave : 4;
+        std::uint8_t octave : 4;
 
         constexpr Note() : pitch(NotePitch::kC), octave(0) {}
-        constexpr Note(NotePitch pitch, uint8_t octave) : pitch(pitch), octave(octave) {}
+        constexpr Note(NotePitch pitch, std::uint8_t octave) : pitch(pitch), octave(octave) {}
 
         auto operator>(Note rhs) const -> bool
         {
-            return (this->octave << 4) + static_cast<uint8_t>(this->pitch) > (rhs.octave << 4) + static_cast<uint8_t>(rhs.pitch);
+            return (this->octave << 4) + static_cast<std::uint8_t>(this->pitch) > (rhs.octave << 4) + static_cast<std::uint8_t>(rhs.pitch);
         }
 
         auto operator>=(Note rhs) const -> bool
         {
-            return (this->octave << 4) + static_cast<uint8_t>(this->pitch) >= (rhs.octave << 4) + static_cast<uint8_t>(rhs.pitch);
+            return (this->octave << 4) + static_cast<std::uint8_t>(this->pitch) >= (rhs.octave << 4) + static_cast<std::uint8_t>(rhs.pitch);
         }
 
         auto operator<(Note rhs) const -> bool
         {
-            return (this->octave << 4) + static_cast<uint8_t>(this->pitch) < (rhs.octave << 4) + static_cast<uint8_t>(rhs.pitch);
+            return (this->octave << 4) + static_cast<std::uint8_t>(this->pitch) < (rhs.octave << 4) + static_cast<std::uint8_t>(rhs.pitch);
         }
 
         auto operator<=(Note rhs) const -> bool
         {
-            return (this->octave << 4) + static_cast<uint8_t>(this->pitch) <= (rhs.octave << 4) + static_cast<uint8_t>(rhs.pitch);
+            return (this->octave << 4) + static_cast<std::uint8_t>(this->pitch) <= (rhs.octave << 4) + static_cast<std::uint8_t>(rhs.pitch);
         }
 
         auto operator==(Note rhs) const -> bool
@@ -76,7 +76,7 @@ namespace NoteTypes
     };
 
     struct Off {};
-    inline constexpr auto operator==(const Off&, const Off&) -> bool { return true; };
+    constexpr auto operator==(const Off&, const Off&) -> bool { return true; };
 };
 
 using NoteSlot = std::variant<NoteTypes::Empty, NoteTypes::Note, NoteTypes::Off>;
@@ -102,7 +102,7 @@ inline constexpr auto GetNoteRange(const Note& low, const Note& high) -> int
     // Returns range in semitones. Assumes high >= low.
     // Range is inclusive on both ends.
 
-    return (high.octave - low.octave) * 12 + (static_cast<uint8_t>(high.pitch) - static_cast<uint8_t>(low.pitch)) + 1;
+    return (high.octave - low.octave) * 12 + (static_cast<std::uint8_t>(high.pitch) - static_cast<std::uint8_t>(low.pitch)) + 1;
 }
 
 } // namespace d2m

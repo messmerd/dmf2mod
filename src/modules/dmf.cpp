@@ -32,8 +32,8 @@
 
 using namespace d2m;
 
-static constexpr uint8_t kDMFFileVersionMin = 17; // DMF files as old as version 17 (0x11) are supported
-static constexpr uint8_t kDMFFileVersionMax = 27; // DMF files as new as version 27 (0x1b) are supported
+static constexpr std::uint8_t kDMFFileVersionMin = 17; // DMF files as old as version 17 (0x11) are supported
+static constexpr std::uint8_t kDMFFileVersionMax = 27; // DMF files as new as version 27 (0x1b) are supported
 
 // DMF format magic numbers
 //static constexpr int kDMFNoInstrument = -1;
@@ -59,7 +59,7 @@ private:
     auto LoadInstrument(SystemType system_type) -> dmf::Instrument;
     void LoadWavetablesData();
     void LoadPatternsData();
-    auto LoadPatternRow(uint8_t effect_columns_count) -> Row<DMF>;
+    auto LoadPatternRow(std::uint8_t effect_columns_count) -> Row<DMF>;
     void LoadPCMSamplesData();
     auto LoadPCMSample() -> dmf::PCMSample;
 
@@ -147,17 +147,8 @@ static constexpr auto kPeriodTable = []() constexpr
 
 static constexpr auto GetPeriod(Note note) -> double
 {
-    assert(static_cast<uint16_t>(note.pitch) < 12 && note.octave < 9);
-    return kPeriodTable[static_cast<uint16_t>(note.pitch) + 12*note.octave];
-}
-
-DMF::DMF()
-{
-    // Initialize pointers to nullptr to prevent segfault when freeing memory if the import fails:
-    instruments_ = nullptr;
-    wavetable_sizes_ = nullptr;
-    wavetable_values_ = nullptr;
-    pcm_samples_ = nullptr;
+    assert(static_cast<std::uint16_t>(note.pitch) < 12 && note.octave < 9);
+    return kPeriodTable[static_cast<std::uint16_t>(note.pitch) + 12 * note.octave];
 }
 
 DMF::~DMF()
@@ -525,7 +516,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
         {
             // Volume macro
             inst.std.vol_env_size = fin_.ReadInt();
-            inst.std.vol_env_value = new int32_t[inst.std.vol_env_size];
+            inst.std.vol_env_value = new std::int32_t[inst.std.vol_env_size];
 
             for (int i = 0; i < inst.std.vol_env_size; i++)
             {
@@ -540,7 +531,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
         {
             // Volume macro
             inst.std.vol_env_size = fin_.ReadInt();
-            inst.std.vol_env_value = new int32_t[inst.std.vol_env_size];
+            inst.std.vol_env_value = new std::int32_t[inst.std.vol_env_size];
 
             for (int i = 0; i < inst.std.vol_env_size; i++)
             {
@@ -556,7 +547,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
 
         // Arpeggio macro
         inst.std.arp_env_size = fin_.ReadInt();
-        inst.std.arp_env_value = new int32_t[inst.std.arp_env_size];
+        inst.std.arp_env_value = new std::int32_t[inst.std.arp_env_size];
 
         for (int i = 0; i < inst.std.arp_env_size; i++)
         {
@@ -573,7 +564,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
 
         // Duty/Noise macro
         inst.std.duty_noise_env_size = fin_.ReadInt();
-        inst.std.duty_noise_env_value = new int32_t[inst.std.duty_noise_env_size];
+        inst.std.duty_noise_env_value = new std::int32_t[inst.std.duty_noise_env_size];
 
         for (int i = 0; i < inst.std.duty_noise_env_size; i++)
         {
@@ -588,7 +579,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
 
         // Wavetable macro
         inst.std.wavetable_env_size = fin_.ReadInt();
-        inst.std.wavetable_env_value = new int32_t[inst.std.wavetable_env_size];
+        inst.std.wavetable_env_value = new std::int32_t[inst.std.wavetable_env_size];
 
         for (int i = 0; i < inst.std.wavetable_env_size; i++)
         {
@@ -690,7 +681,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
 
                 if (system_type == DMF::SystemType::kSMS_OPLL || system_type == DMF::SystemType::kNES_VRC7)
                 {
-                    const uint8_t opll_preset = fin_.ReadInt();
+                    const std::uint8_t opll_preset = fin_.ReadInt();
                     if (i == 0) { inst.fm.opll_preset = opll_preset; }
 
                     inst.fm.ops[i].ksr = fin_.ReadInt();
@@ -738,10 +729,10 @@ void DMF::Importer::LoadWavetablesData()
 {
     dmf_.total_wavetables_ = fin_.ReadInt();
 
-    dmf_.wavetable_sizes_ = new uint32_t[dmf_.total_wavetables_];
-    dmf_.wavetable_values_ = new uint32_t*[dmf_.total_wavetables_];
+    dmf_.wavetable_sizes_ = new std::uint32_t[dmf_.total_wavetables_];
+    dmf_.wavetable_values_ = new std::uint32_t*[dmf_.total_wavetables_];
 
-    uint32_t data_mask = 0xFFFFFFFF;
+    std::uint32_t data_mask = 0xFFFFFFFF;
     if (dmf_.GetSystem().type == DMF::SystemType::kGameBoy)
     {
         data_mask = 0xF;
@@ -755,7 +746,7 @@ void DMF::Importer::LoadWavetablesData()
     {
         dmf_.wavetable_sizes_[i] = fin_.ReadInt<false, 4>();
 
-        dmf_.wavetable_values_[i] = new uint32_t[dmf_.wavetable_sizes_[i]];
+        dmf_.wavetable_values_[i] = new std::uint32_t[dmf_.wavetable_sizes_[i]];
 
         for (unsigned j = 0; j < dmf_.wavetable_sizes_[i]; j++)
         {
@@ -810,12 +801,12 @@ void DMF::Importer::LoadPatternsData()
     }
 }
 
-auto DMF::Importer::LoadPatternRow(uint8_t effect_columns_count) -> Row<DMF>
+auto DMF::Importer::LoadPatternRow(std::uint8_t effect_columns_count) -> Row<DMF>
 {
     Row<DMF> row;
 
-    const uint16_t temp_pitch = fin_.ReadInt<false, 2>();
-    uint8_t temp_octave = fin_.ReadInt<false, 2>(); // Upper byte is unused
+    const std::uint16_t temp_pitch = fin_.ReadInt<false, 2>();
+    std::uint8_t temp_octave = fin_.ReadInt<false, 2>(); // Upper byte is unused
 
     switch (temp_pitch)
     {
@@ -848,9 +839,9 @@ auto DMF::Importer::LoadPatternRow(uint8_t effect_columns_count) -> Row<DMF>
 
     row.volume = fin_.ReadInt<true, 2>();
 
-    for (uint8_t col = 0; col < effect_columns_count; ++col)
+    for (std::uint8_t col = 0; col < effect_columns_count; ++col)
     {
-        const int16_t dmf_effect_code = fin_.ReadInt<true, 2>();
+        const std::int16_t dmf_effect_code = fin_.ReadInt<true, 2>();
         row.effect[col].value = fin_.ReadInt<true, 2>();
         assert(kEffectValueless == kDMFNoEffectVal); // DMF valueless effect magic number is -1, and so must be kEffectValueless
 
@@ -901,7 +892,7 @@ auto DMF::Importer::LoadPatternRow(uint8_t effect_columns_count) -> Row<DMF>
     }
 
     // Initialize the rest to zero
-    for (uint8_t col = effect_columns_count; col < 4; ++col) // Max total of 4 effects columns in Deflemask
+    for (std::uint8_t col = effect_columns_count; col < 4; ++col) // Max total of 4 effects columns in Deflemask
     {
         row.effect[col] = {Effects::kNoEffect, 0};
     }
@@ -975,8 +966,8 @@ auto DMF::Importer::LoadPCMSample() -> dmf::PCMSample
     sample.data = nullptr;
     if (sample.size > 0)
     {
-        sample.data = new uint16_t[sample.size];
-        for (uint32_t i = 0; i < sample.size; i++)
+        sample.data = new std::uint16_t[sample.size];
+        for (std::uint32_t i = 0; i < sample.size; i++)
         {
             sample.data[i] = fin_.ReadInt<false, 2>();
         }
@@ -998,7 +989,7 @@ auto DMF::Importer::LoadPCMSample() -> dmf::PCMSample
  * 1:  Error
  * 2:  An extra "loopback order" is needed
  */
-auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
+auto DMF::GenerateDataImpl(std::size_t data_flags) const -> std::size_t
 {
     auto& gen_data = *GetGeneratedDataMut();
     const auto& data = GetData();
@@ -1028,7 +1019,7 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
     gen_data.Get<GD::kTotalOrders>() = data.GetNumOrders();
 
     // Data flags
-    size_t return_val = 0;
+    std::size_t return_val = 0;
     const bool no_port2note_auto_off = data_flags & 0x1;
     const bool mod_compat_loops = data_flags & 0x2;
 

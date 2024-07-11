@@ -34,10 +34,10 @@ namespace detail {
     // Adapted from: https://peter.bloomfield.online/using-cpp-templates-for-size-based-type-selection/
     template<uint8_t num_bytes>
     using UIntSelector =
-        typename std::conditional<num_bytes == 1, uint_fast8_t,
-            typename std::conditional<num_bytes == 2, uint_fast16_t,
-                typename std::conditional<num_bytes == 3 || num_bytes == 4, uint_fast32_t,
-                    uint_fast64_t
+        typename std::conditional<num_bytes == 1, std::uint_fast8_t,
+            typename std::conditional<num_bytes == 2, std::uint_fast16_t,
+                typename std::conditional<num_bytes == 3 || num_bytes == 4, std::uint_fast32_t,
+                    std::uint_fast64_t
                 >::type
             >::type
         >::type;
@@ -55,13 +55,13 @@ class StreamReader
 private:
     IStream stream_;
 
-    template<typename T, uint8_t num_bytes>
+    template<typename T, std::uint8_t num_bytes>
     struct LittleEndianReadOperator
     {
-        static constexpr uint_fast8_t kShiftAmount = (num_bytes - 1) * 8;
+        static constexpr std::uint_fast8_t kShiftAmount = (num_bytes - 1) * 8;
         static_assert(num_bytes > 0);
 
-        inline void operator()()
+        void operator()()
         {
             value >>= 8;
             value |= static_cast<T>(stream_.get()) << kShiftAmount;
@@ -73,7 +73,7 @@ private:
     template<typename T>
     struct BigEndianReadOperator
     {
-        inline void operator()()
+        void operator()()
         {
             value <<= 8;
             value |= static_cast<T>(stream_.get());
@@ -82,8 +82,8 @@ private:
         T value{};
     };
 
-    template<typename T, bool is_signed, uint8_t num_bytes>
-    inline auto ReadIntLittleEndian() -> T
+    template<typename T, bool is_signed, std::uint8_t num_bytes>
+    auto ReadIntLittleEndian() -> T
     {
         LittleEndianReadOperator<T, num_bytes> oper{stream()};
         detail::LoopUnroller<num_bytes>{}(oper);
@@ -99,8 +99,8 @@ private:
         }
     }
 
-    template<typename T, bool is_signed, uint8_t num_bytes>
-    inline auto ReadIntBigEndian() -> T
+    template<typename T, bool is_signed, std::uint8_t num_bytes>
+    auto ReadIntBigEndian() -> T
     {
         BigEndianReadOperator<T> oper{stream()};
         detail::LoopUnroller<num_bytes>{}(oper);
@@ -143,7 +143,7 @@ public:
     auto ReadPStr() -> std::string
     {
         // P-Strings (Pascal strings) are prefixed with a 1 byte length
-        uint8_t string_length = stream_.get();
+        std::uint8_t string_length = stream_.get();
         return ReadStr(string_length);
     }
 
@@ -155,10 +155,10 @@ public:
         return temp_bytes;
     }
 
-    template<bool is_signed = false, uint8_t num_bytes = 1, Endianness endian = global_endian>
+    template<bool is_signed = false, std::uint8_t num_bytes = 1, Endianness endian = global_endian>
     auto ReadInt()
     {
-        using UIntType = std::conditional_t<(num_bytes > 1), detail::UIntSelector<num_bytes>, uint8_t>;
+        using UIntType = std::conditional_t<(num_bytes > 1), detail::UIntSelector<num_bytes>, std::uint8_t>;
         using ReturnType = std::conditional_t<is_signed, std::make_signed_t<UIntType>, UIntType>;
 
         static_assert(num_bytes <= 8 && num_bytes >= 1, "Accepted range for num_bytes: 1 <= num_bytes <= 8");

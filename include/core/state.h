@@ -25,14 +25,14 @@
 namespace d2m {
 
 // Unique, quickly calculated value encoding order # (not pattern #!) and pattern row #. Easily and quickly comparable.
-using OrderRowPosition = int32_t;
+using OrderRowPosition = std::int32_t;
 
 using GlobalOrderRowPosition = OrderRowPosition;
 using ChannelOrderRowPosition = OrderRowPosition;
 
 // Helpers for conversion:
-[[nodiscard]] inline constexpr auto GetOrderRowPosition(OrderIndex order, RowIndex row) -> OrderRowPosition { return (order << 16) | row; };
-[[nodiscard]] inline constexpr auto GetOrderRowPosition(OrderRowPosition pos) -> std::pair<OrderIndex, RowIndex> { return { pos >> 16, pos & 0x00FF }; };
+constexpr auto GetOrderRowPosition(OrderIndex order, RowIndex row) -> OrderRowPosition { return (order << 16) | row; };
+constexpr auto GetOrderRowPosition(OrderRowPosition pos) -> std::pair<OrderIndex, RowIndex> { return { pos >> 16, pos & 0x00FF }; };
 
 namespace detail {
 
@@ -57,7 +57,7 @@ template<typename... Ts>
 using WrappedStateDataType = typename WrappedStateData<Ts...>::type;
 
 template<typename T>
-[[nodiscard]] inline constexpr auto abs(const T x) noexcept -> T
+constexpr auto abs(const T x) noexcept -> T
 {
     return x == T(0) ? T(0) : (x < T(0) ? -x : x);
 }
@@ -73,14 +73,14 @@ template<typename T>
 template<class ModuleClass>
 struct SoundIndex
 {
-    using type = uint8_t;
+    using type = std::uint8_t;
 };
 
 template<class ModuleClass>
 using SoundIndexType = typename SoundIndex<ModuleClass>::type;
 
-using EffectValueXX = uint8_t;
-using EffectValueXXYY = uint8_t; //std::pair<uint8_t, uint8_t>;
+using EffectValueXX = std::uint8_t;
+using EffectValueXXYY = std::uint8_t; //std::pair<uint8_t, uint8_t>;
 
 // Global state data types
 
@@ -246,13 +246,13 @@ public:
     virtual ~StateStorageCommon() = default;
 
     template<int state_data_index, std::enable_if_t<(state_data_index < 0), bool> = true>
-    [[nodiscard]] constexpr auto Get2() const -> const auto&
+    constexpr auto Get2() const -> const auto&
     {
         return std::get<state_data_index + CommonDef::kCommonCount>(common_data_);
     }
 
     template<int state_data_index, std::enable_if_t<(state_data_index < 0), bool> = true>
-    [[nodiscard]] constexpr auto Get2() -> auto&
+    constexpr auto Get2() -> auto&
     {
         return std::get<state_data_index + CommonDef::kCommonCount>(common_data_);
     }
@@ -279,14 +279,14 @@ public:
     using CombinedStateDataWrapped = detail::WrappedStateDataType<CombinedStateData>;
 
     template<int state_data_index>
-    [[nodiscard]] constexpr auto Get() const -> const auto&
+    constexpr auto Get() const -> const auto&
     {
         if constexpr (state_data_index >= 0) { return std::get<state_data_index>(specialized_data_); }
         else { return StateStorageCommon<CommonDef>::template Get2<state_data_index>(); }
     }
 
     template<int state_data_index>
-    [[nodiscard]] constexpr auto Get() -> auto&
+    constexpr auto Get() -> auto&
     {
         if constexpr (state_data_index >= 0) { return std::get<state_data_index>(specialized_data_); }
         else { return StateStorageCommon<CommonDef>::template Get2<state_data_index>(); }
@@ -308,13 +308,13 @@ public:
     virtual ~OneShotStorageCommon() = default;
 
     template<int oneshot_data_index, std::enable_if_t<(oneshot_data_index < 0), bool> = true>
-    [[nodiscard]] constexpr auto GetOneShot2() const -> const auto&
+    constexpr auto GetOneShot2() const -> const auto&
     {
         return std::get<oneshot_data_index + CommonDef::kOneShotCommonCount>(common_oneshot_data_);
     }
 
     template<int oneshot_data_index, std::enable_if_t<(oneshot_data_index < 0), bool> = true>
-    [[nodiscard]] constexpr auto GetOneShot2() -> auto&
+    constexpr auto GetOneShot2() -> auto&
     {
         return std::get<oneshot_data_index + CommonDef::kOneShotCommonCount>(common_oneshot_data_);
     }
@@ -341,14 +341,14 @@ public:
     using CombinedOneShotDataWrapped = detail::WrappedStateDataType<CombinedOneShotData>;
 
     template<int oneshot_data_index>
-    [[nodiscard]] constexpr auto GetOneShot() const -> const auto&
+    constexpr auto GetOneShot() const -> const auto&
     {
         if constexpr (oneshot_data_index >= 0) { return std::get<oneshot_data_index>(specialized_oneshot_data_); }
         else { return OneShotStorageCommon<CommonDef>::template GetOneShot2<oneshot_data_index>(); }
     }
 
     template<int oneshot_data_index>
-    [[nodiscard]] constexpr auto GetOneShot() -> auto&
+    constexpr auto GetOneShot() -> auto&
     {
         if constexpr (oneshot_data_index >= 0) { return std::get<oneshot_data_index>(specialized_oneshot_data_); }
         else { return OneShotStorageCommon<CommonDef>::template GetOneShot2<oneshot_data_index>(); }
@@ -398,7 +398,7 @@ namespace detail {
     enum StateType { kState, kOneShot };
 
     template<class CommonStorage, StateType state_type>
-    inline constexpr int kStorageCommonCount = state_type == kState ? CommonStorage::kCommonCount : CommonStorage::kOneShotCommonCount;
+    constexpr int kStorageCommonCount = state_type == kState ? CommonStorage::kCommonCount : CommonStorage::kOneShotCommonCount;
 
     template<class Storage, StateType state_type>
     using CombinedStorageDataType = std::conditional_t<state_type == kState, typename Storage::CombinedStateData, typename Storage::CombinedOneShotData>;
@@ -496,7 +496,7 @@ public:
 
     // Get the specified state data vector (state_data_index)
     template<int state_data_index>
-    [[nodiscard]] inline constexpr auto GetVec() const -> const GetWrappedType<state_data_index, detail::kState>&
+    constexpr auto GetVec() const -> const GetWrappedType<state_data_index, detail::kState>&
     {
         assert(state_);
         return state_->template Get<state_data_index>();
@@ -504,7 +504,7 @@ public:
 
     // Get the specified one-shot data vector (oneshot_data_index)
     template<int oneshot_data_index>
-    [[nodiscard]] inline constexpr auto GetOneShotVec() const -> const GetWrappedType<oneshot_data_index, detail::kOneShot>&
+    constexpr auto GetOneShotVec() const -> const GetWrappedType<oneshot_data_index, detail::kOneShot>&
     {
         assert(state_);
         return state_->template GetOneShot<oneshot_data_index>();
@@ -512,7 +512,7 @@ public:
 
     // Get the specified state data (state_data_index) at the current read position
     template<int state_data_index>
-    [[nodiscard]] inline constexpr auto Get() const -> const GetType<state_data_index, detail::kState>&
+    constexpr auto Get() const -> const GetType<state_data_index, detail::kState>&
     {
         const int vec_index = cur_indexes_[GetIndex(state_data_index)];
         const auto& vec = GetVec<state_data_index>();
@@ -522,14 +522,14 @@ public:
 
     // Get the specified state data (state_data_index) at the specified read index (vec_index) within the vector
     template<int state_data_index>
-    [[nodiscard]] inline constexpr auto Get(size_t vec_index) const -> const GetType<state_data_index, detail::kState>&
+    constexpr auto Get(size_t vec_index) const -> const GetType<state_data_index, detail::kState>&
     {
         return GetVec<state_data_index>().at(vec_index).second;
     }
 
     // Get the specified one-shot data (oneshot_data_index) at the current read position. Only valid if GetOneShotDelta() returned true.
     template<int oneshot_data_index>
-    [[nodiscard]] inline constexpr auto GetOneShot() const -> const GetType<oneshot_data_index, detail::kOneShot>&
+    constexpr auto GetOneShot() const -> const GetType<oneshot_data_index, detail::kOneShot>&
     {
         const int vec_index = cur_indexes_oneshot_[GetOneShotIndex(oneshot_data_index)];
         assert(vec_index > 0 && "Only call GetOneShot() if GetOneShotDelta() returned true");
@@ -539,7 +539,7 @@ public:
     // Gets the specified state data (state_data_index) if it is exactly at the current read position.
     // TODO: This makes a copy. Try using std::reference_wrapper
     template<int state_data_index>
-    [[nodiscard]] inline constexpr auto GetImpulse() const -> std::optional<GetType<state_data_index, detail::kState>>
+    constexpr auto GetImpulse() const -> std::optional<GetType<state_data_index, detail::kState>>
     {
         const auto& vec = GetVec<state_data_index>();
         assert(!vec.empty() && "The initial state must be set before reading");
@@ -552,7 +552,7 @@ public:
     }
 
     // Returns a tuple of all the state values at the current read position
-    [[nodiscard]] auto Copy() const -> typename State::CombinedStateData
+    auto Copy() const -> typename State::CombinedStateData
     {
         typename State::CombinedStateData return_val;
         detail::CopyState<State::kLowerBound, State::kUpperBound>(this, return_val,
@@ -635,13 +635,13 @@ public:
      * These delta values can then be obtained by calling GetDeltas() or GetOneShotDeltas().
      */
     template<bool set_deltas = true>
-    inline void SetReadPos(OrderIndex order, RowIndex row)
+    void SetReadPos(OrderIndex order, RowIndex row)
     {
         SetReadPos<set_deltas>(GetOrderRowPosition(order, row));
     }
 
     // Returns state data at given position, then restores position to what it was previously
-    [[nodiscard]] auto ReadAt(OrderRowPosition pos) -> typename State::CombinedStateData
+    auto ReadAt(OrderRowPosition pos) -> typename State::CombinedStateData
     {
         const OrderRowPosition cur_pos_temp = cur_pos_;
         const auto deltas_temp = deltas_;
@@ -663,40 +663,40 @@ public:
     }
 
     // Returns state data at given position, then restores position to what it was previously
-    [[nodiscard]] inline auto ReadAt(OrderIndex order, RowIndex row) -> typename State::CombinedStateData
+    auto ReadAt(OrderIndex order, RowIndex row) -> typename State::CombinedStateData
     {
         return ReadAt(GetOrderRowPosition(order, row));
     }
 
     // Get the size of the specified state data vector (state_data_index)
     template<int state_data_index>
-    [[nodiscard]] inline constexpr auto GetSize() const -> size_t
+    constexpr auto GetSize() const -> std::size_t
     {
         return GetVec<state_data_index>().size();
     }
 
     // Returns the deltas from the last SetReadPos<true>() call
-    [[nodiscard]] inline constexpr auto GetDeltas() const -> const Deltas& { return deltas_; }
+    constexpr auto GetDeltas() const -> const Deltas& { return deltas_; }
 
-    [[nodiscard]] inline constexpr auto GetDelta(int state_data_index) const -> bool { return deltas_[GetIndex(state_data_index)]; }
+    constexpr auto GetDelta(int state_data_index) const -> bool { return deltas_[GetIndex(state_data_index)]; }
 
     // Returns the one-shot deltas from the last SetReadPos<true>() call
-    [[nodiscard]] inline constexpr auto GetOneShotDeltas() const -> const OneShotDeltas& { return oneshot_deltas_; }
+    constexpr auto GetOneShotDeltas() const -> const OneShotDeltas& { return oneshot_deltas_; }
 
-    [[nodiscard]] inline constexpr auto GetOneShotDelta(int oneshot_data_index) const -> bool { return oneshot_deltas_[GetOneShotIndex(oneshot_data_index)]; }
+    constexpr auto GetOneShotDelta(int oneshot_data_index) const -> bool { return oneshot_deltas_[GetOneShotIndex(oneshot_data_index)]; }
 
     // Only useful for ChannelStateReader
-    [[nodiscard]] inline auto GetChannel() const -> ChannelIndex { return channel_; }
+    auto GetChannel() const -> ChannelIndex { return channel_; }
 
     // Gets a desired value from CombinedStateData
     template<int state_data_index>
-    [[nodiscard]] static constexpr auto GetValue(const typename State::CombinedStateData& data) -> GetType<state_data_index, detail::kState>
+    static constexpr auto GetValue(const typename State::CombinedStateData& data) -> GetType<state_data_index, detail::kState>
     {
         return std::get<GetIndex(state_data_index)>(data);
     }
 
     template<int state_data_index>
-    [[nodiscard]] constexpr auto Find(std::function<bool(const GetType<state_data_index, detail::kState>&)> cmp) const -> std::optional<std::pair<OrderRowPosition, GetType<state_data_index, detail::kState>>>
+    constexpr auto Find(std::function<bool(const GetType<state_data_index, detail::kState>&)> cmp) const -> std::optional<std::pair<OrderRowPosition, GetType<state_data_index, detail::kState>>>
     {
         const auto& vec = GetVec<state_data_index>();
         assert(!vec.empty() && "The initial state must be set before reading");
@@ -714,10 +714,10 @@ public:
 protected:
 
     // Converts StateEnumCommon or StateEnum variants into a zero-based index of an array. Returns offset if no enum is provided.
-    [[nodiscard]] static inline constexpr auto GetIndex(int state_data_index = 0) -> int { return State::kCommonCount + state_data_index; }
+    static constexpr auto GetIndex(int state_data_index = 0) -> int { return State::kCommonCount + state_data_index; }
 
     // Converts OneShotEnumCommon or OneShotEnum variants into a zero-based index of an array. Returns offset if no enum is provided.
-    [[nodiscard]] static inline constexpr auto GetOneShotIndex(int oneshot_data_index = 0) -> int { return State::kOneShotCommonCount + oneshot_data_index; }
+    static constexpr auto GetOneShotIndex(int oneshot_data_index = 0) -> int { return State::kOneShotCommonCount + oneshot_data_index; }
 
     const State* state_ = nullptr; // The state this reader is reading from
     Deltas deltas_; // An array of bools indicating which (if any) state data values have changed since the last SetReadPos<true>() call
@@ -797,7 +797,7 @@ public:
 
     // Set the initial state
     template<int state_data_index>
-    inline void SetInitial(const GetType<state_data_index, detail::kState>& val)
+    void SetInitial(const GetType<state_data_index, detail::kState>& val)
     {
         GetType<state_data_index, detail::kState> val_copy = val;
         SetInitial<state_data_index>(std::move(val_copy));
@@ -837,7 +837,7 @@ public:
 
     // Set the specified state data (state_data_index) at the current write position (the end of the vector) to val
     template<int state_data_index, bool ignore_duplicates = false>
-    inline void Set(const GetType<state_data_index, detail::kState>& val)
+    void Set(const GetType<state_data_index, detail::kState>& val)
     {
         GetType<state_data_index, detail::kState> val_copy = val;
         Set<state_data_index, ignore_duplicates>(std::move(val_copy));
@@ -882,7 +882,7 @@ public:
 
     // Set the specified state data (oneshot_data_index) at the current write position (the end of the vector) to val
     template<int oneshot_data_index>
-    inline void SetOneShot(const GetType<oneshot_data_index, detail::kOneShot>& val)
+    void SetOneShot(const GetType<oneshot_data_index, detail::kOneShot>& val)
     {
         GetType<oneshot_data_index, detail::kOneShot> val_copy = val;
         SetOneShot<oneshot_data_index>(std::move(val_copy));
@@ -936,20 +936,20 @@ public:
     }
 
     // Call this at the start of an inner loop before Set() is called
-    inline void SetWritePos(OrderRowPosition pos)
+    void SetWritePos(OrderRowPosition pos)
     {
         R::cur_pos_ = pos;
     }
 
     // Call this at the start of an inner loop before Set() is called
-    inline void SetWritePos(OrderIndex order, RowIndex row)
+    void SetWritePos(OrderIndex order, RowIndex row)
     {
         SetWritePos(GetOrderRowPosition(order, row));
     }
 
 private:
 
-    State* state_write_; // The state this reader is writing to
+    State* state_write_ = nullptr; // The state this reader is writing to
 };
 
 // Type aliases for convenience
@@ -1031,7 +1031,7 @@ class ModuleState
 public:
 
     // Creates and returns a pointer to a StateReaders object. The readers are valid only for as long as ModuleState is valid.
-    [[nodiscard]] auto GetReaders() const -> std::shared_ptr<StateReaders<ModuleClass>>
+    auto GetReaders() const -> std::shared_ptr<StateReaders<ModuleClass>>
     {
         auto return_val = std::make_shared<StateReaders<ModuleClass>>();
         return_val->global_reader.AssignState(&global_state_);
@@ -1051,7 +1051,7 @@ private:
     void Initialize(unsigned numChannels) { channel_states_.resize(numChannels); }
 
     // Creates and returns a pointer to a StateReaderWriters object. The reader/writers are valid only for as long as ModuleState is valid.
-    [[nodiscard]] auto GetReaderWriters() -> std::shared_ptr<StateReaderWriters<ModuleClass>>
+    auto GetReaderWriters() -> std::shared_ptr<StateReaderWriters<ModuleClass>>
     {
         auto return_val = std::make_shared<StateReaderWriters<ModuleClass>>();
         return_val->global_reader_writer.AssignStateWrite(&global_state_);

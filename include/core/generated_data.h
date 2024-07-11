@@ -128,22 +128,22 @@ public:
 
     // Returns an immutable reference to generated data at index gen_data_index
     template<int gen_data_index>
-    [[nodiscard]] constexpr auto Get() const -> const auto&
+    constexpr auto Get() const -> const auto&
     {
         return std::get<gen_data_index + CommonDef::kCommonCount>(data_);
     }
 
     // Returns a mutable reference to generated data at index gen_data_index
     template<int gen_data_index>
-    [[nodiscard]] constexpr auto Get() -> auto&
+    constexpr auto Get() -> auto&
     {
         return std::get<gen_data_index + CommonDef::kCommonCount>(data_);
     }
 
     // For convenience:
-    [[nodiscard]] constexpr auto GetState() const -> const std::optional<ModuleState<ModuleClass>>& { return Get<GenDataEnumCommon::kState>(); }
-    [[nodiscard]] constexpr auto GetState() -> std::optional<ModuleState<ModuleClass>>& { return Get<GenDataEnumCommon::kState>(); }
-    [[nodiscard]] constexpr auto GetNumOrders() const -> const std::optional<OrderIndex>& { return Get<GenDataEnumCommon::kTotalOrders>(); }
+    constexpr auto GetState() const -> const std::optional<ModuleState<ModuleClass>>& { return Get<GenDataEnumCommon::kState>(); }
+    constexpr auto GetState() -> std::optional<ModuleState<ModuleClass>>& { return Get<GenDataEnumCommon::kState>(); }
+    constexpr auto GetNumOrders() const -> const std::optional<OrderIndex>& { return Get<GenDataEnumCommon::kTotalOrders>(); }
 
     // Destroys any generated data at index gen_data_index. Call this after any change which would make the data invalid.
     template<int gen_data_index>
@@ -166,16 +166,16 @@ public:
         status_ = 0;
     }
 
-    [[nodiscard]] auto IsValid() const -> bool { return generated_.has_value(); }
-    [[nodiscard]] auto GetGenerated() const -> std::optional<size_t> { return generated_; }
-    void SetGenerated(std::optional<size_t> val) { generated_ = val; }
-    [[nodiscard]] auto GetStatus() const -> size_t { return status_; }
-    void SetStatus(size_t val) { status_ = val; }
+    auto IsValid() const -> bool { return generated_.has_value(); }
+    auto GetGenerated() const -> std::optional<std::size_t> { return generated_; }
+    void SetGenerated(std::optional<std::size_t> val) { generated_ = val; }
+    auto GetStatus() const -> std::size_t { return status_; }
+    void SetStatus(std::size_t val) { status_ = val; }
 
 protected:
     GenDataWrapped data_; // Stores all generated data
-    std::optional<size_t> generated_; // The value passed to GenerateDataImpl. Has a value if gen data is valid.
-    size_t status_; // The value returned by GenerateDataImpl. Only valid if IsValid() == true.
+    std::optional<std::size_t> generated_; // The value passed to GenerateDataImpl. Has a value if gen data is valid.
+    std::size_t status_; // The value returned by GenerateDataImpl. Only valid if IsValid() == true.
 };
 
 ///////////////////////////////////////////////////////////

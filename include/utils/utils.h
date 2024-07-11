@@ -21,22 +21,22 @@ class Utils
 {
 public:
     // File utils
-    [[nodiscard]] static auto GetBaseNameFromFilename(std::string_view filename) -> std::string;
-    [[nodiscard]] static auto ReplaceFileExtension(std::string_view filename, std::string_view new_file_extension) -> std::string;
-    [[nodiscard]] static auto GetFileExtension(std::string_view filename) -> std::string;
-    [[nodiscard]] static auto FileExists(std::string_view filename) -> bool;
+    static auto GetBaseNameFromFilename(std::string_view filename) -> std::string;
+    static auto ReplaceFileExtension(std::string_view filename, std::string_view new_file_extension) -> std::string;
+    static auto GetFileExtension(std::string_view filename) -> std::string;
+    static auto FileExists(std::string_view filename) -> bool;
 
     // File utils which require Factory initialization
-    [[nodiscard]] static auto GetTypeFromFilename(std::string_view filename) -> ModuleType;
-    [[nodiscard]] static auto GetTypeFromFileExtension(std::string_view extension) -> ModuleType;
-    [[nodiscard]] static auto GetTypeFromCommandName(std::string_view command_name) -> ModuleType;
-    [[nodiscard]] static auto GetExtensionFromType(ModuleType module_type) -> std::string_view;
+    static auto GetTypeFromFilename(std::string_view filename) -> ModuleType;
+    static auto GetTypeFromFileExtension(std::string_view extension) -> ModuleType;
+    static auto GetTypeFromCommandName(std::string_view command_name) -> ModuleType;
+    static auto GetExtensionFromType(ModuleType module_type) -> std::string_view;
 
     // Command-line arguments and options utils
-    [[nodiscard]] static auto GetArgsAsVector(int argc, char** argv) -> std::vector<std::string>;
+    static auto GetArgsAsVector(int argc, char** argv) -> std::vector<std::string>;
 
     // String utils (borrowed from Stack Overflow)
-    static inline void StringTrimLeft(std::string& str)
+    static void StringTrimLeft(std::string& str)
     {
         // Trim string from start (in place)
         str.erase(str.begin(), std::find_if(str.begin(), str.end(), [](unsigned char ch) {
@@ -44,7 +44,7 @@ public:
         }));
     }
 
-    static inline void StringTrimRight(std::string& str)
+    static void StringTrimRight(std::string& str)
     {
         // Trim string from end (in place)
         str.erase(std::find_if(str.rbegin(), str.rend(), [](unsigned char ch) {
@@ -52,7 +52,7 @@ public:
         }).base(), str.end());
     }
 
-    static inline void StringTrimBothEnds(std::string& str)
+    static void StringTrimBothEnds(std::string& str)
     {
         // Trim string from both ends (in place)
         StringTrimLeft(str);

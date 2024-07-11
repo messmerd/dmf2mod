@@ -32,8 +32,8 @@
 
 using namespace d2m;
 
-static constexpr uint8_t kDMFFileVersionMin = 17; // DMF files as old as version 17 (0x11) are supported
-static constexpr uint8_t kDMFFileVersionMax = 27; // DMF files as new as version 27 (0x1b) are supported
+static constexpr std::uint8_t kDMFFileVersionMin = 17; // DMF files as old as version 17 (0x11) are supported
+static constexpr std::uint8_t kDMFFileVersionMax = 27; // DMF files as new as version 27 (0x1b) are supported
 
 // DMF format magic numbers
 //static constexpr int kDMFNoInstrument = -1;
@@ -59,7 +59,7 @@ private:
     auto LoadInstrument(SystemType system_type) -> dmf::Instrument;
     void LoadWavetablesData();
     void LoadPatternsData();
-    auto LoadPatternRow(uint8_t effect_columns_count) -> Row<DMF>;
+    auto LoadPatternRow(std::uint8_t effect_columns_count) -> Row<DMF>;
     void LoadPCMSamplesData();
     auto LoadPCMSample() -> dmf::PCMSample;
 
@@ -147,17 +147,8 @@ static constexpr auto kPeriodTable = []() constexpr
 
 static constexpr auto GetPeriod(Note note) -> double
 {
-    assert(static_cast<uint16_t>(note.pitch) < 12 && note.octave < 9);
-    return kPeriodTable[static_cast<uint16_t>(note.pitch) + 12*note.octave];
-}
-
-DMF::DMF()
-{
-    // Initialize pointers to nullptr to prevent segfault when freeing memory if the import fails:
-    instruments_ = nullptr;
-    wavetable_sizes_ = nullptr;
-    wavetable_values_ = nullptr;
-    pcm_samples_ = nullptr;
+    assert(static_cast<std::uint16_t>(note.pitch) < 12 && note.octave < 9);
+    return kPeriodTable[static_cast<std::uint16_t>(note.pitch) + 12 * note.octave];
 }
 
 DMF::~DMF()
@@ -525,7 +516,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
         {
             // Volume macro
             inst.std.vol_env_size = fin_.ReadInt();
-            inst.std.vol_env_value = new int32_t[inst.std.vol_env_size];
+            inst.std.vol_env_value = new std::int32_t[inst.std.vol_env_size];
 
             for (int i = 0; i < inst.std.vol_env_size; i++)
             {
@@ -540,7 +531,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
         {
             // Volume macro
             inst.std.vol_env_size = fin_.ReadInt();
-            inst.std.vol_env_value = new int32_t[inst.std.vol_env_size];
+            inst.std.vol_env_value = new std::int32_t[inst.std.vol_env_size];
 
             for (int i = 0; i < inst.std.vol_env_size; i++)
             {
@@ -556,7 +547,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
 
         // Arpeggio macro
         inst.std.arp_env_size = fin_.ReadInt();
-        inst.std.arp_env_value = new int32_t[inst.std.arp_env_size];
+        inst.std.arp_env_value = new std::int32_t[inst.std.arp_env_size];
 
         for (int i = 0; i < inst.std.arp_env_size; i++)
         {
@@ -573,7 +564,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
 
         // Duty/Noise macro
         inst.std.duty_noise_env_size = fin_.ReadInt();
-        inst.std.duty_noise_env_value = new int32_t[inst.std.duty_noise_env_size];
+        inst.std.duty_noise_env_value = new std::int32_t[inst.std.duty_noise_env_size];
 
         for (int i = 0; i < inst.std.duty_noise_env_size; i++)
         {
@@ -588,7 +579,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
 
         // Wavetable macro
         inst.std.wavetable_env_size = fin_.ReadInt();
-        inst.std.wavetable_env_value = new int32_t[inst.std.wavetable_env_size];
+        inst.std.wavetable_env_value = new std::int32_t[inst.std.wavetable_env_size];
 
         for (int i = 0; i < inst.std.wavetable_env_size; i++)
         {
@@ -690,7 +681,7 @@ auto DMF::Importer::LoadInstrument(DMF::SystemType system_type) -> dmf::Instrume
 
                 if (system_type == DMF::SystemType::kSMS_OPLL || system_type == DMF::SystemType::kNES_VRC7)
                 {
-                    const uint8_t opll_preset = fin_.ReadInt();
+                    const std::uint8_t opll_preset = fin_.ReadInt();
                     if (i == 0) { inst.fm.opll_preset = opll_preset; }
 
                     inst.fm.ops[i].ksr = fin_.ReadInt();
@@ -738,10 +729,10 @@ void DMF::Importer::LoadWavetablesData()
 {
     dmf_.total_wavetables_ = fin_.ReadInt();
 
-    dmf_.wavetable_sizes_ = new uint32_t[dmf_.total_wavetables_];
-    dmf_.wavetable_values_ = new uint32_t*[dmf_.total_wavetables_];
+    dmf_.wavetable_sizes_ = new std::uint32_t[dmf_.total_wavetables_];
+    dmf_.wavetable_values_ = new std::uint32_t*[dmf_.total_wavetables_];
 
-    uint32_t data_mask = 0xFFFFFFFF;
+    std::uint32_t data_mask = 0xFFFFFFFF;
     if (dmf_.GetSystem().type == DMF::SystemType::kGameBoy)
     {
         data_mask = 0xF;
@@ -755,7 +746,7 @@ void DMF::Importer::LoadWavetablesData()
     {
         dmf_.wavetable_sizes_[i] = fin_.ReadInt<false, 4>();
 
-        dmf_.wavetable_values_[i] = new uint32_t[dmf_.wavetable_sizes_[i]];
+        dmf_.wavetable_values_[i] = new std::uint32_t[dmf_.wavetable_sizes_[i]];
 
         for (unsigned j = 0; j < dmf_.wavetable_sizes_[i]; j++)
         {
@@ -810,12 +801,12 @@ void DMF::Importer::LoadPatternsData()
     }
 }
 
-auto DMF::Importer::LoadPatternRow(uint8_t effect_columns_count) -> Row<DMF>
+auto DMF::Importer::LoadPatternRow(std::uint8_t effect_columns_count) -> Row<DMF>
 {
     Row<DMF> row;
 
-    const uint16_t temp_pitch = fin_.ReadInt<false, 2>();
-    uint8_t temp_octave = fin_.ReadInt<false, 2>(); // Upper byte is unused
+    const std::uint16_t temp_pitch = fin_.ReadInt<false, 2>();
+    std::uint8_t temp_octave = fin_.ReadInt<false, 2>(); // Upper byte is unused
 
     switch (temp_pitch)
     {
@@ -848,9 +839,9 @@ auto DMF::Importer::LoadPatternRow(uint8_t effect_columns_count) -> Row<DMF>
 
     row.volume = fin_.ReadInt<true, 2>();
 
-    for (uint8_t col = 0; col < effect_columns_count; ++col)
+    for (std::uint8_t col = 0; col < effect_columns_count; ++col)
     {
-        const int16_t dmf_effect_code = fin_.ReadInt<true, 2>();
+        const std::int16_t dmf_effect_code = fin_.ReadInt<true, 2>();
         row.effect[col].value = fin_.ReadInt<true, 2>();
         assert(kEffectValueless == kDMFNoEffectVal); // DMF valueless effect magic number is -1, and so must be kEffectValueless
 
@@ -901,7 +892,7 @@ auto DMF::Importer::LoadPatternRow(uint8_t effect_columns_count) -> Row<DMF>
     }
 
     // Initialize the rest to zero
-    for (uint8_t col = effect_columns_count; col < 4; ++col) // Max total of 4 effects columns in Deflemask
+    for (std::uint8_t col = effect_columns_count; col < 4; ++col) // Max total of 4 effects columns in Deflemask
     {
         row.effect[col] = {Effects::kNoEffect, 0};
     }
@@ -975,8 +966,8 @@ auto DMF::Importer::LoadPCMSample() -> dmf::PCMSample
     sample.data = nullptr;
     if (sample.size > 0)
     {
-        sample.data = new uint16_t[sample.size];
-        for (uint32_t i = 0; i < sample.size; i++)
+        sample.data = new std::uint16_t[sample.size];
+        for (std::uint32_t i = 0; i < sample.size; i++)
         {
             sample.data[i] = fin_.ReadInt<false, 2>();
         }
@@ -998,7 +989,7 @@ auto DMF::Importer::LoadPCMSample() -> dmf::PCMSample
  * 1:  Error
  * 2:  An extra "loopback order" is needed
  */
-auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
+auto DMF::GenerateDataImpl(std::size_t data_flags) const -> std::size_t
 {
     auto& gen_data = *GetGeneratedDataMut();
     const auto& data = GetData();
@@ -1015,26 +1006,22 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
     auto& global_state = state_reader_writers->global_reader_writer;
     auto& channel_states = state_reader_writers->channel_reader_writers;
 
+    // For convenience:
+    using GD = GeneratedData<DMF>;
+    using GS = GlobalState<DMF>;
+    using CS = ChannelState<DMF>;
+
     // Initialize other generated data
-    using GenDataEnumCommon = GeneratedData<DMF>::GenDataEnumCommon;
-    auto& sound_indexes_used = gen_data.Get<GenDataEnumCommon::kSoundIndexesUsed>().emplace();
-    auto& sound_index_note_extremes = gen_data.Get<GenDataEnumCommon::kSoundIndexNoteExtremes>().emplace();
-    //auto& channel_note_extremes = gen_data.Get<GenDataEnumCommon::kChannelNoteExtremes>().emplace();
-    gen_data.Get<GenDataEnumCommon::kNoteOffUsed>() = false;
-    gen_data.Get<GenDataEnumCommon::kTotalOrders>() = data.GetNumOrders();
+    auto& sound_indexes_used = gen_data.Get<GD::kSoundIndexesUsed>().emplace();
+    auto& sound_index_note_extremes = gen_data.Get<GD::kSoundIndexNoteExtremes>().emplace();
+    //auto& channel_note_extremes = gen_data.Get<GD::kChannelNoteExtremes>().emplace();
+    gen_data.Get<GD::kNoteOffUsed>() = false;
+    gen_data.Get<GD::kTotalOrders>() = data.GetNumOrders();
 
     // Data flags
-    size_t return_val = 0;
+    std::size_t return_val = 0;
     const bool no_port2note_auto_off = data_flags & 0x1;
     const bool mod_compat_loops = data_flags & 0x2;
-
-    // For convenience:
-    using GlobalCommon = GlobalState<DMF>::StateEnumCommon;
-    using GlobalOneShotCommon = GlobalState<DMF>::OneShotEnumCommon;
-    //using GlobalEnum = GlobalState<DMF>::StateEnum;
-    using ChannelCommon = ChannelState<DMF>::StateEnumCommon;
-    using ChannelOneShotCommon = ChannelState<DMF>::OneShotEnumCommon;
-    //using ChannelEnum = ChannelState<DMF>::StateEnum;
 
     /*
      * In spite of what the Deflemask manual says, portamento effects are automatically turned off if they
@@ -1122,9 +1109,9 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
 
     // Set initial state (global)
     global_state.Reset(); // Just in case
-    global_state.SetInitial<GlobalCommon::kSpeedA>(module_info_.tick_time1); // * timebase?
-    global_state.SetInitial<GlobalCommon::kSpeedB>(module_info_.tick_time2); // * timebase?
-    global_state.SetInitial<GlobalCommon::kTempo>(0); // TODO: How should tempo/speed info be stored?
+    global_state.SetInitial<GS::kSpeedA>(module_info_.tick_time1); // * timebase?
+    global_state.SetInitial<GS::kSpeedB>(module_info_.tick_time2); // * timebase?
+    global_state.SetInitial<GS::kTempo>(0); // TODO: How should tempo/speed info be stored?
 
     // Set initial state (per-channel)
     for (unsigned i = 0; i < channel_states.size(); ++i)
@@ -1132,18 +1119,18 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
         auto& channel_state = channel_states[i];
         channel_state.Reset(); // Just in case
 
-        channel_state.SetInitial<ChannelCommon::kSoundIndex>(current_sound_index[i].second);
-        channel_state.SetInitial<ChannelCommon::kNoteSlot>(NoteTypes::Empty{});
-        channel_state.SetInitial<ChannelCommon::kNotePlaying>(false);
-        channel_state.SetInitial<ChannelCommon::kVolume>(dmf::kGameBoyVolumeMax);
-        channel_state.SetInitial<ChannelCommon::kArp>(0);
-        channel_state.SetInitial<ChannelCommon::kPort>({PortamentoStateData::kNone, 0});
-        channel_state.SetInitial<ChannelCommon::kVibrato>(0);
-        channel_state.SetInitial<ChannelCommon::kPort2NoteVolSlide>(0);
-        channel_state.SetInitial<ChannelCommon::kVibratoVolSlide>(0);
-        channel_state.SetInitial<ChannelCommon::kTremolo>(0);
-        channel_state.SetInitial<ChannelCommon::kPanning>(127);
-        channel_state.SetInitial<ChannelCommon::kVolSlide>(0);
+        channel_state.SetInitial<CS::kSoundIndex>(current_sound_index[i].second);
+        channel_state.SetInitial<CS::kNoteSlot>(NoteTypes::Empty{});
+        channel_state.SetInitial<CS::kNotePlaying>(false);
+        channel_state.SetInitial<CS::kVolume>(dmf::kGameBoyVolumeMax);
+        channel_state.SetInitial<CS::kArp>(0);
+        channel_state.SetInitial<CS::kPort>({PortamentoStateData::kNone, 0});
+        channel_state.SetInitial<CS::kVibrato>(0);
+        channel_state.SetInitial<CS::kPort2NoteVolSlide>(0);
+        channel_state.SetInitial<CS::kVibratoVolSlide>(0);
+        channel_state.SetInitial<CS::kTremolo>(0);
+        channel_state.SetInitial<CS::kPanning>(127);
+        channel_state.SetInitial<CS::kVolSlide>(0);
     }
 
     // Main loop
@@ -1172,9 +1159,9 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
                 if (!NoteIsEmpty(row_data.note))
                 {
                     // Portamento to note stops when next note is reached or on Note OFF
-                    if (channel_state.Get<ChannelCommon::kPort>().type == PortamentoStateData::kToNote)
+                    if (channel_state.Get<CS::kPort>().type == PortamentoStateData::kToNote)
                     {
-                        channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0});
+                        channel_state.Set<CS::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0});
                     }
                 }
 
@@ -1187,9 +1174,9 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
                     if (periods[channel] == target_periods[channel])
                     {
                         // Portamento to note stops when it reaches its target period
-                        if (channel_state.Get<ChannelCommon::kPort>().type == PortamentoStateData::kToNote)
+                        if (channel_state.Get<CS::kPort>().type == PortamentoStateData::kToNote)
                         {
-                            channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0});
+                            channel_state.Set<CS::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0});
                         }
                     }
                 }
@@ -1198,9 +1185,9 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
                 if (periods[channel] >= lowest_period || periods[channel] <= highest_period)
                 {
                     // If the period is at the highest or lowest value, automatically stop any portamento effects
-                    if (channel_state.Get<ChannelCommon::kPort>().type != PortamentoStateData::kNone)
+                    if (channel_state.Get<CS::kPort>().type != PortamentoStateData::kNone)
                     {
-                        channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0});
+                        channel_state.Set<CS::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0});
                     }
                 }
 
@@ -1219,7 +1206,7 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
                     // on the current row, if the left-most Port2Note were to be used with value > 0, that note will not play.
                     // In addition, all subsequent notes in the channel will also be cancelled until the port2note is stopped by
                     // a future port effect, note OFF, or it auto-off's. Port2Note auto-off is not implemented here though.
-                    const bool port2note_note_cancellation_possible = channel_state.GetSize<ChannelCommon::kNoteSlot>() == 1 && NoteHasPitch(row_data.note);
+                    const bool port2note_note_cancellation_possible = channel_state.GetSize<CS::kNoteSlot>() == 1 && NoteHasPitch(row_data.note);
                     bool just_cancelled_note = false;
                     bool temp_note_cancelled = note_cancelled[channel];
 
@@ -1368,8 +1355,8 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
                         if (need_to_set_port)
                         {
                             // If setting a port to a value of zero, use kNone instead
-                            if (temp_port.value != 0) { channel_state.Set<ChannelCommon::kPort>(temp_port); }
-                            else { channel_state.Set<ChannelCommon::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0}); }
+                            if (temp_port.value != 0) { channel_state.Set<CS::kPort>(temp_port); }
+                            else { channel_state.Set<CS::kPort>(PortamentoStateData{PortamentoStateData::kNone, 0}); }
                         }
                     }
 
@@ -1380,16 +1367,16 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
                     }
 
                     // Set other effects' states (WIP)
-                    if (arp) { channel_state.Set<ChannelCommon::kArp>(arp.value()); }
-                    if (vibrato) { channel_state.Set<ChannelCommon::kVibrato>(vibrato.value()); }
-                    if (port2note_volslide) { channel_state.Set<ChannelCommon::kPort2NoteVolSlide>(port2note_volslide.value()); }
-                    if (vibrato_volslide) { channel_state.Set<ChannelCommon::kVibratoVolSlide>(vibrato_volslide.value()); }
-                    if (tremolo) { channel_state.Set<ChannelCommon::kTremolo>(tremolo.value()); }
-                    if (panning) { channel_state.Set<ChannelCommon::kPanning>(panning.value()); }
-                    if (volslide) { channel_state.Set<ChannelCommon::kVolSlide>(volslide.value()); }
-                    if (retrigger) { channel_state.SetOneShot<ChannelOneShotCommon::kRetrigger>(retrigger.value()); }
-                    if (note_cut) { channel_state.SetOneShot<ChannelOneShotCommon::kNoteCut>(note_cut.value()); }
-                    if (note_delay) { channel_state.SetOneShot<ChannelOneShotCommon::kNoteDelay>(note_delay.value()); }
+                    if (arp) { channel_state.Set<CS::kArp>(arp.value()); }
+                    if (vibrato) { channel_state.Set<CS::kVibrato>(vibrato.value()); }
+                    if (port2note_volslide) { channel_state.Set<CS::kPort2NoteVolSlide>(port2note_volslide.value()); }
+                    if (vibrato_volslide) { channel_state.Set<CS::kVibratoVolSlide>(vibrato_volslide.value()); }
+                    if (tremolo) { channel_state.Set<CS::kTremolo>(tremolo.value()); }
+                    if (panning) { channel_state.Set<CS::kPanning>(panning.value()); }
+                    if (volslide) { channel_state.Set<CS::kVolSlide>(volslide.value()); }
+                    if (retrigger) { channel_state.SetOneShot<CS::kRetrigger>(retrigger.value()); }
+                    if (note_cut) { channel_state.SetOneShot<CS::kNoteCut>(note_cut.value()); }
+                    if (note_delay) { channel_state.SetOneShot<CS::kNoteDelay>(note_delay.value()); }
 
                     if (sound_index.index() != SoundIndex<DMF>::kNone)
                     {
@@ -1402,16 +1389,16 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
                 const NoteSlot& note_slot = row_data.note;
                 if (NoteIsOff(note_slot))
                 {
-                    channel_state.Set<ChannelCommon::kNoteSlot>(note_slot); // channel_state.SetSingle<ChannelCommon::kNoteSlot>(note_slot, NoteTypes::Empty{});
-                    channel_state.Set<ChannelCommon::kNotePlaying>(false);
-                    gen_data.Get<GenDataEnumCommon::kNoteOffUsed>() = true;
+                    channel_state.Set<CS::kNoteSlot>(note_slot); // channel_state.SetSingle<CS::kNoteSlot>(note_slot, NoteTypes::Empty{});
+                    channel_state.Set<CS::kNotePlaying>(false);
+                    gen_data.Get<GD::kNoteOffUsed>() = true;
                     note_cancelled[channel] = false; // An OFF also "uncancels" notes cancelled by a port2note effect
                     // NOTE: Note OFF does not affect the current note period
                 }
                 else if (NoteHasPitch(note_slot) && !note_cancelled[channel])
                 {
-                    channel_state.Set<ChannelCommon::kNoteSlot, true>(note_slot);
-                    channel_state.Set<ChannelCommon::kNotePlaying>(true);
+                    channel_state.Set<CS::kNoteSlot, true>(note_slot);
+                    channel_state.Set<CS::kNotePlaying>(true);
                     const Note& note = GetNote(note_slot);
 
                     // Update the period
@@ -1427,7 +1414,7 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
                     // temporarily, but it will still be guaranteed to write to the end of the
                     // underlying vector and not mess up the always-increasing position ordering.
                     channel_state.SetWritePos(current_sound_index[channel].first);
-                    channel_state.Set<ChannelCommon::kSoundIndex>(sound_index);
+                    channel_state.Set<CS::kSoundIndex>(sound_index);
                     channel_state.SetWritePos(gen_data_order, gen_data_row);
 
                     // Get lowest/highest notes
@@ -1452,7 +1439,7 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
                 }
 
                 // Update current period
-                periods[channel] = UpdatePeriod(periods[channel], row % 2, channel_state.Get<ChannelCommon::kPort>(), target_periods[channel]);
+                periods[channel] = UpdatePeriod(periods[channel], row % 2, channel_state.Get<CS::kPort>(), target_periods[channel]);
 
                 // CHANNEL STATE - VOLUME
                 if (row_data.volume != kDMFNoVolume)
@@ -1464,13 +1451,13 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
                         switch (row_data.volume)
                         {
                             case 0: case 1: case 2: case 3:
-                                channel_state.Set<ChannelCommon::kVolume>(0); break;
+                                channel_state.Set<CS::kVolume>(0); break;
                             case 4: case 5: case 6: case 7:
-                                channel_state.Set<ChannelCommon::kVolume>(5); break;
+                                channel_state.Set<CS::kVolume>(5); break;
                             case 8: case 9: case 10: case 11:
-                                channel_state.Set<ChannelCommon::kVolume>(10); break;
+                                channel_state.Set<CS::kVolume>(10); break;
                             case 12: case 13: case 14: case 15:
-                                channel_state.Set<ChannelCommon::kVolume>(15); break;
+                                channel_state.Set<CS::kVolume>(15); break;
                             default:
                                 assert(false && "Invalid DMF volume");
                                 break;
@@ -1478,7 +1465,7 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
                     }
                     else if (NoteHasPitch(row_data.note))
                     {
-                        channel_state.Set<ChannelCommon::kVolume>(static_cast<EffectValueXX>(row_data.volume));
+                        channel_state.Set<CS::kVolume>(static_cast<EffectValueXX>(row_data.volume));
                     }
                 }
 
@@ -1554,14 +1541,14 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
                     }
 
                     // Set the global state if needed
-                    if (speed_a) { global_state.Set<GlobalCommon::kSpeedA>(speed_a.value()); }
-                    if (speed_b) { global_state.Set<GlobalCommon::kSpeedB>(speed_b.value()); }
-                    if (tempo) { global_state.Set<GlobalCommon::kTempo>(tempo.value()); }
+                    if (speed_a) { global_state.Set<GS::kSpeedA>(speed_a.value()); }
+                    if (speed_b) { global_state.Set<GS::kSpeedB>(speed_b.value()); }
+                    if (tempo) { global_state.Set<GS::kTempo>(tempo.value()); }
 
                     if (pat_break)
                     {
                         // Always 0 b/c we're using row offsets
-                        global_state.SetOneShot<GlobalOneShotCommon::kPatBreak>(0);
+                        global_state.SetOneShot<GS::kPatBreak>(0);
 
                         // If PatBreak value > 0, rows in gen data will shifted by an offset so that they start on row 0.
                         assert(order < data.GetNumOrders());
@@ -1588,7 +1575,7 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
                             // If not on the last row, use a PatBreak. PosJump is not needed.
                             if (row + 1 != data.GetNumRows())
                             {
-                                global_state.SetOneShot<GlobalOneShotCommon::kPatBreak>(0);
+                                global_state.SetOneShot<GS::kPatBreak>(0);
                             }
 
                             // Any further rows in this order/pattern are skipped because they unreachable.
@@ -1610,7 +1597,7 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
                                 GetOrderRowPosition(gen_data_order, gen_data_row),
                                 GetOrderRowPosition(order_map.at(pos_jump.value()), 0)
                             ); // From/To
-                            global_state.SetOneShot<GlobalOneShotCommon::kPosJump>(order_map.at(pos_jump.value()));
+                            global_state.SetOneShot<GS::kPosJump>(order_map.at(pos_jump.value()));
 
                             // Any further orders or rows in this song are ignored because they unreachable.
                             // Break out of entire nested loop.
@@ -1642,7 +1629,7 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
 
     // Gen data's total orders may be less than data's if any orders are skipped due to PosJump or
     // unreachable due to being an order after a loopback.
-    gen_data.Get<GenDataEnumCommon::kTotalOrders>().value() -= num_orders_skipped;
+    gen_data.Get<GD::kTotalOrders>().value() -= num_orders_skipped;
 
     const auto last_order_temp = data.GetNumOrders() - 1 - num_orders_skipped;
     const auto last_row_temp = last_row[last_order_temp] - 1;
@@ -1654,7 +1641,7 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
         // No pos jump + loopback has been added for the end of the song - need to add them here
         global_state.Reset();
         global_state.SetWritePos(last_order_row);
-        global_state.SetOneShot<GlobalOneShotCommon::kPosJump>(0);
+        global_state.SetOneShot<GS::kPosJump>(0);
         loopbacks_temp.emplace_back(last_order_row, 0);
     }
 
@@ -1678,7 +1665,7 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
         if (last != to)
         {
             global_state.SetWritePos(to);
-            global_state.SetOneShot<GlobalOneShotCommon::kLoopback>(from);
+            global_state.SetOneShot<GS::kLoopback>(from);
             last = to;
 
             // Only proceed if using MOD-compatible loops
@@ -1694,15 +1681,15 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
                 channel_state.SetWritePos(to);
 
                 const auto state_before_loop = channel_state.ReadAt(from);
-                const bool playing_before = channel_state.GetValue<ChannelCommon::kNotePlaying>(state_before_loop);
+                const bool playing_before = channel_state.GetValue<CS::kNotePlaying>(state_before_loop);
                 if (playing_before)
                 {
                     // A note was playing just before looping back
-                    const auto current_row = channel_state.GetImpulse<ChannelCommon::kNoteSlot>();
+                    const auto current_row = channel_state.GetImpulse<CS::kNoteSlot>();
                     if (!current_row.has_value() || NoteIsEmpty(current_row.value()))
                     {
                         // There's an empty slot on this row
-                        const bool playing_now = channel_state.Get<ChannelCommon::kNotePlaying>();
+                        const bool playing_now = channel_state.Get<CS::kNotePlaying>();
                         if (playing_now)
                         {
                             // In Deflemask, a note would be playing on this row the first time through, but when looping back
@@ -1714,8 +1701,8 @@ auto DMF::GenerateDataImpl(size_t data_flags) const -> size_t
                         else
                         {
                             // Can safely insert a Note OFF in this row to stop notes carrying over from the loop
-                            channel_state.Insert<ChannelCommon::kNoteSlot, true>(NoteTypes::Off{});
-                            gen_data.Get<GenDataEnumCommon::kNoteOffUsed>() = true;
+                            channel_state.Insert<CS::kNoteSlot, true>(NoteTypes::Off{});
+                            gen_data.Get<GD::kNoteOffUsed>() = true;
                         }
                     }
                 }

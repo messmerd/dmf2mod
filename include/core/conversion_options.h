@@ -49,7 +49,7 @@ public:
      * Cast ConversionOptionsPtr to std::shared_ptr<T> where T is the derived ConversionOptions class
      */
     template<class T, std::enable_if_t<std::is_base_of_v<ConversionOptionsBase, T>, bool> = true>
-    [[nodiscard]] auto Cast() const -> std::shared_ptr<const T>
+    auto Cast() const -> std::shared_ptr<const T>
     {
         return std::static_pointer_cast<const T>(shared_from_this());
     }

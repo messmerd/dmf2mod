@@ -58,7 +58,7 @@ void OptionDefinition::PrintHelp() const
         str1 += '[';
 
         unsigned i = 0;
-        const size_t total = GetAcceptedValuesOrdered().size();
+        const std::size_t total = GetAcceptedValuesOrdered().size();
         for (const auto& val : GetAcceptedValuesOrdered())
         {
             switch (option_type)
@@ -201,7 +201,7 @@ OptionDefinitionCollection::OptionDefinitionCollection(const std::initializer_li
     }
 }
 
-auto OptionDefinitionCollection::Count() const -> size_t
+auto OptionDefinitionCollection::Count() const -> std::size_t
 {
     return id_options_map_.size();
 }
@@ -442,7 +442,7 @@ auto OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unk
         }
 
         const OptionDefinition* def = handling_option;
-        size_t equals_pos = std::string::npos;
+        std::size_t equals_pos = std::string::npos;
 
         const bool this_arg_is_value = handling_option != nullptr;
         if (this_arg_is_value)

@@ -76,9 +76,9 @@ private:
     void ConvertSamples(SampleMap& sample_map);
     void ConvertSampleData(const SampleMap& sample_map);
     void ConvertPatterns(const SampleMap& sample_map);
-    inline auto ConvertEffects(ChannelStateReader<DMF>& state) -> PriorityEffect;
-    inline auto ConvertNote(ChannelStateReader<DMF>& state, NoteRange& note_range, bool& set_sample, int& set_vol_if_not, const SampleMap& sample_map, PriorityEffect& mod_effect) -> Row<MOD>;
-    inline void ApplyEffects(std::array<Row<MOD>, 4>& row_data, const std::array<PriorityEffect, 4>& mod_effect, std::vector<PriorityEffect>& global_effects);
+    auto ConvertEffects(ChannelStateReader<DMF>& state) -> PriorityEffect;
+    auto ConvertNote(ChannelStateReader<DMF>& state, NoteRange& note_range, bool& set_sample, int& set_vol_if_not, const SampleMap& sample_map, PriorityEffect& mod_effect) -> Row<MOD>;
+    void ApplyEffects(std::array<Row<MOD>, 4>& row_data, const std::array<PriorityEffect, 4>& mod_effect, std::vector<PriorityEffect>& global_effects);
     void ConvertInitialBPM(unsigned& tempo, unsigned& speed);
 
     MOD& mod_;
@@ -92,9 +92,9 @@ private:
 
 using MODOptionEnum = MODConversionOptions::OptionEnum;
 
-static auto GenerateSquareWaveSample(unsigned duty_cycle, unsigned length) -> std::vector<int8_t>;
-static auto GenerateWavetableSample(uint32_t* wavetable_data, unsigned length) -> std::vector<int8_t>;
-static inline auto GetEffectCode(int effect_code) -> uint8_t;
+static auto GenerateSquareWaveSample(unsigned duty_cycle, unsigned length) -> std::vector<std::int8_t>;
+static auto GenerateWavetableSample(std::uint32_t* wavetable_data, unsigned length) -> std::vector<std::int8_t>;
+static auto GetEffectCode(int effect_code) -> std::uint8_t;
 static auto GetWarningMessage(MOD::ConvertWarning warning, const std::string& info = "") -> std::string;
 
 /*
@@ -104,11 +104,11 @@ static auto GetWarningMessage(MOD::ConvertWarning warning, const std::string& in
  */
 
 static constexpr auto kProTrackerPeriodTable = std::array{
-    std::array<uint16_t, 12>{1712, 1616, 1525, 1440, 1357, 1281, 1209, 1141, 1077, 1017, 961, 907}, /* C-0 to B-0 */
-    std::array<uint16_t, 12>{856,  808,  762,  720,  678,  640,  604,  570,  538,  508,  480, 453}, /* C-1 to B-1 */
-    std::array<uint16_t, 12>{428,  404,  381,  360,  339,  320,  302,  285,  269,  254,  240, 226}, /* C-2 to B-2 */
-    std::array<uint16_t, 12>{214,  202,  190,  180,  170,  160,  151,  143,  135,  127,  120, 113}, /* C-3 to B-3 */
-    std::array<uint16_t, 12>{107,  101,  95,   90,   85,   80,   76,   71,   67,   64,   60,  57}   /* C-4 to B-4 */
+    std::array<std::uint16_t, 12>{1712, 1616, 1525, 1440, 1357, 1281, 1209, 1141, 1077, 1017, 961, 907}, /* C-0 to B-0 */
+    std::array<std::uint16_t, 12>{856,  808,  762,  720,  678,  640,  604,  570,  538,  508,  480, 453}, /* C-1 to B-1 */
+    std::array<std::uint16_t, 12>{428,  404,  381,  360,  339,  320,  302,  285,  269,  254,  240, 226}, /* C-2 to B-2 */
+    std::array<std::uint16_t, 12>{214,  202,  190,  180,  170,  160,  151,  143,  135,  127,  120, 113}, /* C-3 to B-3 */
+    std::array<std::uint16_t, 12>{107,  101,  95,   90,   85,   80,   76,   71,   67,   64,   60,  57}   /* C-4 to B-4 */
 };
 
 // Effect codes used by the MOD format
@@ -209,17 +209,17 @@ public:
     auto InitSilence() -> SoundIndexType<MOD>;
 
     auto GetMODNote(const Note& dmf_note, NoteRange& mod_note_range) const -> Note;
-    [[nodiscard]] auto GetMODNoteRange(const Note& dmf_note) const -> NoteRange;
-    [[nodiscard]] auto GetMODSampleId(const Note& dmf_note) const -> SoundIndexType<MOD>;
-    [[nodiscard]] auto GetMODSampleId(NoteRange mod_note_range) const -> SoundIndexType<MOD>;
-    [[nodiscard]] auto GetMODSampleLength(NoteRange mod_note_range) const -> unsigned;
-    [[nodiscard]] auto GetMODNoteRange(SoundIndexType<MOD> mod_sound_index) const -> NoteRange;
-    [[nodiscard]] auto GetMODNoteRangeName(NoteRange mod_note_range) const -> NoteRangeName;
+    auto GetMODNoteRange(const Note& dmf_note) const -> NoteRange;
+    auto GetMODSampleId(const Note& dmf_note) const -> SoundIndexType<MOD>;
+    auto GetMODSampleId(NoteRange mod_note_range) const -> SoundIndexType<MOD>;
+    auto GetMODSampleLength(NoteRange mod_note_range) const -> unsigned;
+    auto GetMODNoteRange(SoundIndexType<MOD> mod_sound_index) const -> NoteRange;
+    auto GetMODNoteRangeName(NoteRange mod_note_range) const -> NoteRangeName;
 
-    [[nodiscard]] auto GetNumMODSamples() const -> int { return num_mod_samples_; }
-    [[nodiscard]] auto GetSampleType() const -> SampleType { return sample_type_; }
-    [[nodiscard]] auto GetFirstMODSampleId() const -> SoundIndexType<MOD> { return mod_sound_indexes_[0]; }
-    [[nodiscard]] auto IsDownsamplingNeeded() const -> bool { return downsampling_needed_; }
+    auto GetNumMODSamples() const -> int { return num_mod_samples_; }
+    auto GetSampleType() const -> SampleType { return sample_type_; }
+    auto GetFirstMODSampleId() const -> SoundIndexType<MOD> { return mod_sound_indexes_[0]; }
+    auto IsDownsamplingNeeded() const -> bool { return downsampling_needed_; }
 
 private:
     SoundIndexType<DMF> dmf_sound_index_ = SoundIndex<DMF>::None{};
@@ -524,7 +524,7 @@ void MOD::DMFConverter::Convert()
 
     ///////////////// GET DMF GENERATED DATA
 
-    const size_t error_code = dmf_.GenerateData(1 | 2); // MOD-compatibility flags
+    const std::size_t error_code = dmf_.GenerateData(1 | 2); // MOD-compatibility flags
     if (error_code & 2) { mod_.status_.AddWarning(GetWarningMessage(ConvertWarning::kLoopbackInaccuracy)); }
 
     auto dmf_gen_data = dmf_.GetGeneratedData();
@@ -645,7 +645,7 @@ void MOD::DMFConverter::ConvertSampleData(const SampleMap& sample_map)
 
                 case SampleType::kSquare:
                 {
-                    const uint8_t duty_cycle = std::get<SoundIndex<DMF>::Square>(dmf_sound_index).id;
+                    const std::uint8_t duty_cycle = std::get<SoundIndex<DMF>::Square>(dmf_sound_index).id;
                     si.name = "SQW, Duty ";
                     switch (duty_cycle)
                     {
@@ -661,14 +661,14 @@ void MOD::DMFConverter::ConvertSampleData(const SampleMap& sample_map)
 
                 case SampleType::kWave:
                 {
-                    const uint8_t wavetable_index = std::get<SoundIndex<DMF>::Wave>(dmf_sound_index).id;
+                    const std::uint8_t wavetable_index = std::get<SoundIndex<DMF>::Wave>(dmf_sound_index).id;
 
                     si.name = "Wavetable #";
                     si.name += std::to_string(wavetable_index);
                 
                     si.volume = kVolumeMax; // TODO: Optimize this?
 
-                    uint32_t* wavetable_data = dmf_.GetWavetableValues()[wavetable_index];
+                    std::uint32_t* wavetable_data = dmf_.GetWavetableValues()[wavetable_index];
                     si.data = GenerateWavetableSample(wavetable_data, si.length);
                     break;
                 }
@@ -860,7 +860,7 @@ void MOD::DMFConverter::ConvertPatterns(const SampleMap& sample_map)
     }
 }
 
-inline auto MOD::DMFConverter::ConvertEffects(ChannelStateReader<DMF>& state) -> PriorityEffect
+auto MOD::DMFConverter::ConvertEffects(ChannelStateReader<DMF>& state) -> PriorityEffect
 {
     // Effects are listed here with highest priority first
 
@@ -909,7 +909,7 @@ inline auto MOD::DMFConverter::ConvertEffects(ChannelStateReader<DMF>& state) ->
     return { kEffectPriorityUnsupportedEffect, { Effects::kNoEffect, 0 } };
 }
 
-inline auto MOD::DMFConverter::ConvertNote(ChannelStateReader<DMF>& state, NoteRange& note_range, bool& set_sample, int& set_vol_if_not, const SampleMap& sample_map, PriorityEffect& mod_effect) -> Row<MOD>
+auto MOD::DMFConverter::ConvertNote(ChannelStateReader<DMF>& state, NoteRange& note_range, bool& set_sample, int& set_vol_if_not, const SampleMap& sample_map, PriorityEffect& mod_effect) -> Row<MOD>
 {
     // Do not call this when on the noise channel
 
@@ -1016,7 +1016,7 @@ inline auto MOD::DMFConverter::ConvertNote(ChannelStateReader<DMF>& state, NoteR
     }
 }
 
-inline void MOD::DMFConverter::ApplyEffects(std::array<Row<MOD>, 4>& row_data, const std::array<PriorityEffect, 4>& mod_effects, std::vector<PriorityEffect>& global_effects)
+void MOD::DMFConverter::ApplyEffects(std::array<Row<MOD>, 4>& row_data, const std::array<PriorityEffect, 4>& mod_effects, std::vector<PriorityEffect>& global_effects)
 {
     // When there are no global (channel-independent) effects:
     if (global_effects.empty())
@@ -1251,7 +1251,7 @@ void MOD::ExportModuleInfo(std::ofstream& fout) const
     {
         fout.put(static_cast<uint8_t>(pattern_id));
     }
-    for (uint8_t i = num_orders; i < 128; ++i)
+    for (std::uint8_t i = num_orders; i < 128; ++i)
     {
         fout.put(0);
     }
@@ -1269,11 +1269,11 @@ void MOD::ExportPatterns(std::ofstream& fout) const
             for (ChannelIndex channel = 0; channel < mod_data.GetNumChannels(); ++channel)
             {
                 const Row<MOD>& row_data = pattern[row][channel];
-                uint16_t period = 0;
+                std::uint16_t period = 0;
                 if (NoteHasPitch(row_data.note))
                 {
-                    const uint8_t octave = GetNote(row_data.note).octave;
-                    const auto pitch = static_cast<uint8_t>(GetNote(row_data.note).pitch);
+                    const std::uint8_t octave = GetNote(row_data.note).octave;
+                    const auto pitch = static_cast<std::uint8_t>(GetNote(row_data.note).pitch);
                     period = kProTrackerPeriodTable[octave][pitch];
                 }
 
@@ -1286,13 +1286,13 @@ void MOD::ExportPatterns(std::ofstream& fout) const
                 //const uint16_t effect = ((uint16_t)rowData.EffectCode << 4) | rowData.EffectValue;
 
                 // Convert dmf2mod internal effect code to MOD effect code
-                const uint8_t effect_code = GetEffectCode(row_data.effect.code);
+                const std::uint8_t effect_code = GetEffectCode(row_data.effect.code);
 
                 // Sample number (lower 4b); effect code (upper 4b)
                 fout.put((row_data.sample << 4) | (effect_code >> 4));
 
                 // Effect code (lower 8 bits)
-                fout.put(((effect_code << 4) & 0x00FF) | static_cast<uint8_t>(row_data.effect.value));
+                fout.put(((effect_code << 4) & 0x00FF) | static_cast<std::uint8_t>(row_data.effect.value));
             }
         }
     }
@@ -1303,7 +1303,7 @@ void MOD::ExportSampleData(std::ofstream& fout) const
     for (const auto& sample_info : samples_)
     {
         const auto& sample_data = sample_info.second.data;
-        for (int8_t value : sample_data)
+        for (std::int8_t value : sample_data)
         {
             fout.put(value);
         }
@@ -1312,11 +1312,11 @@ void MOD::ExportSampleData(std::ofstream& fout) const
 
 ///////// OTHER /////////
 
-static auto GenerateSquareWaveSample(unsigned duty_cycle, unsigned length) -> std::vector<int8_t>
+static auto GenerateSquareWaveSample(unsigned duty_cycle, unsigned length) -> std::vector<std::int8_t>
 {
     constexpr auto duty = std::array{1, 2, 4, 6};
 
-    std::vector<int8_t> sample;
+    std::vector<std::int8_t> sample;
     sample.assign(length, 0);
 
     // This loop creates a square wave with the correct length and duty cycle:
@@ -1335,11 +1335,11 @@ static auto GenerateSquareWaveSample(unsigned duty_cycle, unsigned length) -> st
     return sample;
 }
 
-static auto GenerateWavetableSample(uint32_t* wavetable_data, unsigned length) -> std::vector<int8_t>
+static auto GenerateWavetableSample(std::uint32_t* wavetable_data, unsigned length) -> std::vector<int8_t>
 {
     constexpr float max_vol_cap = 12.f / 15.f; // Set WAVE max volume to 12/15 of potential max volume to emulate DMF wave channel
 
-    std::vector<int8_t> sample;
+    std::vector<std::int8_t> sample;
     sample.assign(length, 0);
 
     for (unsigned i = 0; i < length; i++)
@@ -1349,27 +1349,27 @@ static auto GenerateWavetableSample(uint32_t* wavetable_data, unsigned length) -
         switch (length)
         {
             case 512: // x16
-                sample[i] = (int8_t)(((wavetable_data[i / 16] / 15.f * 255.f) - 128.f) * max_vol_cap); break;
+                sample[i] = (std::int8_t)(((wavetable_data[i / 16] / 15.f * 255.f) - 128.f) * max_vol_cap); break;
             case 256: // x8
-                sample[i] = (int8_t)(((wavetable_data[i / 8] / 15.f * 255.f) - 128.f) * max_vol_cap); break;
+                sample[i] = (std::int8_t)(((wavetable_data[i / 8] / 15.f * 255.f) - 128.f) * max_vol_cap); break;
             case 128: // x4
-                sample[i] = (int8_t)(((wavetable_data[i / 4] / 15.f * 255.f) - 128.f) * max_vol_cap); break;
+                sample[i] = (std::int8_t)(((wavetable_data[i / 4] / 15.f * 255.f) - 128.f) * max_vol_cap); break;
             case 64:  // x2
-                sample[i] = (int8_t)(((wavetable_data[i / 2] / 15.f * 255.f) - 128.f) * max_vol_cap); break;
+                sample[i] = (std::int8_t)(((wavetable_data[i / 2] / 15.f * 255.f) - 128.f) * max_vol_cap); break;
             case 32:  // Original length
-                sample[i] = (int8_t)(((wavetable_data[i] / 15.f * 255.f) - 128.f) * max_vol_cap); break;
+                sample[i] = (std::int8_t)(((wavetable_data[i] / 15.f * 255.f) - 128.f) * max_vol_cap); break;
             case 16:  // Half length (loss of information from downsampling)
             {
                 // Take average of every two sample values to make new sample value
                 const unsigned sum = wavetable_data[i * 2] + wavetable_data[(i * 2) + 1];
-                sample[i] = (int8_t)(((sum / (15.f * 2) * 255.f) - 128.f) * max_vol_cap);
+                sample[i] = (std::int8_t)(((sum / (15.f * 2) * 255.f) - 128.f) * max_vol_cap);
                 break;
             }
             case 8:   // Quarter length (loss of information from downsampling)
             {
                 // Take average of every four sample values to make new sample value
                 const unsigned sum = wavetable_data[i * 4] + wavetable_data[(i * 4) + 1] + wavetable_data[(i * 4) + 2] + wavetable_data[(i * 4) + 3];
-                sample[i] = (int8_t)(((sum / (15.f * 4) * 255.f) - 128.f) * max_vol_cap);
+                sample[i] = (std::int8_t)(((sum / (15.f * 4) * 255.f) - 128.f) * max_vol_cap);
                 break;
             }
             default:
@@ -1381,7 +1381,7 @@ static auto GenerateWavetableSample(uint32_t* wavetable_data, unsigned length) -
     return sample;
 }
 
-static inline auto GetEffectCode(int effect_code) -> uint8_t
+static auto GetEffectCode(int effect_code) -> std::uint8_t
 {
     // Maps dmf2mod internal effect code to MOD effect code.
     switch (effect_code)

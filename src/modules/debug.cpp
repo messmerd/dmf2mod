@@ -17,6 +17,25 @@
 
 using namespace d2m;
 
+namespace {
+
+struct SoundIndexVisitor
+{
+    auto operator()(const SoundIndexType<DMF>& val) -> std::string
+    {
+        using SI = SoundIndex<DMF>;
+        if (auto square = std::get_if<SI::Square>(&val); square)
+            { return "SQUARE:" + std::to_string(square->id); }
+        else if (auto wave = std::get_if<SI::Wave>(&val); wave)
+            { return "WAVE:" + std::to_string(wave->id); }
+        else if (auto noise = std::get_if<SI::Noise>(&val); noise)
+            { return "NOISE:" + std::to_string(noise->id); }
+        else { return "UNKNOWN"; }
+    }
+};
+
+} // namespace
+
 void Debug::ImportImpl(const std::string& filename)
 {
     // Not implemented
@@ -46,43 +65,28 @@ void Debug::ConvertImpl(const ModulePtr& input)
     [[maybe_unused]] auto result = input->GenerateData(flags);
     dump_ += "GenerateData result: " + std::to_string(result) + "\n";
 
-    static_assert(ChannelState<Debug>::kCommonCount == 12);
+    static_assert(ChannelState<Debug>::kCommonCount == 11);
     static_assert(ChannelState<Debug>::kOneShotCommonCount == 3);
 
-    /*
     switch (input->GetType())
     {
     case ModuleType::kDMF:
     {
-        using Common = ChannelState<DMF>::ChannelOneShotCommonDefinition;
-        auto derived = input->Cast<DMF>();
-        auto gen_data = derived->GetGeneratedData();
-
-        const auto& note_delay = gen_data->Get<Common::kNoteDelay>();
-        if (note_delay)
-        {
-            for (auto& [index, extremes] : note_delay.value())
-            {
-                if (std::is_same_v<SoundIndex<DMF>::Square, decltype(index)>)
-                {
-                    dump_ += "";
-                }
-            }
-        }
-
+        //using Common = ChannelState<DMF>::ChannelOneShotCommonDefinition;
+        //auto derived = input->Cast<DMF>();
+        // ...
         break;
     }
     case ModuleType::kMOD:
     {
-        auto derived = input->Cast<MOD>();
-        auto gen_data = derived->GetGeneratedData();
-
+        //auto derived = input->Cast<MOD>();
+        //auto gen_data = derived->GetGeneratedData();
+        // ...
         break;
     }
     default:
         break;
     }
-    */
 }
 
 void Debug::ExportImpl(const std::string& filename)

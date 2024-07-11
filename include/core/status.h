@@ -63,12 +63,12 @@ public:
         kConvert
     };
 
-    [[nodiscard]] auto what() const noexcept -> const char* override
+    auto what() const noexcept -> const char* override
     {
         return error_message_.c_str();
     }
 
-    [[nodiscard]] auto str() const -> std::string_view
+    auto str() const -> std::string_view
     {
         return error_message_;
     }
@@ -121,7 +121,7 @@ public: // Should this be protected once DMF gets its own DMFException class?
     }
 
 protected:
-    int error_code_;
+    int error_code_ = 0;
     std::string error_message_;
 
 private:
@@ -138,14 +138,14 @@ public:
 
     Status() { Clear(); }
 
-    [[nodiscard]] auto ErrorOccurred() const -> bool { return error_.get(); }
-    [[nodiscard]] auto WarningsIssued() const -> bool { return !warning_messages_.empty(); }
+    auto ErrorOccurred() const -> bool { return error_.get(); }
+    auto WarningsIssued() const -> bool { return !warning_messages_.empty(); }
     
     void PrintError(bool use_std_err = true) const;
     void PrintWarnings(bool use_std_err = false) const;
 
     // Prints error and warnings that occurred during the last action. Returns true if an error occurred.
-    [[nodiscard]] auto HandleResults() const -> bool;
+    auto HandleResults() const -> bool;
 
     void Clear()
     {

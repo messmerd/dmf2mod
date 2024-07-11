@@ -227,8 +227,8 @@ template<class Base> bool Factory<Base>::initialized_ = false;
 template<class Base>
 struct EnableReflection : public detail::EnableReflectionBase
 {
-    [[nodiscard]] virtual auto GetType() const -> ModuleType = 0;
-    [[nodiscard]] virtual auto GetInfo() const -> const Info<Base>* = 0;
+    virtual auto GetType() const -> ModuleType = 0;
+    virtual auto GetInfo() const -> const Info<Base>* = 0;
 };
 
 
@@ -242,13 +242,13 @@ struct EnableReflection : public detail::EnableReflectionBase
 template<class Derived, class Base>
 struct ReflectionImpl : public Base
 {
-    [[nodiscard]] auto GetType() const -> ModuleType final
+    auto GetType() const -> ModuleType final
     {
         static const ModuleType module_type = Factory<Base>::template GetEnumFromType<Derived>();
         return module_type;
     }
 
-    [[nodiscard]] auto GetInfo() const -> const Info<Base>* final
+    auto GetInfo() const -> const Info<Base>* final
     {
         return Factory<Base>::GetInfo(GetType());
     }

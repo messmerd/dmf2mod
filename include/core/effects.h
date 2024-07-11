@@ -11,8 +11,8 @@
 
 namespace d2m {
 
-using EffectCode = int8_t;
-using EffectValue = int16_t;
+using EffectCode = std::int8_t;
+using EffectValue = std::int16_t;
 
 struct Effect
 {
@@ -31,25 +31,25 @@ namespace Effects
     enum
     {
         // All common effects are less than 0
-        kNoEffect            =0,
-        kArp                 =-1,
-        kPortUp              =-2,
-        kPortDown            =-3,
-        kPort2Note           =-4,
-        kVibrato             =-5,
-        kPort2NoteVolSlide   =-6,
-        kVibratoVolSlide     =-7,
-        kTremolo             =-8,
-        kPanning             =-9,
-        kSpeedA              =-10,
-        kVolSlide            =-11,
-        kPosJump             =-12,
-        kRetrigger           =-13,
-        kPatBreak            =-14,
-        kNoteCut             =-15,
-        kNoteDelay           =-16,
-        kTempo               =-17,
-        kSpeedB              =-18,
+        kNoEffect            =  0,
+        kArp                 = -1,
+        kPortUp              = -2,
+        kPortDown            = -3,
+        kPort2Note           = -4,
+        kVibrato             = -5,
+        kPort2NoteVolSlide   = -6,
+        kVibratoVolSlide     = -7,
+        kTremolo             = -8,
+        kPanning             = -9,
+        kSpeedA              = -10,
+        kVolSlide            = -11,
+        kPosJump             = -12,
+        kRetrigger           = -13,
+        kPatBreak            = -14,
+        kNoteCut             = -15,
+        kNoteDelay           = -16,
+        kTempo               = -17,
+        kSpeedB              = -18,
     };
     // Modules should implement effects specific to them using positive values starting with 1.
 }

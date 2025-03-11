@@ -12,11 +12,11 @@ namespace d2m {
 // Add all supported modules to this enum
 enum class ModuleType
 {
-    kNone=0,
-    kDMF,
-    kMOD,
+	kNone=0,
+	kDMF,
+	kMOD,
 #ifndef NDEBUG
-    kDebug,
+	kDebug,
 #endif
 };
 

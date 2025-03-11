@@ -6,7 +6,7 @@ message(STATUS "Setting up for web app")
 
 # Source files
 set(WEBAPP_SOURCES
-    ${DMF2MOD_ROOT}/webapp/webapp.cpp
+	${DMF2MOD_ROOT}/webapp/webapp.cpp
 )
 
 # Warnings
@@ -24,11 +24,11 @@ set(WASM_LFLAGS "--bind -lidbfs.js ${WASM_LINKER_FLAGS} ${WASM_COMMON_FLAGS}")
 # Determine whether to build WASM or asm.js version
 option(USE_WASM "Use WASM (asm.js is used otherwise)" ON)
 if (USE_WASM)
-    message(STATUS "Using WebAssembly")
-    set(USE_WASM_FLAG "-s WASM=1")
+	message(STATUS "Using WebAssembly")
+	set(USE_WASM_FLAG "-s WASM=1")
 else()
-    message(STATUS "Using asm.js")
-    set(USE_WASM_FLAG "-s WASM=0")
+	message(STATUS "Using asm.js")
+	set(USE_WASM_FLAG "-s WASM=0")
 endif()
 
 # Set compiler flags
@@ -54,15 +54,15 @@ target_link_libraries(${PROJECT_NAME} PRIVATE zlibstatic)
 
 # Includes
 target_include_directories(${PROJECT_NAME} PRIVATE
-    ${INC_DIRS}
-    ${PROJECT_BINARY_DIR}/extern
-    ${PROJECT_BINARY_DIR}/extern/zlib
+	${INC_DIRS}
+	${PROJECT_BINARY_DIR}/extern
+	${PROJECT_BINARY_DIR}/extern/zlib
 )
 
 add_custom_command(
-    TARGET ${PROJECT_NAME}
-    POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${DMF2MOD_ROOT}/webapp/ui"
-        "${CMAKE_BINARY_DIR}/html"
+	TARGET ${PROJECT_NAME}
+	POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E copy_directory
+		"${DMF2MOD_ROOT}/webapp/ui"
+		"${CMAKE_BINARY_DIR}/html"
 )

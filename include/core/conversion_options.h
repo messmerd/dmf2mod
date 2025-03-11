@@ -30,7 +30,7 @@ template<typename T> class ConversionOptionsInterface;
 template<>
 struct Info<ConversionOptionsBase> : public InfoBase
 {
-    OptionDefinitionCollection option_definitions;
+	OptionDefinitionCollection option_definitions;
 };
 
 
@@ -39,39 +39,39 @@ class ConversionOptionsBase : public OptionCollection, public EnableReflection<C
 {
 protected:
 
-    ConversionOptionsBase() = default; // See ConversionOptionsInterface constructor
+	ConversionOptionsBase() = default; // See ConversionOptionsInterface constructor
 
 public:
 
-    virtual ~ConversionOptionsBase() = default;
+	virtual ~ConversionOptionsBase() = default;
 
-    /*
-     * Cast ConversionOptionsPtr to std::shared_ptr<T> where T is the derived ConversionOptions class
-     */
-    template<class T, std::enable_if_t<std::is_base_of_v<ConversionOptionsBase, T>, bool> = true>
-    [[nodiscard]] auto Cast() const -> std::shared_ptr<const T>
-    {
-        return std::static_pointer_cast<const T>(shared_from_this());
-    }
+	/*
+	 * Cast ConversionOptionsPtr to std::shared_ptr<T> where T is the derived ConversionOptions class
+	 */
+	template<class T, std::enable_if_t<std::is_base_of_v<ConversionOptionsBase, T>, bool> = true>
+	[[nodiscard]] auto Cast() const -> std::shared_ptr<const T>
+	{
+		return std::static_pointer_cast<const T>(shared_from_this());
+	}
 
-    /*
-     * Get the filename of the output file. Returns empty string if error occurred.
-     */
-    auto GetOutputFilename() const -> std::string { return output_file_; }
+	/*
+	 * Get the filename of the output file. Returns empty string if error occurred.
+	 */
+	auto GetOutputFilename() const -> std::string { return output_file_; }
 
-    /*
-     * Prints help message for this module's options
-     */
-    virtual void PrintHelp() const = 0;
+	/*
+	 * Prints help message for this module's options
+	 */
+	virtual void PrintHelp() const = 0;
 
-    /*
-     * Prints help message for the options of the given module type
-     */
-    static void PrintHelp(ModuleType module_type);
+	/*
+	 * Prints help message for the options of the given module type
+	 */
+	static void PrintHelp(ModuleType module_type);
 
 protected:
 
-    std::string output_file_;
+	std::string output_file_;
 };
 
 
@@ -81,21 +81,21 @@ class ConversionOptionsInterface : public EnableFactory<Derived, ConversionOptio
 {
 protected:
 
-    ConversionOptionsInterface()
-    {
-        OptionCollection::SetDefinitions(&(this->GetInfo()->option_definitions));
-    }
+	ConversionOptionsInterface()
+	{
+		OptionCollection::SetDefinitions(&(this->GetInfo()->option_definitions));
+	}
 
-    void PrintHelp() const override
-    {
-        ConversionOptionsBase::PrintHelp(this->GetType());
-    }
+	void PrintHelp() const override
+	{
+		ConversionOptionsBase::PrintHelp(this->GetType());
+	}
 
 public:
 
-    ConversionOptionsInterface(const ConversionOptionsInterface&) = delete;
-    ConversionOptionsInterface(ConversionOptionsInterface&&) = delete;
-    virtual ~ConversionOptionsInterface() = default;
+	ConversionOptionsInterface(const ConversionOptionsInterface&) = delete;
+	ConversionOptionsInterface(ConversionOptionsInterface&&) = delete;
+	virtual ~ConversionOptionsInterface() = default;
 };
 
 } // namespace d2m

@@ -18,19 +18,19 @@ namespace d2m {
 class GlobalOptions
 {
 public:
-    enum class OptionEnum
-    {
-        kForce,
-        kHelp,
-        kVerbose,
-        kVersion
-    };
+	enum class OptionEnum
+	{
+		kForce,
+		kHelp,
+		kVerbose,
+		kVersion
+	};
 
-    static void Set(const OptionCollection& global_options) { global_options_ = global_options; }
-    static auto Get() -> OptionCollection& { return global_options_; }
+	static void Set(const OptionCollection& global_options) { global_options_ = global_options; }
+	static auto Get() -> OptionCollection& { return global_options_; }
 
 private:
-    static OptionCollection global_options_;
+	static OptionCollection global_options_;
 };
 
 } // namespace d2m

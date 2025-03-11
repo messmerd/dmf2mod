@@ -120,7 +120,7 @@ public:
 	[[nodiscard]] auto GetName() const -> std::string_view { return name_; };
 	[[nodiscard]] auto GetShortName() const -> char { return short_name_; }
 	[[nodiscard]] auto GetDisplayName() const -> std::string;
-	[[nodiscard]] auto GetDefaultValue() const -> ValueType { return default_value_; }
+	[[nodiscard]] auto GetDefaultValue() const -> const ValueType& { return default_value_; }
 	[[nodiscard]] auto GetAcceptedValues() const -> const std::map<ValueType, int>& { return accepted_values_; }
 	[[nodiscard]] auto GetAcceptedValuesOrdered() const -> const std::vector<ValueType>& { return accepted_values_ordered_; }
 	[[nodiscard]] auto GetDescription() const -> std::string_view { return description_; }

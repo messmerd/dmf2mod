@@ -1,7 +1,5 @@
 name: GitHub Pages
-on:
-  push:
-    branches: [main]
+on: [push, pull_request]
 jobs:
   deploy:
     runs-on: ubuntu-latest

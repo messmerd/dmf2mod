@@ -1,7 +1,26 @@
 # FindZSTR.cmake
 
 set(ZLIB_USE_STATIC_LIBS ON)
-find_package(ZLIB 1.2.3 REQUIRED)
+find_package(ZLIB 1.2.3)
+
+if(NOT ZLIB_FOUND)
+	message(STATUS "Downloading zlib using FetchContent")
+
+	include(FetchContent)
+	FetchContent_Declare(
+		zlibGitRepo
+		GIT_REPOSITORY "https://github.com/madler/zlib"
+		GIT_TAG        "master"
+	)
+	FetchContent_MakeAvailable(zlibGitRepo)
+
+	if(TARGET zlibstatic)
+		set(ZLIB_FOUND TRUE)
+	else()
+		message(WARNING "Failed to download zlib")
+		return()
+	endif()
+endif()
 
 if(DEFINED VCPKG_TOOLCHAIN)
 	# Use vcpkg when available
@@ -15,7 +34,8 @@ if(DEFINED VCPKG_TOOLCHAIN)
 		target_compile_features(zstr::zstr INTERFACE cxx_std_17)
 	endif()
 else()
-	# Download zstr from its Git repo
+	message(STATUS "Downloading zstr using FetchContent")
+
 	include(FetchContent)
 	FetchContent_Declare(ZStrGitRepo
 		GIT_REPOSITORY "https://github.com/mateidavid/zstr"

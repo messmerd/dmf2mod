@@ -3,6 +3,8 @@
 find_package(gcem CONFIG QUIET)
 
 if(NOT gcem_FOUND)
+	message(STATUS "Downloading gcem using FetchContent")
+
 	include(FetchContent)
 	FetchContent_Declare(
 		gcemGitRepo

@@ -1,40 +1,36 @@
 name: build
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+on: [push, pull_request]
 jobs:
   build-windows:
     name: windows-x86_64
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: build
-      run: |
-        cmake -S. -Bbin
-        cmake --build .\bin --config Release
-    - name: run
-      run: .\bin\console\Release\dmf2mod.exe
+    - uses: actions/checkout@v4
+    - name: Configure
+      run: cmake --preset console
+    - name: Build
+      run: cmake --build --preset console
+    - name: Run
+      run: .\build\console\dmf2mod.exe
   build-linux:
     name: linux-x86_64
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: build
-      run: |
-        cmake -S. -Bbin/Release
-        cmake --build ./bin/Release
-    - name: run
-      run: ./bin/Release/console/dmf2mod
+    - uses: actions/checkout@v4
+    - name: Configure
+      run: cmake --preset console
+    - name: Build
+      run: cmake --build --preset console
+    - name: Run
+      run: ./build/console/dmf2mod
   build-macos:
     name: macos-arm64
     runs-on: macOS-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: build
-      run: |
-        cmake -S. -Bbin/Release
-        cmake --build ./bin/Release
-    - name: run
-      run: ./bin/Release/console/dmf2mod
+    - uses: actions/checkout@v4
+    - name: Configure
+      run: cmake --preset console
+    - name: Build
+      run: cmake --build --preset console
+    - name: Run
+      run: ./build/console/dmf2mod

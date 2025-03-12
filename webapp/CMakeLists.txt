@@ -1,8 +1,6 @@
-cmake_minimum_required(VERSION 3.14)
+message(STATUS "Setting up for web app")
 
 project(dmf2mod_webapp)
-
-message(STATUS "Setting up for web app")
 
 # Source files
 set(WEBAPP_SOURCES
@@ -47,17 +45,8 @@ set_target_properties(${PROJECT_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAK
 set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "${WASM_LFLAGS} ${USE_WASM_FLAG} ${WARNING_FLAGS} --pre-js ${DMF2MOD_ROOT}/webapp/pre.js")
 message(STATUS "em++ linker flags: ${WASM_LFLAGS} ${USE_WASM_FLAG} ${WARNING_FLAGS} --pre-js ${DMF2MOD_ROOT}/webapp/pre.js")
 
-# Build and link to the bundled zlib
-set(ZLIB_ROOT ${DMF2MOD_ROOT}/extern/zlib)
-add_subdirectory(${ZLIB_ROOT} ${CMAKE_CURRENT_BINARY_DIR}/extern/zlib EXCLUDE_FROM_ALL)
-target_link_libraries(${PROJECT_NAME} PRIVATE zlibstatic)
-
-# Includes
-target_include_directories(${PROJECT_NAME} PRIVATE
-	${INC_DIRS}
-	${PROJECT_BINARY_DIR}/extern
-	${PROJECT_BINARY_DIR}/extern/zlib
-)
+target_link_libraries(${PROJECT_NAME} PRIVATE gcem zstr::zstr)
+target_include_directories(${PROJECT_NAME} PUBLIC ${DMF2MOD_ROOT}/include)
 
 add_custom_command(
 	TARGET ${PROJECT_NAME}

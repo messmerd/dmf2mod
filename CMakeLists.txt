@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.24)
 
 project(dmf2mod VERSION "0.2.0")
 set(PROJECT_VERSION_STAGE "alpha")
@@ -6,57 +6,49 @@ if(PROJECT_VERSION_STAGE)
 	set(PROJECT_VERSION "${PROJECT_VERSION}-${PROJECT_VERSION_STAGE}")
 endif()
 
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules" ${CMAKE_MODULE_PATH})
+
 enable_language(CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-set(DMF2MOD_ROOT ${PROJECT_SOURCE_DIR})
-set(SRC ${DMF2MOD_ROOT}/src)
-set(INC ${DMF2MOD_ROOT}/include)
+######################
+## Set build target ##
+######################
 
-# Configure version
-configure_file(${INC}/version.h.in ${INC}/version.h)
+set(BUILD_TARGET "console" CACHE STRING "Choose build type: library, console, or web-app")
+set_property(CACHE BUILD_TARGET PROPERTY STRINGS "library" "console" "web-app")
 
-# Source files
-set(CORE_SOURCES
-	${SRC}/dmf2mod.cpp
-	${SRC}/core/conversion_options.cpp
-	${SRC}/core/factory.cpp
-	${SRC}/core/global_options.cpp
-	${SRC}/core/module.cpp
-	${SRC}/core/options.cpp
-	${SRC}/core/status.cpp
-)
+if(BUILD_TARGET STREQUAL "library")
+	if(DEFINED EMSCRIPTEN)
+		message(FATAL_ERROR "Cannot build library using Emscripten")
+	endif()
+	message(STATUS "Building dmf2mod library")
+elseif(BUILD_TARGET STREQUAL "console")
+	set(BUILD_CONSOLE 1)
+	if(DEFINED EMSCRIPTEN)
+		message(FATAL_ERROR "Cannot build command-line application using Emscripten")
+	endif()
+	message(STATUS "Building dmf2mod command-line application")
+elseif(BUILD_TARGET STREQUAL "web-app")
+	set(BUILD_WEBAPP 1)
+	if(NOT DEFINED EMSCRIPTEN)
+		message(FATAL_ERROR "Please use the wasm32-emscripten-vcpkg.cmake toolchain file")
+	endif()
+	message(STATUS "Building dmf2mod web app")
+else()
+	message(FATAL_ERROR "Invalid BUILD_TARGET: ${BUILD_TARGET}")
+endif()
 
-set(MODULE_SOURCES
-	${SRC}/modules/dmf.cpp
-	${SRC}/modules/mod.cpp
-	${SRC}/modules/debug.cpp
-)
-
-set(UTILS_SOURCES
-	${SRC}/utils/utils.cpp
-)
-
-set(DMF2MOD_SOURCES ${CORE_SOURCES} ${MODULE_SOURCES} ${UTILS_SOURCES})
-
-set(INC_DIRS
-	${DMF2MOD_ROOT}/extern
-	${DMF2MOD_ROOT}/extern/zstr
-	${DMF2MOD_ROOT}/extern/zlib
-	${DMF2MOD_ROOT}/extern/gcem/include
-	${DMF2MOD_ROOT}/include
-	${PROJECT_BINARY_DIR}
-)
-
-option(BUILD_CONSOLE "Build dmf2mod command-line application" TRUE)
-option(ENABLE_CPPCHECK "Enable testing with cppcheck" FALSE)
+#############################
+## Set build configuration ##
+#############################
 
 # Set default build type if none was specified
 set(DEFAULT_BUILD_TYPE "Release")
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-	message(STATUS "Setting build type to '${DEFAULT_BUILD_TYPE}' as none was specified.")
-	set(CMAKE_BUILD_TYPE "${DEFAULT_BUILD_TYPE}" CACHE STRING "Choose the type of build." FORCE)
+	message(STATUS "Setting build type to '${DEFAULT_BUILD_TYPE}' as none was specified")
+	set(CMAKE_BUILD_TYPE "${DEFAULT_BUILD_TYPE}" CACHE STRING "Choose the type of build" FORCE)
 	# Set the possible values of build type for cmake-gui
 	set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Asan" "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
@@ -78,6 +70,12 @@ endif()
 message(STATUS "Debug flags: ${CMAKE_CXX_FLAGS_DEBUG}")
 message(STATUS "Release flags: ${CMAKE_CXX_FLAGS_RELEASE}")
 
+###########################
+## Static analysis setup ##
+###########################
+
+option(ENABLE_CPPCHECK "Enable testing with cppcheck" FALSE)
+
 # Set up Cppcheck static code analysis
 if(ENABLE_CPPCHECK)
 	find_program(CPPCHECK cppcheck)
@@ -92,48 +90,51 @@ if(ENABLE_CPPCHECK)
 	endif()
 endif()
 
+##################
+## Dependencies ##
+##################
 
-if(EMSCRIPTEN)
-	# Web app build
+find_package(gcem REQUIRED)
+find_package(ZSTR REQUIRED)
+
+###########
+## Build ##
+###########
+
+set(DMF2MOD_ROOT ${PROJECT_SOURCE_DIR})
+
+add_subdirectory(src)
+
+# Configure version
+configure_file(include/version.h.in include/version.h)
+
+# Build web app
+if(BUILD_WEBAPP)
 	add_subdirectory(webapp)
-else()
-	# DMF2MOD library build
+	return()
+endif()
 
-	# Compiler-specific warnings
-	if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-		set(WARNING_FLAGS "-Wall -Wno-unknown-pragmas -Werror -Wno-error=cpp -Wno-error=unused-variable")
-	elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-		set(WARNING_FLAGS "-Wall -Wno-unknown-pragmas -Wno-\#warnings -Werror -Wno-error=unused-variable")
-	elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-		set(WARNING_FLAGS "/W3") #/WX
-	else()
-		set(WARNING_FLAGS "")
-	endif()
+# DMF2MOD library build
 
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${WARNING_FLAGS}")
-	add_library(${PROJECT_NAME} STATIC ${DMF2MOD_SOURCES})
+# Compiler-specific warnings
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+	set(WARNING_FLAGS -Wall -Wno-unknown-pragmas -Werror -Wno-error=cpp -Wno-error=unused-variable)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+	set(WARNING_FLAGS -Wall -Wno-unknown-pragmas "-Wno-\#warnings" -Werror -Wno-error=unused-variable)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+	set(WARNING_FLAGS /W3) #/WX
+	set(OTHER_FLAGS /utf-8 /permissive-)
+endif()
 
-	#set_target_properties(${PROJECT_NAME} PROPERTIES
-	#	ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
+add_library(${PROJECT_NAME} STATIC ${DMF2MOD_SOURCES})
 
-	# Build and link to the bundled zlib
-	set(ZLIB_ROOT ${DMF2MOD_ROOT}/extern/zlib)
-	add_subdirectory(${ZLIB_ROOT} EXCLUDE_FROM_ALL)
-	target_link_libraries(${PROJECT_NAME} PRIVATE zlibstatic)
+target_link_libraries(${PROJECT_NAME} PRIVATE gcem zstr::zstr)
+target_include_directories(${PROJECT_NAME} PUBLIC ${DMF2MOD_ROOT}/include)
+target_compile_options(${PROJECT_NAME} PRIVATE ${WARNING_FLAGS} ${OTHER_FLAGS})
 
-	# Includes
-	target_include_directories(${PROJECT_NAME} PRIVATE
-		${INC_DIRS}
-		${PROJECT_BINARY_DIR}/extern
-		${PROJECT_BINARY_DIR}/extern/zlib
-	)
+#set_target_properties(${PROJECT_NAME} PROPERTIES
+#	ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 
-	target_include_directories(${PROJECT_NAME} PUBLIC
-		${INC}
-		${PROJECT_BINARY_DIR}
-	)
-
-	if(BUILD_CONSOLE)
-		add_subdirectory(console)
-	endif()
+if(BUILD_CONSOLE)
+	add_subdirectory(console)
 endif()

@@ -2,9 +2,8 @@
 docs/
 test/
 .vscode/
-extern/zlib/zconf.h
-extern/zlib/zconf.h.included
 include/version.h
+vcpkg_installed/
 
 ##### Windows
 # Windows thumbnail cache files

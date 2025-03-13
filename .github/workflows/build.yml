@@ -11,7 +11,7 @@ jobs:
     - name: Build
       run: cmake --build --preset console
     - name: Run
-      run: .\build\console\dmf2mod.exe
+      run: .\build\console\Release\dmf2mod.exe
   build-linux:
     name: linux-x86_64
     runs-on: ubuntu-latest

@@ -16,9 +16,15 @@
 			}
 		},
 		{
+			"name": "console-ninja",
+			"inherits": "console",
+			"generator": "Ninja"
+		},
+		{
 			"name": "web-app",
 			"description": "dmf2mod web app using Emscripten with vcpkg",
 			"toolchainFile": "${sourceDir}/cmake/toolchains/wasm32-emscripten-vcpkg.cmake",
+			"generator": "Ninja",
 			"binaryDir": "build/web-app",
 			"cacheVariables": {
 				"BUILD_TARGET": "web-app",
@@ -29,11 +35,17 @@
 	"buildPresets": [
 		{
 			"name": "console",
+			"configurePreset": "console",
+			"configuration": "Release"
+		},
+		{
+			"name": "console-ninja",
 			"configurePreset": "console"
 		},
 		{
 			"name": "web-app",
-			"configurePreset": "web-app"
+			"configurePreset": "web-app",
+			"configuration": "Release"
 		}
 	]
 }

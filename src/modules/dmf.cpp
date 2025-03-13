@@ -12,13 +12,8 @@
 #include "utils/utils.h"
 #include "utils/hash.h"
 
-// For inflating DMF files
-#include "zlib/zlib.h"
-#include "zlib/zconf.h"
-#include "zstr/zstr.hpp"
-
-// Compile time math
-#include "gcem.hpp"
+#include <zstr.hpp>
+#include <gcem.hpp>
 
 #include <iostream>
 #include <iomanip>

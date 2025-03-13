@@ -1,0 +1,14 @@
+{
+	"$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+	"name": "dmf2mod",
+	"dependencies": [
+		{
+			"name": "gcem",
+			"default-features": false
+		},
+		{
+			"name": "zstr",
+			"default-features": false
+		}
+	]
+}

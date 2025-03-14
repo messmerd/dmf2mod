@@ -12,14 +12,14 @@
 
 #include "core/factory.h"
 
+#include <exception>
+#include <map>
+#include <memory>
+#include <stdexcept>
 #include <string>
 #include <string_view>
-#include <vector>
-#include <map>
-#include <exception>
-#include <stdexcept>
 #include <type_traits>
-#include <memory>
+#include <vector>
 
 namespace d2m {
 
@@ -63,12 +63,12 @@ public:
 		kConvert
 	};
 
-	[[nodiscard]] auto what() const noexcept -> const char* override
+	auto what() const noexcept -> const char* override
 	{
 		return error_message_.c_str();
 	}
 
-	[[nodiscard]] auto str() const -> std::string_view
+	auto str() const -> std::string_view
 	{
 		return error_message_;
 	}
@@ -129,7 +129,7 @@ private:
 };
 
 
-// Provides warning information after module importing/converting/exporting
+//! Provides warning information after module importing/converting/exporting
 class Status
 {
 public:
@@ -138,14 +138,14 @@ public:
 
 	Status() { Clear(); }
 
-	[[nodiscard]] auto ErrorOccurred() const -> bool { return error_.get(); }
-	[[nodiscard]] auto WarningsIssued() const -> bool { return !warning_messages_.empty(); }
+	auto ErrorOccurred() const -> bool { return error_.get(); }
+	auto WarningsIssued() const -> bool { return !warning_messages_.empty(); }
 
 	void PrintError(bool use_std_err = true) const;
 	void PrintWarnings(bool use_std_err = false) const;
 
-	// Prints error and warnings that occurred during the last action. Returns true if an error occurred.
-	[[nodiscard]] auto HandleResults() const -> bool;
+	//! Prints error and warnings that occurred during the last action. Returns true if an error occurred.
+	auto HandleResults() const -> bool;
 
 	void Clear()
 	{
@@ -171,14 +171,13 @@ public:
 	}
 
 private:
-
 	std::unique_ptr<ModuleException> error_;
 	std::vector<std::string> warning_messages_;
 	Category category_ = Category::kNone;
 };
 
 
-// NotImplementedException because I took exception to the standard library not implementing it
+//! NotImplementedException because I took exception to the standard library not implementing it
 class NotImplementedException : public std::logic_error
 {
 public:

@@ -6,11 +6,12 @@
  */
 
 #include "core/module.h"
+
 #include "utils/utils.h"
 
 #include <cassert>
 
-using namespace d2m;
+namespace d2m {
 
 auto ModuleBase::Import(const std::string& filename) -> bool
 {
@@ -73,3 +74,5 @@ auto ModuleBase::Convert(ModuleType type, const ConversionOptionsPtr& options) -
 
 	return output;
 }
+
+} // namespace d2m

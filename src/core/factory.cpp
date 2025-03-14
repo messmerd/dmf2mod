@@ -6,9 +6,10 @@
  */
 
 #include "core/factory.h"
+
 #include "dmf2mod.h"
 
-using namespace d2m;
+namespace d2m {
 
 template<>
 Factory<ConversionOptions>::InitializeImpl::InitializeImpl()
@@ -48,3 +49,5 @@ Factory<Module>::InitializeImpl::InitializeImpl()
 	Register<ModuleType::kDebug, Debug>("Debug", "debug", "log");
 #endif
 };
+
+} // namespace d2m

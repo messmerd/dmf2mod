@@ -7,16 +7,16 @@
 
 #pragma once
 
-#include "core/note.h"
 #include "core/data.h"
-#include "core/state.h"
 #include "core/module_base.h"
+#include "core/note.h"
+#include "core/state.h"
 
+#include <cassert>
 #include <cstddef>
 #include <map>
-#include <set>
 #include <optional>
-#include <cassert>
+#include <set>
 
 namespace d2m {
 
@@ -31,7 +31,7 @@ template<typename... Ts>
 struct WrappedGenData<std::tuple<Ts...>>
 {
 	// type is either an empty tuple or a tuple with each Ts wrapped in an optional
-	using type = std::conditional_t<sizeof...(Ts)==0, std::tuple<>, std::tuple<std::optional<Ts>...>>;
+	using type = std::conditional_t<sizeof...(Ts) == 0, std::tuple<>, std::tuple<std::optional<Ts>...>>;
 };
 
 template<typename... T>
@@ -57,8 +57,10 @@ template<class T> using StateGenData = ModuleState<T>;
 template<class T>
 struct GeneratedDataCommonDefinition : public detail::GenDataDefinitionTag
 {
-	static constexpr int kCommonCount = 6; // # of variants in GenDataEnumCommon (remember to update this after changing the enum)
+	//! Number of variants in GenDataEnumCommon (remember to update this after changing the enum)
+	static constexpr int kCommonCount = 6;
 	static constexpr int kLowerBound = -kCommonCount;
+
 	using ModuleClass = T;
 
 	enum GenDataEnumCommon
@@ -109,7 +111,8 @@ template<class CommonDef, typename... Ts>
 class GeneratedDataStorage : public CommonDef
 {
 public:
-	static constexpr int kUpperBound = sizeof...(Ts); // # of module-specific gen data types
+	//! Number of module-specific gen data types
+	static constexpr int kUpperBound = sizeof...(Ts);
 
 	using typename CommonDef::GenDataEnumCommon;
 	using typename CommonDef::ModuleClass;
@@ -127,24 +130,39 @@ public:
 
 	// Returns an immutable reference to generated data at index gen_data_index
 	template<int gen_data_index>
-	[[nodiscard]] constexpr auto Get() const -> const auto&
+	constexpr auto Get() const -> const auto&
 	{
 		return std::get<gen_data_index + CommonDef::kCommonCount>(data_);
 	}
 
 	// Returns a mutable reference to generated data at index gen_data_index
 	template<int gen_data_index>
-	[[nodiscard]] constexpr auto Get() -> auto&
+	constexpr auto Get() -> auto&
 	{
 		return std::get<gen_data_index + CommonDef::kCommonCount>(data_);
 	}
 
-	// For convenience:
-	[[nodiscard]] constexpr auto GetState() const -> const std::optional<ModuleState<ModuleClass>>& { return Get<GenDataEnumCommon::kState>(); }
-	[[nodiscard]] constexpr auto GetState() -> std::optional<ModuleState<ModuleClass>>& { return Get<GenDataEnumCommon::kState>(); }
-	[[nodiscard]] constexpr auto GetNumOrders() const -> const std::optional<OrderIndex>& { return Get<GenDataEnumCommon::kTotalOrders>(); }
+	// For convenience
 
-	// Destroys any generated data at index gen_data_index. Call this after any change which would make the data invalid.
+	constexpr auto GetState() const -> const std::optional<ModuleState<ModuleClass>>&
+	{
+		return Get<GenDataEnumCommon::kState>();
+	}
+
+	constexpr auto GetState() -> std::optional<ModuleState<ModuleClass>>&
+	{
+		return Get<GenDataEnumCommon::kState>();
+	}
+
+	constexpr auto GetNumOrders() const -> const std::optional<OrderIndex>&
+	{
+		return Get<GenDataEnumCommon::kTotalOrders>();
+	}
+
+	/**
+	 * Destroys any generated data at index gen_data_index.
+	 * Call this after any change which would make the data invalid.
+	 */
 	template<int gen_data_index>
 	void Clear()
 	{
@@ -157,7 +175,7 @@ public:
 		}
 	}
 
-	// Destroys all generated data
+	//! Destroys all generated data
 	void ClearAll()
 	{
 		detail::ClearAllGenData<-CommonDef::kCommonCount, kUpperBound>(this);
@@ -165,33 +183,40 @@ public:
 		status_ = 0;
 	}
 
-	[[nodiscard]] auto IsValid() const -> bool { return generated_.has_value(); }
-	[[nodiscard]] auto GetGenerated() const -> std::optional<size_t> { return generated_; }
-	void SetGenerated(std::optional<size_t> val) { generated_ = val; }
-	[[nodiscard]] auto GetStatus() const -> size_t { return status_; }
-	void SetStatus(size_t val) { status_ = val; }
+	auto IsValid() const -> bool { return generated_.has_value(); }
+	auto GetGenerated() const -> std::optional<std::size_t> { return generated_; }
+	void SetGenerated(std::optional<std::size_t> val) { generated_ = val; }
+	auto GetStatus() const -> std::size_t { return status_; }
+	void SetStatus(std::size_t val) { status_ = val; }
 
 protected:
-	GenDataWrapped data_; // Stores all generated data
-	std::optional<size_t> generated_; // The value passed to GenerateDataImpl. Has a value if gen data is valid.
-	size_t status_; // The value returned by GenerateDataImpl. Only valid if IsValid() == true.
+	// Stores all generated data
+	GenDataWrapped data_;
+
+	// The value passed to GenerateDataImpl. Has a value if gen data is valid.
+	std::optional<std::size_t> generated_;
+
+	// The value returned by GenerateDataImpl. Only valid if IsValid() == true.
+	std::size_t status_ = 0;
 };
 
 ///////////////////////////////////////////////////////////
 // GENERATED DATA PRIMARY TEMPLATE
 ///////////////////////////////////////////////////////////
 
-/*
+/**
  * The following is the generated data storage primary class template.
+ *
  * It can be specialized to add additional supported generated data if desired.
  * Any specializations must inherit from GeneratedDataStorage and pass the correct
  * common definition struct plus the new module-specific types to the template parameter.
  * In addition, specializations must define GenDataEnumCommon and GenDataEnum.
  * All generated data types must have a "==" operator defined for them.
  */
-
 template<class ModuleClass>
-struct GeneratedData : public GeneratedDataStorage<GeneratedDataCommonDefinition<ModuleClass> /* Module-specific types go here in any specializations */>
+struct GeneratedData
+	: public GeneratedDataStorage<GeneratedDataCommonDefinition<ModuleClass>
+		/* Module-specific types go here in any specializations */>
 {
 	//using Parent = GeneratedDataStorage<GeneratedDataCommonDefinition<ModuleClass>>;
 	using typename GeneratedDataCommonDefinition<ModuleClass>::GenDataEnumCommon;

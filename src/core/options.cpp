@@ -7,15 +7,16 @@
  */
 
 #include "core/options.h"
+
 #include "utils/utils.h"
 
-#include <unordered_set>
-#include <iostream>
-#include <iomanip>
-#include <charconv>
 #include <cassert>
+#include <charconv>
+#include <iomanip>
+#include <iostream>
+#include <unordered_set>
 
-using namespace d2m;
+namespace d2m {
 
 // OptionDefinition
 
@@ -58,7 +59,7 @@ void OptionDefinition::PrintHelp() const
 		str1 += '[';
 
 		unsigned i = 0;
-		const size_t total = GetAcceptedValuesOrdered().size();
+		const auto total = GetAcceptedValuesOrdered().size();
 		for (const auto& val : GetAcceptedValuesOrdered())
 		{
 			switch (option_type)
@@ -201,27 +202,27 @@ OptionDefinitionCollection::OptionDefinitionCollection(const std::initializer_li
 	}
 }
 
-auto OptionDefinitionCollection::Count() const -> size_t
+auto OptionDefinitionCollection::Count() const -> std::size_t
 {
 	return id_options_map_.size();
 }
 
 auto OptionDefinitionCollection::FindById(int id) const -> const OptionDefinition*
 {
-	if (id_options_map_.count(id) == 0) { return nullptr; }
-	return &id_options_map_.at(id);
+	const auto it = id_options_map_.find(id);
+	return it != id_options_map_.end() ? &it->second : nullptr;
 }
 
 auto OptionDefinitionCollection::FindByName(const std::string& name) const -> const OptionDefinition*
 {
-	if (name_options_map_.count(name) == 0) { return nullptr; }
-	return name_options_map_.at(name);
+	const auto it = name_options_map_.find(name);
+	return it != name_options_map_.end() ? it->second : nullptr;
 }
 
 auto OptionDefinitionCollection::FindByShortName(char short_name) const -> const OptionDefinition*
 {
-	if (short_name_options_map_.count(short_name) == 0) { return nullptr; }
-	return short_name_options_map_.at(short_name);
+	const auto it = short_name_options_map_.find(short_name);
+	return it != short_name_options_map_.end() ? it->second : nullptr;
 }
 
 auto OptionDefinitionCollection::FindIdByName(const std::string& name) const -> int
@@ -250,14 +251,16 @@ void OptionDefinitionCollection::PrintHelp() const
 // Option
 
 Option::Option(const OptionDefinitionCollection* definitions, int id)
-	: definitions_{definitions}, id_{id}
+	: definitions_{definitions}
+	, id_{id}
 {
 	assert(definitions_ && "Option definition cannot be null.");
 	SetValueToDefault();
 }
 
 Option::Option(const OptionDefinitionCollection* definitions, int id, ValueType value)
-	: definitions_{definitions}, id_{id}
+	: definitions_{definitions}
+	, id_{id}
 {
 	assert(definitions_ && "Option definition cannot be null.");
 	SetValue(value);
@@ -335,14 +338,14 @@ void OptionCollection::SetDefinitions(const OptionDefinitionCollection* definiti
 	}
 }
 
-auto OptionCollection::GetOption(std::string name) const -> const Option&
+auto OptionCollection::GetOption(const std::string& name) const -> const Option&
 {
 	const int id = definitions_->FindIdByName(name);
 	assert(id != OptionDefinitionCollection::kNotFound && "Option with the given name wasn't found in the collection.");
 	return GetOption(id);
 }
 
-auto OptionCollection::GetOption(std::string name) -> Option&
+auto OptionCollection::GetOption(const std::string& name) -> Option&
 {
 	const int id = definitions_->FindIdByName(name);
 	assert(id != OptionDefinitionCollection::kNotFound && "Option with the given name wasn't found in the collection.");
@@ -442,7 +445,7 @@ auto OptionCollection::ParseArgs(std::vector<std::string>& args, bool ignore_unk
 		}
 
 		const OptionDefinition* def = handling_option;
-		size_t equals_pos = std::string::npos;
+		auto equals_pos = std::string::npos;
 
 		const bool this_arg_is_value = handling_option != nullptr;
 		if (this_arg_is_value)
@@ -739,3 +742,5 @@ auto ModuleOptionUtils::ConvertToValue(std::string_view value_str, OptionDefinit
 
 	return false;
 }
+
+} // namespace d2m

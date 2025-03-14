@@ -38,22 +38,29 @@ template<class Base>
 class BuilderBase
 {
 public:
-	friend class Factory<Base>; // Only the factory can use BuilderBase
+	// Only the factory can use BuilderBase
+	friend class Factory<Base>;
+
 	virtual ~BuilderBase() = default;
+
 protected:
 	BuilderBase() = default;
 	virtual auto Build() const -> std::shared_ptr<Base> = 0;
 };
 
-// Builds an instance of a factory-enabled class; Can specialize this, but it must inherit from BuilderBase and Factory<Base> must have access to its members.
+/**
+ * Builds an instance of a factory-enabled class.
+ *
+ * Derived must have a default constructor accessible by this class and also must have a public destructor.
+ * Can specialize this, but it must inherit from BuilderBase and Factory<Base> must have access to its members.
+ */
 template<class Derived, class Base>
 class Builder : public BuilderBase<Base>
 {
-	// NOTE: Derived must have a default constructor accessible by this class and also must have a public destructor.
+	// Only the factory can use Builder
+	friend class Factory<Base>;
 
-	friend class Factory<Base>; // Only the factory can use Builder
-
-	// Default constructs an object of Derived wrapped in a shared_ptr. std::make_shared cannot be used for classes with a non-public constructor even if Builder is a friend.
+	//! Default constructs an object of Derived wrapped in a shared_ptr
 	auto Build() const -> std::shared_ptr<Base> override { return std::shared_ptr<Derived>(new Derived{}); };
 };
 
@@ -63,7 +70,10 @@ struct InfoBase
 	ModuleType type = ModuleType::kNone;
 };
 
-// Static data for a factory-enabled class; Can specialize this, but it must inherit from InfoBase.
+/**
+ * Static data for a factory-enabled class.
+ * Can specialize this, but it must inherit from InfoBase.
+ */
 template<class T>
 struct Info : public InfoBase {};
 
@@ -72,7 +82,6 @@ template<class Base>
 class Factory
 {
 private:
-
 	~Factory() { Clear(); }
 
 	struct InitializeImpl
@@ -98,12 +107,11 @@ private:
 	}
 
 public:
-
 	Factory() = delete;
 	Factory(const Factory&) = delete;
-	Factory(Factory&&) = delete;
+	Factory(Factory&&) noexcept = delete;
 	auto operator=(const Factory&) -> Factory& = delete;
-	auto operator=(Factory&&) -> Factory& = delete;
+	auto operator=(Factory&&) noexcept -> Factory& = delete;
 
 	static auto Create(ModuleType module_type) -> std::shared_ptr<Base>
 	{
@@ -167,13 +175,14 @@ public:
 	}
 
 private:
-
 	template<ModuleType module_type, class Type>
 	static void Register()
 	{
-		static_assert(detail::factory_enabled_v<Type>, "Cannot register a class which does not inherit from EnableFactory");
+		static_assert(detail::factory_enabled_v<Type>,
+			"Cannot register a class which does not inherit from EnableFactory");
 		static_assert(std::is_base_of_v<InfoBase, Info<Base>>, "Info<Base> must derive from InfoBase");
-		static_assert(std::is_base_of_v<BuilderBase<Base>, Builder<Type, Base>>, "Builder<Derived, Base> must derive from BuilderBase<Base>");
+		static_assert(std::is_base_of_v<BuilderBase<Base>, Builder<Type, Base>>,
+			"Builder<Derived, Base> must derive from BuilderBase<Base>");
 
 		builders_[module_type] = std::make_unique<const Builder<Type, Base>>();
 		auto temp = std::make_unique<Info<Base>>();
@@ -185,9 +194,11 @@ private:
 	template<class Type>
 	static void Register(Info<Base>&& info)
 	{
-		static_assert(detail::factory_enabled_v<Type>, "Cannot register a class which does not inherit from EnableFactory");
+		static_assert(detail::factory_enabled_v<Type>,
+			"Cannot register a class which does not inherit from EnableFactory");
 		static_assert(std::is_base_of_v<InfoBase, Info<Base>>, "Info<Base> must derive from InfoBase");
-		static_assert(std::is_base_of_v<BuilderBase<Base>, Builder<Type, Base>>, "Builder<Derived, Base> must derive from BuilderBase<Base>");
+		static_assert(std::is_base_of_v<BuilderBase<Base>, Builder<Type, Base>>,
+			"Builder<Derived, Base> must derive from BuilderBase<Base>");
 
 		const ModuleType module_type = info.type;
 
@@ -199,7 +210,7 @@ private:
 	template<ModuleType module_type, class Type, typename... Args>
 	static void Register(Args&&... info_args)
 	{
-		Register<Type>(Info<Base>{ InfoBase{ module_type }, std::forward<Args>(info_args)... });
+		Register<Type>(Info<Base>{InfoBase{module_type}, std::forward<Args>(info_args)...});
 	}
 
 	static void Clear()
@@ -227,12 +238,12 @@ template<class Base> bool Factory<Base>::initialized_ = false;
 template<class Base>
 struct EnableReflection : public detail::EnableReflectionBase
 {
-	[[nodiscard]] virtual auto GetType() const -> ModuleType = 0;
-	[[nodiscard]] virtual auto GetInfo() const -> const Info<Base>* = 0;
+	virtual auto GetType() const -> ModuleType = 0;
+	virtual auto GetInfo() const -> const Info<Base>* = 0;
 };
 
 
-/*
+/**
  * If a base class inherits from EnableReflection, EnableReflection will declare pure virtual methods which must be implemented
  * in a derived class. One of the derived classes will be EnableFactory. EnableFactory must know whether to implement the pure
  * virtual methods or not, and this depends on whether the base class inherits from EnableReflection. In order to conditionally
@@ -242,25 +253,28 @@ struct EnableReflection : public detail::EnableReflectionBase
 template<class Derived, class Base>
 struct ReflectionImpl : public Base
 {
-	[[nodiscard]] auto GetType() const -> ModuleType final
+	auto GetType() const -> ModuleType final
 	{
 		static const ModuleType module_type = Factory<Base>::template GetEnumFromType<Derived>();
 		return module_type;
 	}
 
-	[[nodiscard]] auto GetInfo() const -> const Info<Base>* final
+	auto GetInfo() const -> const Info<Base>* final
 	{
 		return Factory<Base>::GetInfo(GetType());
 	}
 };
 
 
-// Inherit this class using CRTP to enable factory for any class
+//! Inherit this class using CRTP to enable factory for any class
 template<class Derived, class Base>
-struct EnableFactory : public detail::EnableFactoryBase, public std::conditional_t<detail::reflection_enabled_v<Base>, ReflectionImpl<Derived, Base>, Base> // See note above
+struct EnableFactory
+	: public detail::EnableFactoryBase
+	, public std::conditional_t<detail::reflection_enabled_v<Base>, ReflectionImpl<Derived, Base>, Base>
 {
 	static_assert(std::is_base_of_v<InfoBase, Info<Derived>>, "Info<Derived> must inherit from InfoBase");
-	static_assert(std::is_base_of_v<BuilderBase<Base>, Builder<Derived, Base>>, "Builder<Derived, Base> must inherit from BuilderBase<Base>");
+	static_assert(std::is_base_of_v<BuilderBase<Base>, Builder<Derived, Base>>,
+		"Builder<Derived, Base> must inherit from BuilderBase<Base>");
 };
 
 } // namespace d2m

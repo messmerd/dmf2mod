@@ -9,10 +9,10 @@
 
 #include "core/module.h"
 
-#include <string>
-#include <sstream>
-#include <map>
 #include <array>
+#include <map>
+#include <sstream>
+#include <string>
 
 namespace d2m {
 
@@ -78,7 +78,7 @@ struct Sample
 	unsigned repeat_offset;
 	unsigned repeat_length;
 
-	std::vector<int8_t> data;
+	std::vector<std::int8_t> data;
 };
 
 } // namespace mod
@@ -102,7 +102,6 @@ private:
 class MODConversionOptions final : public ConversionOptionsInterface<MODConversionOptions>
 {
 public:
-
 	// Factory requires destructor to be public
 	~MODConversionOptions() override = default;
 
@@ -116,16 +115,15 @@ public:
 		kAccuracy, kEffectCompatibility
 	};
 
-	[[nodiscard]] inline auto AllowArpeggio() const -> bool { return GetOption(OptionEnum::kArpeggio).GetValue<bool>(); }
-	[[nodiscard]] inline auto AllowPortamento() const -> bool { return GetOption(OptionEnum::kPortamento).GetValue<bool>(); }
-	[[nodiscard]] inline auto AllowPort2Note() const -> bool { return GetOption(OptionEnum::kPort2Note).GetValue<bool>(); }
-	[[nodiscard]] inline auto AllowVibrato() const -> bool { return GetOption(OptionEnum::kVibrato).GetValue<bool>(); }
-	[[nodiscard]] inline auto GetTempoType() const -> TempoType { return TempoType{GetOption(OptionEnum::kTempoType).GetValueAsIndex()}; }
+	auto AllowArpeggio() const -> bool { return GetOption(OptionEnum::kArpeggio).GetValue<bool>(); }
+	auto AllowPortamento() const -> bool { return GetOption(OptionEnum::kPortamento).GetValue<bool>(); }
+	auto AllowPort2Note() const -> bool { return GetOption(OptionEnum::kPort2Note).GetValue<bool>(); }
+	auto AllowVibrato() const -> bool { return GetOption(OptionEnum::kVibrato).GetValue<bool>(); }
+	auto GetTempoType() const -> TempoType { return TempoType{GetOption(OptionEnum::kTempoType).GetValueAsIndex()}; }
 
-	[[nodiscard]] inline auto AllowEffects() const -> bool { return AllowArpeggio() || AllowPortamento() || AllowPort2Note() || AllowVibrato(); }
+	auto AllowEffects() const -> bool { return AllowArpeggio() || AllowPortamento() || AllowPort2Note() || AllowVibrato(); }
 
 private:
-
 	// Only allow the Factory to construct this class
 	friend class Builder<MODConversionOptions, ConversionOptionsBase>;
 
@@ -135,7 +133,6 @@ private:
 class MOD final : public ModuleInterface<MOD>
 {
 public:
-
 	// Factory requires destructor to be public
 	~MOD() override = default;
 
@@ -172,7 +169,6 @@ public:
 	static constexpr unsigned kVolumeMax = 64u; // Yes, there are 65 different values for the volume
 
 private:
-
 	// Only allow the Factory to construct this class
 	friend class Builder<MOD, ModuleBase>;
 
@@ -182,7 +178,7 @@ private:
 	void ImportImpl(const std::string& filename) override;
 	void ExportImpl(const std::string& filename) override;
 	void ConvertImpl(const ModulePtr& input) override;
-	[[nodiscard]] auto GenerateDataImpl(size_t data_flags) const -> size_t override { return 1; }
+	auto GenerateDataImpl(std::size_t data_flags) const -> std::size_t override { return 1; }
 
 	// DMF -> MOD conversion
 	class DMFConverter;
@@ -195,7 +191,7 @@ private:
 	void ExportSampleData(std::ofstream& fout) const;
 
 	// MOD file info:
-	int8_t total_mod_samples_;
+	std::int8_t total_mod_samples_;
 	std::map<SoundIndexType<MOD>, mod::Sample> samples_;
 };
 

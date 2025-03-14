@@ -6,11 +6,12 @@
  */
 
 #include "core/conversion_options.h"
+
 #include "core/module_base.h"
 
 #include <iostream>
 
-using namespace d2m;
+namespace d2m {
 
 void ConversionOptionsBase::PrintHelp(ModuleType module_type)
 {
@@ -33,3 +34,5 @@ void ConversionOptionsBase::PrintHelp(ModuleType module_type)
 
 	definitions.PrintHelp();
 }
+
+} // namespace d2m

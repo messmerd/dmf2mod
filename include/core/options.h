@@ -8,15 +8,15 @@
 
 #pragma once
 
+#include <cassert>
+#include <map>
+#include <memory>
+#include <set>
 #include <string>
 #include <string_view>
-#include <map>
 #include <unordered_map>
-#include <set>
-#include <vector>
 #include <variant>
-#include <memory>
-#include <cassert>
+#include <vector>
 
 namespace d2m {
 
@@ -114,23 +114,23 @@ public:
 
 	// Getters and helpers
 
-	[[nodiscard]] auto GetOptionType() const -> OptionType { return option_type_; }
-	[[nodiscard]] auto GetId() const -> int { return id_; }
-	[[nodiscard]] auto GetValueType() const -> Type { return value_type_; }
-	[[nodiscard]] auto GetName() const -> std::string_view { return name_; };
-	[[nodiscard]] auto GetShortName() const -> char { return short_name_; }
-	[[nodiscard]] auto GetDisplayName() const -> std::string;
-	[[nodiscard]] auto GetDefaultValue() const -> const ValueType& { return default_value_; }
-	[[nodiscard]] auto GetAcceptedValues() const -> const std::map<ValueType, int>& { return accepted_values_; }
-	[[nodiscard]] auto GetAcceptedValuesOrdered() const -> const std::vector<ValueType>& { return accepted_values_ordered_; }
-	[[nodiscard]] auto GetDescription() const -> std::string_view { return description_; }
+	auto GetOptionType() const -> OptionType { return option_type_; }
+	auto GetId() const -> int { return id_; }
+	auto GetValueType() const -> Type { return value_type_; }
+	auto GetName() const -> std::string_view { return name_; };
+	auto GetShortName() const -> char { return short_name_; }
+	auto GetDisplayName() const -> std::string;
+	auto GetDefaultValue() const -> const ValueType& { return default_value_; }
+	auto GetAcceptedValues() const -> const std::map<ValueType, int>& { return accepted_values_; }
+	auto GetAcceptedValuesOrdered() const -> const std::vector<ValueType>& { return accepted_values_ordered_; }
+	auto GetDescription() const -> std::string_view { return description_; }
 
-	[[nodiscard]] auto HasName() const -> bool { return !name_.empty(); }
-	[[nodiscard]] auto HasShortName() const -> bool { return short_name_ != '\0'; }
-	[[nodiscard]] auto UsesAcceptedValues() const -> bool { return accepted_values_.size() > 0; }
+	auto HasName() const -> bool { return !name_.empty(); }
+	auto HasShortName() const -> bool { return short_name_ != '\0'; }
+	auto UsesAcceptedValues() const -> bool { return accepted_values_.size() > 0; }
 
 	// Returns whether the given value can be assigned to an option with this option definition
-	[[nodiscard]] auto IsValid(const ValueType& value) const -> bool;
+	auto IsValid(const ValueType& value) const -> bool;
 
 	// Prints help info
 	void PrintHelp() const;
@@ -170,17 +170,17 @@ public:
 	OptionDefinitionCollection(const OptionDefinitionCollection& other);
 	OptionDefinitionCollection(const std::initializer_list<OptionDefinition>& options);
 
-	[[nodiscard]] auto Count() const -> size_t;
+	auto Count() const -> std::size_t;
 
 	// Access
-	[[nodiscard]] auto GetIdMap() const -> const std::map<int, OptionDefinition>& { return id_options_map_; }
+	auto GetIdMap() const -> const std::map<int, OptionDefinition>& { return id_options_map_; }
 
 	// Find methods
-	[[nodiscard]] auto FindById(int id) const -> const OptionDefinition*;
-	[[nodiscard]] auto FindByName(const std::string& name) const -> const OptionDefinition*;
-	[[nodiscard]] auto FindByShortName(char short_name) const -> const OptionDefinition*;
-	[[nodiscard]] auto FindIdByName(const std::string& name) const -> int;
-	[[nodiscard]] auto FindIdByShortName(char short_name) const -> int;
+	auto FindById(int id) const -> const OptionDefinition*;
+	auto FindByName(const std::string& name) const -> const OptionDefinition*;
+	auto FindByShortName(char short_name) const -> const OptionDefinition*;
+	auto FindIdByName(const std::string& name) const -> int;
+	auto FindIdByShortName(char short_name) const -> int;
 
 	// Other
 	void PrintHelp() const;
@@ -212,27 +212,27 @@ public:
 
 	void SetValueToDefault();
 
-	[[nodiscard]] auto GetValue() const -> const ValueType& { return value_; }
+	auto GetValue() const -> const ValueType& { return value_; }
 
 	template<typename T>
-	[[nodiscard]] auto GetValue() const -> const T&
+	auto GetValue() const -> const T&
 	{
 		// Will throw an exception if T is the wrong type
 		return std::get<T>(value_);
 	}
 
-	[[nodiscard]] auto GetValueAsIndex() const -> int
+	auto GetValueAsIndex() const -> int
 	{
 		assert(GetDefinition()->UsesAcceptedValues());
 		return value_index_;
 	}
 
-	[[nodiscard]] auto GetExplicitlyProvided() const -> bool
+	auto GetExplicitlyProvided() const -> bool
 	{
 		return explicitly_provided_;
 	}
 
-	[[nodiscard]] auto GetDefinition() const -> const OptionDefinition*;
+	auto GetDefinition() const -> const OptionDefinition*;
 
 private:
 
@@ -259,42 +259,42 @@ public:
 	using ValueType = OptionDefinition::ValueType;
 
 	OptionCollection() = default;
-	OptionCollection(const OptionDefinitionCollection* definitions);
+	explicit OptionCollection(const OptionDefinitionCollection* definitions);
 
 	// Access to definitions
 
 	void SetDefinitions(const OptionDefinitionCollection* definitions);
-	[[nodiscard]] auto GetDefinitions() const -> const OptionDefinitionCollection* { return definitions_; }
+	auto GetDefinitions() const -> const OptionDefinitionCollection* { return definitions_; }
 
 	// Access to collection
 
-	[[nodiscard]] auto GetOptionsMap() const -> const std::map<int, Option>& { return options_map_; }
+	auto GetOptionsMap() const -> const std::map<int, Option>& { return options_map_; }
 
 	// Get options based on id, name, or short name
 
-	[[nodiscard]] auto GetOption(int id) const -> const Option& { return options_map_.at(id); }
+	auto GetOption(int id) const -> const Option& { return options_map_.at(id); }
 	auto GetOption(int id) -> Option& { return options_map_[id]; }
 
 	template<typename T, std::enable_if_t<std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>, bool> = true>
-	[[nodiscard]] auto GetOption(T id) const -> const Option&
+	auto GetOption(T id) const -> const Option&
 	{
 		return GetOption(static_cast<int>(id));
 	}
 
 	template<typename T, std::enable_if_t<std::is_enum_v<T> && std::is_convertible_v<std::underlying_type_t<T>, int>, bool> = true>
-	[[nodiscard]] auto GetOption(T id) -> Option&
+	auto GetOption(T id) -> Option&
 	{
 		return GetOption(static_cast<int>(id));
 	}
 
-	[[nodiscard]] auto GetOption(std::string name) const -> const Option&;
-	auto GetOption(std::string name) -> Option&;
-	[[nodiscard]] auto GetOption(char short_name) const -> const Option&;
+	auto GetOption(const std::string& name) const -> const Option&;
+	auto GetOption(const std::string& name) -> Option&;
+	auto GetOption(char short_name) const -> const Option&;
 	auto GetOption(char short_name) -> Option&;
 
 	// Other
 
-	[[nodiscard]] auto ParseArgs(std::vector<std::string>& args, bool ignore_unknown_args = false) -> bool;
+	auto ParseArgs(std::vector<std::string>& args, bool ignore_unknown_args = false) -> bool;
 	void SetValuesToDefault();
 
 private:
@@ -311,12 +311,10 @@ public:
 	using ValueType = OptionDefinition::ValueType;
 
 	// Convert ValueType to a string
-	[[nodiscard]] static auto ConvertToString(const ValueType& value) -> std::string;
+	static auto ConvertToString(const ValueType& value) -> std::string;
 
 	// Convert string + type to a ValueType
 	static auto ConvertToValue(std::string_view value_str, OptionDefinition::Type type, ValueType& return_val) -> bool;
-
-private:
 };
 
 } // namespace d2m

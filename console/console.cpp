@@ -12,9 +12,9 @@
 
 #include "dmf2mod.h"
 
-#include <string>
-#include <iostream>
 #include <iomanip>
+#include <iostream>
+#include <string>
 
 using namespace d2m;
 
@@ -117,12 +117,12 @@ namespace {
 
 auto ParseArgs(std::vector<std::string>& args, InputOutput& io) -> OperationType
 {
-	io.input_file = "";
+	io.input_file.clear();
 	io.input_type = ModuleType::kNone;
-	io.output_file = "";
+	io.output_file.clear();
 	io.output_type = ModuleType::kNone;
 
-	const size_t arg_count = args.size();
+	const auto arg_count = args.size();
 
 	if (arg_count == 1)
 	{
@@ -205,7 +205,7 @@ auto ParseArgs(std::vector<std::string>& args, InputOutput& io) -> OperationType
 			io.output_type = Utils::GetTypeFromCommandName(args[1]);
 			if (io.output_type != ModuleType::kNone)
 			{
-				const size_t dot_pos = io.input_file.rfind('.');
+				const auto dot_pos = io.input_file.rfind('.');
 				if (dot_pos == 0 || dot_pos + 1 >= io.input_file.size())
 				{
 					std::cerr << "ERROR: The input file is invalid.\n";

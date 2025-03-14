@@ -7,11 +7,11 @@
 
 #include "core/global_options.h"
 
-using namespace d2m;
+namespace d2m {
+
 using OptionEnum = GlobalOptions::OptionEnum;
 
-static const OptionDefinitionCollection kOptionDefinitions =
-{
+static const OptionDefinitionCollection kOptionDefinitions = {
 	{kOption, OptionEnum::kForce, "force", 'f', false, "Overwrite output file."},
 	{kCommand, OptionEnum::kHelp, "help", '\0', "", "[module type]", "Display this help message. Provide module type (i.e. mod) for module-specific options."},
 	{kOption, OptionEnum::kVerbose, "verbose", '\0', false, "Print debug info to console in addition to errors and/or warnings."},
@@ -19,3 +19,5 @@ static const OptionDefinitionCollection kOptionDefinitions =
 };
 
 OptionCollection GlobalOptions::global_options_{&kOptionDefinitions};
+
+} // namespace d2m

@@ -6,5 +6,3 @@
  */
 
 #include "dmf2mod.h"
-
-using namespace d2m;

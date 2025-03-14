@@ -12,7 +12,7 @@
 
 #include <filesystem>
 
-using namespace d2m;
+namespace d2m {
 
 // File utils
 
@@ -87,10 +87,12 @@ auto Utils::GetExtensionFromType(ModuleType moduleType) -> std::string_view
 
 auto Utils::GetArgsAsVector(int argc, char** argv) -> std::vector<std::string>
 {
-	std::vector<std::string> args(argc, "");
+	auto args = std::vector<std::string>(argc, "");
 	for (int i = 0; i < argc; i++)
 	{
 		args[i] = argv[i];
 	}
 	return args;
 }
+
+} // namespace d2m

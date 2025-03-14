@@ -7,8 +7,8 @@
 
 #include "dmf2mod.h"
 
-#include <emscripten/emscripten.h>
 #include <emscripten/bind.h>
+#include <emscripten/emscripten.h>
 
 #include <iostream>
 

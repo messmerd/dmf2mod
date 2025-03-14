@@ -11,11 +11,11 @@
 
 #include "dmf2mod.h"
 
-#include <iostream>
-#include <fstream>
 #include <cassert>
+#include <fstream>
+#include <iostream>
 
-using namespace d2m;
+namespace d2m {
 
 void Debug::ImportImpl(const std::string& filename)
 {
@@ -104,5 +104,7 @@ void Debug::ExportImpl(const std::string& filename)
 	const bool verbose = GlobalOptions::Get().GetOption(GlobalOptions::OptionEnum::kVerbose).GetValue<bool>();
 	if (verbose) { std::cout << "Wrote log to disk.\n\n"; }
 }
+
+} // namespace d2m
 
 #endif // !NDEBUG

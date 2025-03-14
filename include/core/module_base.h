@@ -7,13 +7,13 @@
 
 #pragma once
 
-#include "core/factory.h"
 #include "core/conversion_options.h"
+#include "core/factory.h"
 #include "core/status.h"
 
+#include <memory>
 #include <string>
 #include <string_view>
-#include <memory>
 
 namespace d2m {
 
@@ -40,7 +40,6 @@ struct Info<ModuleBase> : public InfoBase
 class ModuleBase : public EnableReflection<ModuleBase>, public std::enable_shared_from_this<ModuleBase>
 {
 protected:
-
 	ModuleBase() = default;
 
 	// TODO: Use this
@@ -50,14 +49,13 @@ protected:
 	};
 
 public:
-
 	virtual ~ModuleBase() = default;
 
 	/*
 	 * Cast ModulePtr to std::shared_ptr<T> where T is the derived Module class
 	 */
 	template<class T, std::enable_if_t<std::is_base_of_v<ModuleBase, T>, bool> = true>
-	[[nodiscard]] auto Cast() const -> std::shared_ptr<T>
+	auto Cast() const -> std::shared_ptr<T>
 	{
 		return std::static_pointer_cast<T>(shared_from_this());
 	}
@@ -82,12 +80,12 @@ public:
 	/*
 	 * Generates the generated data using optional data flags
 	 */
-	[[nodiscard]] virtual auto GenerateData(size_t data_flags = 0) const -> size_t = 0;
+	virtual auto GenerateData(std::size_t data_flags = 0) const -> std::size_t = 0;
 
 	/*
 	 * Gets the Status object for the last import/export/convert
 	 */
-	[[nodiscard]] auto GetStatus() const -> const Status& { return status_; }
+	auto GetStatus() const -> const Status& { return status_; }
 
 	/*
 	 * Convenience wrapper for GetStatus().HandleResults()
@@ -97,12 +95,12 @@ public:
 	/*
 	 * Get the title of the module
 	 */
-	[[nodiscard]] virtual auto GetTitle() const -> std::string_view = 0;
+	virtual auto GetTitle() const -> std::string_view = 0;
 
 	/*
 	 * Get the author of the module
 	 */
-	[[nodiscard]] virtual auto GetAuthor() const -> std::string_view = 0;
+	virtual auto GetAuthor() const -> std::string_view = 0;
 
 protected:
 	// Import() and Export() and Convert() are wrappers for these methods, which must be implemented by a module class:
@@ -111,12 +109,11 @@ protected:
 	virtual void ExportImpl(const std::string& filename) = 0;
 	virtual void ConvertImpl(const ModulePtr& input) = 0;
 
-	[[nodiscard]] auto GetOptions() const -> ConversionOptionsPtr { return options_; }
+	auto GetOptions() const -> ConversionOptionsPtr { return options_; }
 
 	Status status_;
 
 private:
-
 	ConversionOptionsPtr options_;
 };
 

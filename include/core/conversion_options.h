@@ -38,18 +38,17 @@ struct Info<ConversionOptionsBase> : public InfoBase
 class ConversionOptionsBase : public OptionCollection, public EnableReflection<ConversionOptionsBase>, public std::enable_shared_from_this<ConversionOptionsBase>
 {
 protected:
-
-	ConversionOptionsBase() = default; // See ConversionOptionsInterface constructor
+	// See ConversionOptionsInterface constructor
+	ConversionOptionsBase() = default;
 
 public:
-
 	virtual ~ConversionOptionsBase() = default;
 
 	/*
 	 * Cast ConversionOptionsPtr to std::shared_ptr<T> where T is the derived ConversionOptions class
 	 */
 	template<class T, std::enable_if_t<std::is_base_of_v<ConversionOptionsBase, T>, bool> = true>
-	[[nodiscard]] auto Cast() const -> std::shared_ptr<const T>
+	auto Cast() const -> std::shared_ptr<const T>
 	{
 		return std::static_pointer_cast<const T>(shared_from_this());
 	}
@@ -70,7 +69,6 @@ public:
 	static void PrintHelp(ModuleType module_type);
 
 protected:
-
 	std::string output_file_;
 };
 
@@ -80,7 +78,6 @@ template<class Derived>
 class ConversionOptionsInterface : public EnableFactory<Derived, ConversionOptionsBase>
 {
 protected:
-
 	ConversionOptionsInterface()
 	{
 		OptionCollection::SetDefinitions(&(this->GetInfo()->option_definitions));
@@ -92,9 +89,8 @@ protected:
 	}
 
 public:
-
 	ConversionOptionsInterface(const ConversionOptionsInterface&) = delete;
-	ConversionOptionsInterface(ConversionOptionsInterface&&) = delete;
+	ConversionOptionsInterface(ConversionOptionsInterface&&) noexcept = delete;
 	virtual ~ConversionOptionsInterface() = default;
 };
 

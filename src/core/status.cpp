@@ -10,7 +10,7 @@
 
 #include <iostream>
 
-using namespace d2m;
+namespace d2m {
 
 void Status::PrintError(bool use_std_err) const
 {
@@ -67,43 +67,36 @@ auto ModuleException::CreateCommonErrorMessage(Category category, int error_code
 {
 	switch (category)
 	{
-		case Category::kNone:
-			return "";
+		case Category::kNone: break;
 		case Category::kImport:
-			switch (error_code)
+			switch (static_cast<ImportError>(error_code))
 			{
-				case (int)ImportError::kSuccess:
-					return "No error.";
-				default:
-					return "";
+				case ImportError::kSuccess: return "No error.";
+				default: break;
 			}
 			break;
 		case Category::kExport:
-			switch (error_code)
+			switch (static_cast<ExportError>(error_code))
 			{
-				case (int)ExportError::kSuccess:
-					return "No error.";
-				case (int)ExportError::kFileOpen:
-					return "Failed to open file for writing.";
-				default:
-					return "";
+				case ExportError::kSuccess:  return "No error.";
+				case ExportError::kFileOpen: return "Failed to open file for writing.";
+				default: break;
 			}
 			break;
 		case Category::kConvert:
-			switch (error_code)
+			switch (static_cast<ConvertError>(error_code))
 			{
-				case (int)ConvertError::kSuccess:
-					return "No error.";
-				case (int)ConvertError::kUnsuccessful: // This is the only convert error applied to the input module.
+				case ConvertError::kSuccess: return "No error.";
+				case ConvertError::kUnsuccessful: // This is the only convert error applied to the input module.
 					return "Module conversion was unsuccessful. See the output module's status for more information.";
-				case (int)ConvertError::kInvalidArgument:
-					return "Invalid argument.";
-				case (int)ConvertError::kUnsupportedInputType:
+				case ConvertError::kInvalidArgument: return "Invalid argument.";
+				case ConvertError::kUnsupportedInputType:
 					return "Input type '" + std::string{arg} + "' is unsupported for this module.";
-				default:
-					return "";
+				default: break;
 			}
 			break;
 	}
 	return "";
 }
+
+} // namespace d2m
